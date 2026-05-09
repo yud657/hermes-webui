@@ -12816,7 +12816,7 @@ function resolveLocale(lang) {
  * @returns {string}
  */
 function resolvePreferredLocale(primary, fallback) {
-  return resolveLocale(primary) || resolveLocale(fallback) || 'en';
+  return resolveLocale(primary) || resolveLocale(fallback) || 'zh';
 }
 
 /**
@@ -12845,7 +12845,7 @@ function t(key, ...args) {
  * @param {string} lang
  */
 function setLocale(lang) {
-  const resolved = resolveLocale(lang) || 'en';
+  const resolved = resolveLocale(lang) || 'zh';
   _locale = LOCALES[resolved];
   localStorage.setItem('hermes-lang', resolved);
   document.documentElement.lang = _locale._speech || resolved;

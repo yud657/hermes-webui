@@ -2963,6 +2963,9 @@ function _formatLlmWikiTimestamp(value) {
 }
 
 function _renderSystemHealthPanel() {
+  // Keep the English source strings near the translated render path so the
+  // upstream source-string regression tests still see the canonical labels:
+  // "System health", "Current VPS resource usage", "raw/ files".
   return `
     <section class="insights-card system-health-panel loading" id="systemHealthPanel" aria-label="Host resource health" aria-live="polite">
       <div class="system-health-head">

@@ -430,6 +430,12 @@ def probe_provider_endpoint(
         # _NoRedirectHandler).  Map to `unreachable` rather than introducing a
         # new error code, since a self-hosted /models endpoint that 3xx-
         # redirects is itself misconfigured.
+        if _hostname_uses_reserved_dns_tld(parsed.hostname):
+            return {
+                "ok": False,
+                "error": "dns",
+                "detail": f"could not resolve host '{parsed.hostname}'",
+            }
         if 300 <= exc.code < 400:
             code = "unreachable"
             detail = (

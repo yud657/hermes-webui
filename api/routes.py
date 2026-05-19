@@ -2540,7 +2540,7 @@ def _resolve_login_locale_key(raw_lang: str | None) -> str:
     for key in _LOGIN_LOCALE:
         if key.lower() == base:
             return key
-    return "zh"
+    return "en"
 
 # ── Login page (self-contained, no external deps) ────────────────────────────
 _LOGIN_PAGE_HTML = """<!doctype html>
@@ -2571,7 +2571,7 @@ button:hover{background:rgba(124,185,255,.25)}
   <div class="logo">{{BOT_NAME_INITIAL}}</div>
   <h1>{{BOT_NAME}}</h1>
   <p class="sub">{{LOGIN_SUBTITLE}}</p>
-  <form id="login-form" data-invalid-pw="{{LOGIN_INVALID_PW}}" data-conn-failed="{{LOGIN_CONN_FAILED}}">
+  <form id="login-form" data-invalid-pw="{{LOGIN_INVALID_PW}}" data-conn-failed="{{LOGIN_CONN_FAILED}}" data-en-title="Sign in">
     <input type="password" id="pw" placeholder="{{LOGIN_PLACEHOLDER}}" autofocus>
     <button type="submit">{{LOGIN_BTN}}</button>
   </form>

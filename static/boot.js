@@ -1492,7 +1492,7 @@ function applyBotName(){
     _bootSettings={check_for_updates:false};
     if(typeof setLocale==='function'){
       const _lang=typeof resolvePreferredLocale==='function'
-        ? resolvePreferredLocale(null, localStorage.getItem('hermes-lang'))
+        ? (resolveLocale(localStorage.getItem('hermes-lang')) || 'zh')
         : (localStorage.getItem('hermes-lang') || 'zh');
       setLocale(_lang);
       if(typeof applyLocaleToDOM==='function')applyLocaleToDOM();

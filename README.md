@@ -27,7 +27,7 @@ python3 bootstrap.py
 
 服务默认监听 `http://127.0.0.1:8787`，首次启动即为中文界面。
 
-更详细的部署、配置环境变量、对接 hermes-agent 等内容，请参考 [上游英文 README](./README.en.md)——本分支不修改部署逻辑，所有运行手册仍以上游为准。
+更详细的部署、配置环境变量、对接 hermes-agent 等内容，请参考 [上游英文 README](./README.en.md)——本分支不修改部署逻辑，所有运行手册仍以上游为准。Docker 深度部署见 [`docs/docker.md`](docs/docker.md)，Windows / WSL 登录自启动见 [`docs/wsl-autostart.md`](docs/wsl-autostart.md)。
 
 ## 检查更新走哪？
 

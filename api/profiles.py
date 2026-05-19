@@ -21,6 +21,18 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Older packaged hermes_cli builds expose load_config() without the cache handle
+# that current WebUI tests and newer agents clear between profile swaps.  Provide
+# a no-op compatible handle when running against that older module; newer builds
+# keep their native object.
+try:  # pragma: no cover - depends on the installed hermes_cli version
+    from hermes_cli import config as _hermes_cli_config
+
+    if not hasattr(_hermes_cli_config, "_LOAD_CONFIG_CACHE"):
+        _hermes_cli_config._LOAD_CONFIG_CACHE = {}
+except ModuleNotFoundError:  # pragma: no cover - hermes_cli may be absent in CI
+    pass
+
 # ── Constants (match hermes_cli.profiles upstream) ─────────────────────────
 _PROFILE_ID_RE = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
 _PROFILE_DIRS = [

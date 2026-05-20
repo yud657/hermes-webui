@@ -100,7 +100,7 @@ def _make_dead_stream_session(
 # ── The regression test ────────────────────────────────────────────────────
 
 
-def test_lost_response_recovered_on_second_read(hermes_home, monkeypatch):
+def test_lost_response_recovered_on_second_read(hermes_home):
     sid = "9f14583f0e4e4444aaaa111122223333"
     stream_id = "7c8b4108d52b4aba9af362d3a54f47ac"
 

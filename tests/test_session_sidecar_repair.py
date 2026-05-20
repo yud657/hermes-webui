@@ -314,9 +314,10 @@ class TestDraftRecovery:
         assert "Response interrupted" in content
         assert "WebUI process restarted" in content
         # The marker now arms the lazy-retry hook when a stream id is known
-        # (Recovering the partial output... reload to retry). The legacy
+        # ("Recovering the partial output… reload to retry."). The legacy
         # "user message above was preserved" wording is reserved for the
-        # no-stream-id and post-retry-give-up cases.
+        # no-stream-id repair case; the post-retry-give-up case demotes to
+        # the neutral "Partial output may have been lost." wording instead.
         assert (
             "user message above was preserved" in content
             or "Recovering the partial output" in content

@@ -167,6 +167,7 @@ const LOCALES = {
     model_unavailable_title: 'This model is no longer in your current provider list',
     provider_mismatch_warning: (m,p)=>`"${m}" may not work with your configured provider (${p}). Send anyway, or run \`hermes model\` in your terminal to switch.`,
     provider_mismatch_label: 'Provider mismatch',
+    gateway_auth_label: 'Gateway authentication failed',
     model_not_found_label: 'Model not found',
     model_custom_label: 'Custom model ID',
     model_custom_placeholder: 'e.g. openai/gpt-5.4',
@@ -774,6 +775,18 @@ const LOCALES = {
     insights_model_share: 'Share',
     insights_no_usage_data: 'No usage data yet',
     insights_footer: 'Showing data from the last {days} days',
+    insights_skill_usage_title: 'Skill Usage',
+    insights_skill_usage_sub: 'Tool invocation frequency',
+    insights_skill_usage_total: 'Total invocations',
+    insights_skill_usage_skills_used: 'Skills used',
+    insights_skill_usage_no_data: 'No skill usage data yet',
+    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',
+    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'Skill',
+    insights_skill_usage_col_uses: 'Uses',
+    insights_skill_usage_col_views: 'Views',
+    insights_skill_usage_col_share: 'Usage %',
+    insights_skill_usage_col_patches: 'Patches',
     workspace_desc: 'Add and switch workspaces for your sessions.',
     session_meta_messages: (n) => `${n} msg${n === 1 ? '' : 's'}`,
     session_meta_children: (n) => `${n} child${n === 1 ? '' : 'ren'}`,
@@ -837,6 +850,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'Locked: HERMES_WEBUI_PASSWORD env var is set',
     disable_auth: 'Disable Auth',
     sign_out: 'Sign Out',
+    settings_label_shutdown: 'Stop the Hermes WebUI server',
+    settings_desc_shutdown: 'Gracefully stops the local WebUI server. Useful if you launched via <code>./ctl.sh start</code> and want to stop without switching to a terminal. You\u2019ll need to relaunch the server (<code>./ctl.sh start</code> or the native app) before the WebUI is reachable again.',
+    settings_btn_shutdown: 'Stop server',
+    settings_shutdown_confirm_title: 'Stop Hermes WebUI',
+    settings_shutdown_confirm_message: 'Stop the Hermes WebUI server?',
+    settings_shutdown_confirm_btn: 'Stop',
+    settings_shutdown_stopped_message: 'Server stopped. You can close this tab.',
     // Providers panel
     providers_tab_title: 'Providers',
     providers_section_title: 'Providers',
@@ -1101,6 +1121,19 @@ const LOCALES = {
     memory_saved: 'Memory saved',
     my_notes: 'My Notes',
     user_profile: 'User Profile',
+    external_notes_sources: 'Third-party notes',
+    external_notes_empty: 'No note or knowledge MCP sources are visible yet. Configure Joplin, Obsidian, Notion, llm-wiki, or another notes server to list it here.',
+    external_notes_auto_recall_hint: 'Automatic session recall is unchanged; this drawer only shows configured sources and available read/search tools.',
+    external_notes_no_tools: 'No read/search tools are currently visible for this source.',
+    external_notes_tool_count: (count) => `${count} note tool${Number(count)===1?'':'s'} available`,
+    external_notes_configured_hint: 'Tool names are expected from this configured source; live schemas will appear when the WebUI runtime exposes them.',
+    external_notes_recent_ai: 'Recently used by AI',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: 'Automatic recall',
+    external_notes_search_placeholder: 'Search notes…',
+    external_notes_search_empty: 'Search a configured notes source to preview notes here.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'No notes yet.',
     no_profile_yet: 'No profile yet.',
     agent_soul: 'Agent Soul',
@@ -1186,6 +1219,7 @@ const LOCALES = {
     cron_prompt_label: 'Prompt',
     cron_deliver_label: 'Deliver output to',
     cron_deliver_local: 'Local (save output only)',
+    cron_deliver_custom: 'Custom delivery target',
     cron_profile_label: 'Profile',
     cron_profile_server_default: 'server default',
     cron_profile_server_default_hint: 'Uses the WebUI server default profile at run time. Existing jobs without a profile keep this legacy behavior.',
@@ -1426,6 +1460,7 @@ const LOCALES = {
     model_unavailable_title: 'Questo modello non è più nella lista provider attuale',
     provider_mismatch_warning: (m,p)=>`"${m}" potrebbe non funzionare con il provider configurato (${p}). Invia comunque, o esegui \`hermes model\` nel terminale per cambiare.`,
     provider_mismatch_label: 'Provider non corrispondente',
+    gateway_auth_label: 'Autenticazione Gateway non riuscita',
     model_not_found_label: 'Modello non trovato',
     model_custom_label: 'ID modello personalizzato',
     model_custom_placeholder: 'es. openai/gpt-5.4',
@@ -2028,6 +2063,18 @@ const LOCALES = {
     insights_model_share: 'Quota',
     insights_no_usage_data: 'Nessun dato di utilizzo',
     insights_footer: 'Dati mostrati dagli ultimi {days} giorni',
+    insights_skill_usage_title: 'Utilizzo Skill',
+    insights_skill_usage_sub: 'Frequenza di invocazione strumenti',
+    insights_skill_usage_total: 'Invocazioni totali',
+    insights_skill_usage_skills_used: 'Skill usate',
+    insights_skill_usage_no_data: 'Nessun dato di utilizzo skill ancora',
+    insights_skill_usage_no_data_hint: 'Le skill appariranno qui dopo essere state usate nelle conversazioni.',
+    insights_skill_usage_footer: 'Conteggi da ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'Abilità',
+    insights_skill_usage_col_uses: 'Usi',
+    insights_skill_usage_col_views: 'Visualizzazioni',
+    insights_skill_usage_col_share: 'Utilizzo %',
+    insights_skill_usage_col_patches: 'Patch',
     workspace_desc: 'Aggiungi e cambia workspace per le tue sessioni.',
     session_meta_messages: (n) => `${n} msg`,
     session_meta_children: (n) => `${n} figli${n === 1 ? 'o' : ''}`,
@@ -2088,6 +2135,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'Bloccato: variabile d\'ambiente HERMES_WEBUI_PASSWORD impostata',
     disable_auth: 'Disabilita Auth',
     sign_out: 'Esci',
+    settings_label_shutdown: 'Arresta il server Hermes WebUI',
+    settings_desc_shutdown: 'Arresta in modo controllato il server WebUI locale. Utile se hai avviato tramite <code>./ctl.sh start</code> e vuoi fermarlo senza passare al terminale. Per rendere nuovamente raggiungibile la WebUI dovrai riavviare il server (<code>./ctl.sh start</code> o l\'app nativa).',
+    settings_btn_shutdown: 'Arresta server',
+    settings_shutdown_confirm_title: 'Arresta Hermes WebUI',
+    settings_shutdown_confirm_message: 'Vuoi arrestare il server Hermes WebUI?',
+    settings_shutdown_confirm_btn: 'Arresta',
+    settings_shutdown_stopped_message: 'Server arrestato. Puoi chiudere questa scheda.',
     // Providers panel
     providers_tab_title: 'Provider',
     providers_section_title: 'Provider',
@@ -2352,6 +2406,19 @@ const LOCALES = {
     memory_saved: 'Memoria salvata',
     my_notes: 'Le Mie Note',
     user_profile: 'Profilo Utente',
+    external_notes_sources: 'Note di terze parti',
+    external_notes_empty: 'Nessuna fonte MCP di note o conoscenza è ancora visibile. Configura Joplin, Obsidian, Notion, llm-wiki o un altro server di note per mostrarlo qui.',
+    external_notes_auto_recall_hint: 'Il richiamo automatico della sessione non cambia; questo pannello mostra solo fonti configurate e strumenti di lettura/ricerca disponibili.',
+    external_notes_no_tools: 'Nessuno strumento di lettura/ricerca è attualmente visibile per questa fonte.',
+    external_notes_tool_count: (count) => `${count} strument${Number(count)===1?'o':'i'} per note disponibile${Number(count)===1?'':'i'}`,
+    external_notes_configured_hint: 'I nomi degli strumenti sono attesi da questa fonte configurata; gli schemi live appariranno quando il runtime WebUI li esporrà.',
+    external_notes_recent_ai: 'Usate di recente dall’AI',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: 'Richiamo automatico',
+    external_notes_search_placeholder: 'Cerca note…',
+    external_notes_search_empty: 'Cerca in una fonte di note configurata per visualizzare anteprime qui.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'Ancora nessuna nota.',
     no_profile_yet: 'Ancora nessun profilo.',
     agent_soul: 'Anima dell\'Agente',
@@ -2437,6 +2504,7 @@ const LOCALES = {
     cron_prompt_label: 'Prompt',
     cron_deliver_label: 'Recapita output a',
     cron_deliver_local: 'Locale (solo salva output)',
+    cron_deliver_custom: 'Destinazione personalizzata',
     cron_profile_label: 'Profilo',
     cron_profile_server_default: 'predefinito server',
     cron_profile_server_default_hint: 'Usa il profilo predefinito del server WebUI a runtime. I job esistenti senza profilo mantengono questo comportamento legacy.',
@@ -2677,6 +2745,7 @@ const LOCALES = {
     model_unavailable_title: 'このモデルは現在のプロバイダ一覧に含まれていません',
     provider_mismatch_warning: (m,p)=>`"${m}" は設定されたプロバイダ (${p}) で動作しない可能性があります。このまま送信するか、ターミナルで \`hermes model\` を実行して切り替えてください。`,
     provider_mismatch_label: 'プロバイダ不一致',
+    gateway_auth_label: 'ゲートウェイ認証に失敗しました',
     model_not_found_label: 'モデルが見つかりません',
     model_custom_label: 'カスタムモデルID',
     model_custom_placeholder: '例: openai/gpt-5.4',
@@ -3284,6 +3353,18 @@ const LOCALES = {
     insights_model_share: 'シェア',
     insights_no_usage_data: '使用データはまだありません',
     insights_footer: '直近 {days} 日間のデータを表示',
+    insights_skill_usage_title: 'スキル使用状況',
+    insights_skill_usage_sub: 'ツール呼び出し頻度',
+    insights_skill_usage_total: '総呼び出し数',
+    insights_skill_usage_skills_used: '使用スキル数',
+    insights_skill_usage_no_data: 'スキル使用データがまだありません',
+    insights_skill_usage_no_data_hint: '会話でスキルを使用すると、ここに表示されます。',
+    insights_skill_usage_footer: 'データ元: ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'スキル',
+    insights_skill_usage_col_uses: '使用回数',
+    insights_skill_usage_col_views: '閲覧数',
+    insights_skill_usage_col_share: '使用率',
+    insights_skill_usage_col_patches: 'パッチ',
     workspace_desc: 'セッション用のワークスペースを追加・切り替えします。',
     session_meta_messages: (n) => `${n} 件`,
     session_meta_children: (n) => `${n} 子`,
@@ -3344,6 +3425,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'ロック中: HERMES_WEBUI_PASSWORD 環境変数が設定されています',
     disable_auth: '認証を無効化',
     sign_out: 'サインアウト',
+    settings_label_shutdown: 'Hermes WebUI サーバーを停止',
+    settings_desc_shutdown: 'ローカルの WebUI サーバーを正常に停止します。<code>./ctl.sh start</code> で起動していて、ターミナルに切り替えずに停止したいときに便利です。再度 WebUI にアクセスするにはサーバー（<code>./ctl.sh start</code> またはネイティブアプリ）を再起動する必要があります。',
+    settings_btn_shutdown: 'サーバーを停止',
+    settings_shutdown_confirm_title: 'Hermes WebUI を停止',
+    settings_shutdown_confirm_message: 'Hermes WebUI サーバーを停止しますか？',
+    settings_shutdown_confirm_btn: '停止',
+    settings_shutdown_stopped_message: 'サーバーは停止しました。このタブを閉じて構いません。',
     // Providers panel
     providers_tab_title: 'プロバイダ',
     providers_section_title: 'プロバイダ',
@@ -3608,6 +3696,19 @@ const LOCALES = {
     memory_saved: 'メモリを保存しました',
     my_notes: 'マイノート',
     user_profile: 'ユーザープロファイル',
+    external_notes_sources: 'サードパーティのノート',
+    external_notes_empty: 'ノートまたはナレッジ用の MCP ソースはまだ表示されていません。Joplin、Obsidian、Notion、llm-wiki、または別のノートサーバーを設定するとここに表示されます。',
+    external_notes_auto_recall_hint: '自動セッションリコールは変更されません。このドロワーには、設定済みソースと利用可能な読み取り/検索ツールだけが表示されます。',
+    external_notes_no_tools: 'このソースで利用できる読み取り/検索ツールは現在表示されていません。',
+    external_notes_tool_count: (count) => `${count} 個のノートツールが利用可能`,
+    external_notes_configured_hint: 'この設定済みソースからツール名が想定されています。WebUI ランタイムが公開するとライブスキーマが表示されます。',
+    external_notes_recent_ai: 'AI が最近使用',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: '自動リコール',
+    external_notes_search_placeholder: 'ノートを検索…',
+    external_notes_search_empty: '設定済みのノートソースを検索すると、ここにプレビューが表示されます。',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'まだノートはありません。',
     no_profile_yet: 'まだプロファイルはありません。',
     agent_soul: 'エージェントソウル',
@@ -3693,6 +3794,7 @@ const LOCALES = {
     cron_prompt_label: 'プロンプト',
     cron_deliver_label: '出力先',
     cron_deliver_local: 'ローカル (出力を保存のみ)',
+    cron_deliver_custom: 'カスタム配信先',
     cron_profile_label: 'プロフィール',
     cron_profile_server_default: 'サーバーデフォルト',
     cron_profile_server_default_hint: '実行時に WebUI サーバーのデフォルトプロフィールを使用します。プロフィールのない既存ジョブはこの従来の動作を維持します。',
@@ -3912,6 +4014,7 @@ const LOCALES = {
     provider_mismatch_warning: (m, p) =>
     `"${m}" может не работать с вашим настроенным провайдером (${p}). Всё равно отправить или запустите \`hermes model\` в терминале, чтобы переключиться.`,
     provider_mismatch_label: 'Несовпадение провайдера',
+    gateway_auth_label: 'Сбой аутентификации Gateway',
     model_not_found_label: 'Модель не найдена',
     model_custom_label: 'Пользовательский ID модели',
     model_custom_placeholder: 'например, openai/gpt-5.4',
@@ -4350,6 +4453,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'Заблокировано: задана переменная HERMES_WEBUI_PASSWORD',
     disable_auth: 'Отключить авторизацию',
     sign_out: 'Выйти',
+    settings_label_shutdown: 'Остановить сервер Hermes WebUI',
+    settings_desc_shutdown: 'Корректно останавливает локальный сервер WebUI. Полезно, если вы запустили его через <code>./ctl.sh start</code> и хотите остановить, не переключаясь в терминал. Чтобы WebUI снова стал доступен, потребуется перезапустить сервер (<code>./ctl.sh start</code> или родное приложение).',
+    settings_btn_shutdown: 'Остановить сервер',
+    settings_shutdown_confirm_title: 'Остановить Hermes WebUI',
+    settings_shutdown_confirm_message: 'Остановить сервер Hermes WebUI?',
+    settings_shutdown_confirm_btn: 'Остановить',
+    settings_shutdown_stopped_message: 'Сервер остановлен. Можно закрыть эту вкладку.',
     // Providers panel (English fallback — native translations welcome in follow-up PRs)
     providers_tab_title: 'Providers',
     providers_section_title: 'Providers',
@@ -4597,6 +4707,19 @@ const LOCALES = {
     memory_saved: 'Память сохранена',
     my_notes: 'Мои заметки',
     user_profile: 'Пользовательский профиль',
+    external_notes_sources: 'Сторонние заметки',
+    external_notes_empty: 'Источники заметок или знаний MCP пока не видны. Настройте Joplin, Obsidian, Notion, llm-wiki или другой сервер заметок, чтобы он появился здесь.',
+    external_notes_auto_recall_hint: 'Автоматический вызов контекста сеанса не меняется; эта панель показывает только настроенные источники и доступные инструменты чтения/поиска.',
+    external_notes_no_tools: 'Для этого источника сейчас не видно инструментов чтения/поиска.',
+    external_notes_tool_count: (count) => `Доступно инструментов заметок: ${count}`,
+    external_notes_configured_hint: 'От этого настроенного источника ожидаются имена инструментов; живые схемы появятся, когда WebUI runtime их предоставит.',
+    external_notes_recent_ai: 'Недавно использовано AI',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: 'Автоматический вызов',
+    external_notes_search_placeholder: 'Искать заметки…',
+    external_notes_search_empty: 'Выполните поиск по настроенному источнику заметок, чтобы увидеть предпросмотр здесь.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'Пока нет заметок.',
     no_profile_yet: 'Пока нет профиля.',
     agent_soul: 'Душа агента',
@@ -4713,6 +4836,7 @@ const LOCALES = {
     cron_prompt_label: 'Запрос',
     cron_deliver_label: 'Доставлять вывод',
     cron_deliver_local: 'Локально (только сохранение)',
+    cron_deliver_custom: 'Пользовательская доставка',
     cron_profile_label: 'Профиль',
     cron_profile_server_default: 'по умолчанию сервера',
     cron_profile_server_default_hint: 'Использует профиль WebUI-сервера по умолчанию во время запуска. Существующие задания без профиля сохраняют это поведение.',
@@ -4948,6 +5072,18 @@ const LOCALES = {
     insights_model_share: 'Share',
     insights_no_usage_data: 'No usage data yet',
     insights_footer: 'Showing data from the last {days} days',  // TODO: translate
+    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
+    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
+    insights_skill_usage_total: 'Total invocations',  // TODO: translate
+    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
+    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
+    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
+    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
+    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
+    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
+    insights_skill_usage_col_views: 'Views',  // TODO: translate
+    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
+    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
     insights_input_tokens: 'Input',  // TODO: translate
     insights_messages: 'Messages',  // TODO: translate
     insights_models: 'Models',  // TODO: translate
@@ -5103,6 +5239,7 @@ const LOCALES = {
     model_unavailable_title: 'Este modelo ya no está en tu lista actual de proveedores',
     provider_mismatch_warning: (m,p)=>`"${m}" puede no funcionar con tu proveedor configurado (${p}). Envía de todas formas, o ejecuta \`hermes model\` en la terminal para cambiar.`,
     provider_mismatch_label: 'Proveedor incompatible',
+    gateway_auth_label: 'Error de autenticación de Gateway',
     model_not_found_label: 'Modelo no encontrado',
     model_custom_label: 'ID de modelo personalizado',
     model_custom_placeholder: 'p. ej. openai/gpt-5.4',
@@ -5541,6 +5678,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'Bloqueado: la variable HERMES_WEBUI_PASSWORD está definida',
     disable_auth: 'Desactivar autenticación',
     sign_out: 'Cerrar sesión',
+    settings_label_shutdown: 'Detener el servidor Hermes WebUI',
+    settings_desc_shutdown: 'Detiene de forma controlada el servidor WebUI local. Útil si lo iniciaste con <code>./ctl.sh start</code> y quieres detenerlo sin cambiar al terminal. Para volver a acceder a la WebUI deberás reiniciar el servidor (<code>./ctl.sh start</code> o la aplicación nativa).',
+    settings_btn_shutdown: 'Detener servidor',
+    settings_shutdown_confirm_title: 'Detener Hermes WebUI',
+    settings_shutdown_confirm_message: '¿Detener el servidor Hermes WebUI?',
+    settings_shutdown_confirm_btn: 'Detener',
+    settings_shutdown_stopped_message: 'Servidor detenido. Puedes cerrar esta pestaña.',
     // Providers panel (English fallback — native translations welcome in follow-up PRs)
     providers_tab_title: 'Providers',
     providers_section_title: 'Providers',
@@ -5805,6 +5949,19 @@ const LOCALES = {
     memory_saved: 'Memory saved',
     my_notes: 'My Notes',
     user_profile: 'User Profile',
+    external_notes_sources: 'Notas de terceros',
+    external_notes_empty: 'Aún no hay fuentes MCP de notas o conocimiento visibles. Configura Joplin, Obsidian, Notion, llm-wiki u otro servidor de notas para mostrarlo aquí.',
+    external_notes_auto_recall_hint: 'El recuerdo automático de la sesión no cambia; este panel solo muestra fuentes configuradas y herramientas de lectura/búsqueda disponibles.',
+    external_notes_no_tools: 'No hay herramientas de lectura/búsqueda visibles actualmente para esta fuente.',
+    external_notes_tool_count: (count) => `${count} herramienta${Number(count)===1?'':'s'} de notas disponible${Number(count)===1?'':'s'}`,
+    external_notes_configured_hint: 'Se esperan nombres de herramientas de esta fuente configurada; los esquemas en vivo aparecerán cuando el runtime de WebUI los exponga.',
+    external_notes_recent_ai: 'Usado recientemente por la IA',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: 'Recuerdo automático',
+    external_notes_search_placeholder: 'Buscar notas…',
+    external_notes_search_empty: 'Busca en una fuente de notas configurada para previsualizar notas aquí.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'No notes yet.',
     no_profile_yet: 'No profile yet.',
     agent_soul: 'Agent Soul',
@@ -5890,6 +6047,7 @@ const LOCALES = {
     cron_prompt_label: 'Prompt',
     cron_deliver_label: 'Entregar salida a',
     cron_deliver_local: 'Local (solo guardar salida)',
+    cron_deliver_custom: 'Destino personalizado',
     cron_profile_label: 'Perfil',
     cron_profile_server_default: 'predeterminado del servidor',
     cron_profile_server_default_hint: 'Usa el perfil predeterminado del servidor WebUI durante la ejecución. Los trabajos existentes sin perfil conservan este comportamiento heredado.',
@@ -6125,6 +6283,18 @@ const LOCALES = {
     insights_model_share: 'Share',
     insights_no_usage_data: 'No usage data yet',
     insights_footer: 'Showing data from the last {days} days',  // TODO: translate
+    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
+    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
+    insights_skill_usage_total: 'Total invocations',  // TODO: translate
+    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
+    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
+    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
+    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
+    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
+    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
+    insights_skill_usage_col_views: 'Views',  // TODO: translate
+    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
+    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
     insights_input_tokens: 'Input',  // TODO: translate
     insights_messages: 'Messages',  // TODO: translate
     insights_models: 'Models',  // TODO: translate
@@ -6291,6 +6461,7 @@ const LOCALES = {
     model_unavailable_title: 'Dieses Modell ist nicht mehr in Ihrer aktuellen Provider-Liste',
     provider_mismatch_warning: (m,p)=>`"${m}" funktioniert möglicherweise nicht mit Ihrem konfigurierten Provider (${p}). Trotzdem senden, oder \`hermes model\` im Terminal ausführen.`,
     provider_mismatch_label: 'Provider-Konflikt',
+    gateway_auth_label: 'Gateway-Authentifizierung fehlgeschlagen',
     model_not_found_label: 'Modell nicht gefunden',
     // commands.js
     cmd_help: 'Verfügbare Befehle auflisten',
@@ -6704,6 +6875,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'Gesperrt: HERMES_WEBUI_PASSWORD-Umgebungsvariable ist gesetzt',
     disable_auth: 'Authentifizierung deaktivieren',
     sign_out: 'Abmelden',
+    settings_label_shutdown: 'Hermes WebUI-Server stoppen',
+    settings_desc_shutdown: 'Beendet den lokalen WebUI-Server kontrolliert. Praktisch, wenn du ihn über <code>./ctl.sh start</code> gestartet hast und ihn stoppen möchtest, ohne in ein Terminal zu wechseln. Um die WebUI wieder erreichbar zu machen, musst du den Server neu starten (<code>./ctl.sh start</code> oder die native App).',
+    settings_btn_shutdown: 'Server stoppen',
+    settings_shutdown_confirm_title: 'Hermes WebUI stoppen',
+    settings_shutdown_confirm_message: 'Hermes WebUI-Server stoppen?',
+    settings_shutdown_confirm_btn: 'Stoppen',
+    settings_shutdown_stopped_message: 'Server gestoppt. Du kannst diesen Tab schließen.',
     // Providers panel (English fallback — native translations welcome in follow-up PRs)
     providers_tab_title: 'Providers',
     providers_section_title: 'Providers',
@@ -6796,6 +6974,7 @@ const LOCALES = {
     cron_prompt_label: 'Prompt',
     cron_deliver_label: 'Ausgabe senden an',
     cron_deliver_local: 'Lokal (nur speichern)',
+    cron_deliver_custom: 'Benutzerdefiniertes Ziel',
     cron_profile_label: 'Profil',
     cron_profile_server_default: 'Serverstandard',
     cron_profile_server_default_hint: 'Verwendet zur Laufzeit das Standardprofil des WebUI-Servers. Bestehende Jobs ohne Profil behalten dieses Legacy-Verhalten.',
@@ -7185,6 +7364,19 @@ const LOCALES = {
     memory_saved: 'Notiz gespeichert.',
     my_notes: 'Meine Notizen',
     user_profile: 'Benutzerprofil',
+    external_notes_sources: 'Notizen von Drittanbietern',
+    external_notes_empty: 'Noch sind keine MCP-Quellen für Notizen oder Wissen sichtbar. Konfiguriere Joplin, Obsidian, Notion, llm-wiki oder einen anderen Notizen-Server, um ihn hier anzuzeigen.',
+    external_notes_auto_recall_hint: 'Der automatische Sitzungsabruf bleibt unverändert; diese Leiste zeigt nur konfigurierte Quellen und verfügbare Lese-/Suchwerkzeuge.',
+    external_notes_no_tools: 'Für diese Quelle sind derzeit keine Lese-/Suchwerkzeuge sichtbar.',
+    external_notes_tool_count: (count) => `${count} Notizwerkzeug${Number(count)===1?'':'e'} verfügbar`,
+    external_notes_configured_hint: 'Werkzeugnamen werden von dieser konfigurierten Quelle erwartet; Live-Schemas erscheinen, wenn die WebUI-Laufzeit sie bereitstellt.',
+    external_notes_recent_ai: 'Zuletzt von der KI verwendet',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: 'Automatischer Abruf',
+    external_notes_search_placeholder: 'Notizen suchen…',
+    external_notes_search_empty: 'Durchsuche eine konfigurierte Notizenquelle, um hier eine Vorschau zu sehen.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'Noch keine Notizen.',
     no_profile_yet: 'Noch kein Profil.',
     agent_soul: 'Agenten-Seele',
@@ -7317,6 +7509,18 @@ const LOCALES = {
     insights_model_share: 'Share',
     insights_no_usage_data: 'No usage data yet',
     insights_footer: 'Showing data from the last {days} days',  // TODO: translate
+    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
+    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
+    insights_skill_usage_total: 'Total invocations',  // TODO: translate
+    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
+    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
+    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
+    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
+    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
+    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
+    insights_skill_usage_col_views: 'Views',  // TODO: translate
+    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
+    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
     insights_input_tokens: 'Input',  // TODO: translate
     insights_messages: 'Messages',  // TODO: translate
     insights_models: 'Models',  // TODO: translate
@@ -7483,6 +7687,7 @@ const LOCALES = {
     model_unavailable_title: '这个模型已经不在当前 provider 列表中',
     provider_mismatch_warning: (m,p)=>`\"${m}\" 可能无法在当前配置的提供商 (${p}) 下工作。直接发送，或在终端运行 \`hermes model\` 切换。`,
     provider_mismatch_label: '提供商不匹配',
+    gateway_auth_label: 'Gateway 身份验证失败',
     model_not_found_label: '未找到模型',
     model_custom_label: '自定义模型 ID',
     model_custom_placeholder: '例如 openai/gpt-5.4',
@@ -7871,10 +8076,10 @@ const LOCALES = {
     new_conversation: '新建对话',
     filter_conversations: '筛选对话…',
     session_time_unknown: '未知',
-    session_time_minutes_ago: (n) => `${n}分`,
-    session_time_hours_ago: (n) => `${n}小时`,
-    session_time_days_ago: (n) => `${n}天`,
-    session_time_last_week: '1周',
+    session_time_minutes_ago: (n) => `${n}分钟前`,
+    session_time_hours_ago: (n) => `${n}小时前`,
+    session_time_days_ago: (n) => `${n}天前`,
+    session_time_last_week: '上周',
     session_time_bucket_today: '今天',
     session_time_bucket_yesterday: '昨天',
     session_time_bucket_this_week: '本周',
@@ -7911,6 +8116,13 @@ const LOCALES = {
     suggest_schedule: '今天有什么安排？',
     suggest_files: '这个工作区有哪些文件？',
     sign_out: '退出登录',
+    settings_label_shutdown: '停止 Hermes WebUI 服务器',
+    settings_desc_shutdown: '优雅地停止本地 WebUI 服务器。如果你通过 <code>./ctl.sh start</code> 启动，并希望不切换到终端就停止它，这会很有用。要再次访问 WebUI，需要重新启动服务器（<code>./ctl.sh start</code> 或原生应用）。',
+    settings_btn_shutdown: '停止服务器',
+    settings_shutdown_confirm_title: '停止 Hermes WebUI',
+    settings_shutdown_confirm_message: '停止 Hermes WebUI 服务器？',
+    settings_shutdown_confirm_btn: '停止',
+    settings_shutdown_stopped_message: '服务器已停止。你可以关闭此标签页。',
     // Providers panel (English fallback — native translations welcome in follow-up PRs)
     providers_tab_title: '提供商',
     providers_section_title: '提供商',
@@ -8179,6 +8391,19 @@ const LOCALES = {
     memory_saved: '记忆已保存',
     my_notes: '我的备注',
     user_profile: '用户画像',
+    external_notes_sources: '第三方笔记',
+    external_notes_empty: '还没有可见的笔记或知识 MCP 来源。配置 Joplin、Obsidian、Notion、llm-wiki 或其他笔记服务器后会显示在这里。',
+    external_notes_auto_recall_hint: '自动会话召回保持不变；这个抽屉只显示已配置的来源和可用的读取/搜索工具。',
+    external_notes_no_tools: '此来源当前没有可见的读取/搜索工具。',
+    external_notes_tool_count: (count) => `${count} 个笔记工具可用`,
+    external_notes_configured_hint: '此已配置来源应提供工具名称；当 WebUI 运行时暴露实时 schema 后会显示在这里。',
+    external_notes_recent_ai: 'AI 最近使用',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: '自动召回',
+    external_notes_search_placeholder: '搜索笔记…',
+    external_notes_search_empty: '搜索已配置的笔记来源后，可在这里预览笔记。',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: '暂无备注。',
     no_profile_yet: '暂无用户画像。',
     agent_soul: '智能体灵魂',
@@ -8277,6 +8502,7 @@ const LOCALES = {
     cron_prompt_label: '提示词',
     cron_deliver_label: '输出位置',
     cron_deliver_local: '本地（仅保存输出）',
+    cron_deliver_custom: '自定义推送目标',
     cron_profile_label: '配置档',
     cron_profile_server_default: '服务器默认',
     cron_profile_server_default_hint: '运行时使用 WebUI 服务器默认配置档。没有配置档的现有作业会保留此旧行为。',
@@ -8502,6 +8728,18 @@ const LOCALES = {
     insights_model_share: '占比',
     insights_no_usage_data: '暂无使用数据',
     insights_footer: '显示最近 {days} 天的数据',
+    insights_skill_usage_title: '技能使用统计',
+    insights_skill_usage_sub: '工具调用频次',
+    insights_skill_usage_total: '总调用次数',
+    insights_skill_usage_skills_used: '已使用技能',
+    insights_skill_usage_no_data: '暂无技能使用数据',
+    insights_skill_usage_no_data_hint: '在对话中使用技能后，数据将在此显示。',
+    insights_skill_usage_footer: '数据来源于 ~/.hermes/skills/',
+    insights_skill_usage_col_skill: '技能',
+    insights_skill_usage_col_uses: '使用次数',
+    insights_skill_usage_col_views: '查看次数',
+    insights_skill_usage_col_share: '使用占比',
+    insights_skill_usage_col_patches: '补丁',
     insights_input_tokens: '输入',
     insights_messages: '消息',
     insights_models: '模型',
@@ -8659,6 +8897,7 @@ const LOCALES = {
     model_unavailable_title: '\u6b64\u6a21\u578b\u5df2\u7d93\u4e0d\u5728\u7576\u524d provider \u5217\u8868\u4e2d',
     provider_mismatch_warning: (m,p)=>`\"${m}\" \u53ef\u80fd\u7121\u6cd5\u5728\u7576\u524d\u914d\u7f6e\u7684\u63d0\u4f9b\u8005 (${p}) \u4e0b\u904b\u4f5c\u3002\u5c1a\u9001\uff0c\u6216\u5728\u7d42\u7aef\u57f7\u884c \`hermes model\` \u5207\u63db\u3002`,
     provider_mismatch_label: '\u63d0\u4f9b\u8005\u4e0d\u76f8\u7b26',
+    gateway_auth_label: 'Gateway 驗證失敗',
     model_not_found_label: '\u672a\u627e\u5230\u6a21\u578b',
     // commands.js
     cmd_help: '\u67e5\u770b\u53ef\u7528\u547d\u4ee4',
@@ -9095,6 +9334,13 @@ const LOCALES = {
     suggest_schedule: '今天的時程如何？',
     suggest_files: '這個工作區有哪些檔案？',
     sign_out: '\u767b\u51fa',
+    settings_label_shutdown: '\u505c\u6b62 Hermes WebUI \u4f3a\u670d\u5668',
+    settings_desc_shutdown: '\u6b63\u5e38\u505c\u6b62\u672c\u5730\u7684 WebUI \u4f3a\u670d\u5668\u3002\u5982\u679c\u4f60\u900f\u904e <code>./ctl.sh start</code> \u555f\u52d5\uff0c\u4e26\u5e0c\u671b\u4e0d\u5207\u63db\u5230\u7d42\u7aef\u5c31\u505c\u6b62\uff0c\u9019\u5f88\u6709\u7528\u3002\u8981\u518d\u6b21\u9032\u5165 WebUI\uff0c\u9700\u8981\u91cd\u65b0\u555f\u52d5\u4f3a\u670d\u5668\uff08<code>./ctl.sh start</code> \u6216\u539f\u751f\u61c9\u7528\u7a0b\u5f0f\uff09\u3002',
+    settings_btn_shutdown: '\u505c\u6b62\u4f3a\u670d\u5668',
+    settings_shutdown_confirm_title: '\u505c\u6b62 Hermes WebUI',
+    settings_shutdown_confirm_message: '\u505c\u6b62 Hermes WebUI \u4f3a\u670d\u5668\uff1f',
+    settings_shutdown_confirm_btn: '\u505c\u6b62',
+    settings_shutdown_stopped_message: '\u4f3a\u670d\u5668\u5df2\u505c\u6b62\u3002\u4f60\u53ef\u4ee5\u95dc\u9589\u9019\u500b\u5206\u9801\u3002',
     password_placeholder: '\u5bc6\u78bc',
     password_env_var_locked: '\u76ee\u524d\u5df2\u8a2d\u5b9a HERMES_WEBUI_PASSWORD \u74b0\u5883\u8b8a\u6578\u4e14\u512a\u5148\u751f\u6548\u3002\u8acb\u53d6\u6d88\u8a2d\u5b9a\u4e26\u91cd\u65b0\u555f\u52d5\u4f3a\u670d\u5668\uff0c\u624d\u80fd\u5728\u6b64\u7ba1\u7406\u5bc6\u78bc\u3002',
     password_env_var_locked_placeholder: '\u5df2\u9396\u5b9a\uff1a\u5df2\u8a2d\u5b9a HERMES_WEBUI_PASSWORD \u74b0\u5883\u8b8a\u6578',
@@ -9378,6 +9624,17 @@ const LOCALES = {
     no_profile_yet: '\u5c1a\u7121\u8a2d\u5b9a\u6a94\u3002',
     agent_soul: '智能體靈魂',
     no_soul_yet: '尚無靈魂定義。',
+    external_notes_sources: '第三方筆記',
+    external_notes_empty: '尚未看到任何筆記或知識 MCP 來源。設定 Joplin、Obsidian、Notion、llm-wiki 或其他筆記伺服器後，會顯示在這裡。',
+    external_notes_auto_recall_hint: '自動會話召回維持不變；這個抽屜只顯示已設定的來源，以及可用的讀取/搜尋工具。',
+    external_notes_no_tools: '此來源目前沒有可見的讀取/搜尋工具。',
+    external_notes_tool_count: (count) => `${count} 個筆記工具可用`,
+    external_notes_configured_hint: '此已設定來源應提供工具名稱；當 WebUI 執行階段提供即時 schema 時會顯示在這裡。',
+    external_notes_recent_ai: 'AI 最近使用',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: '自動召回',
+    external_notes_search_placeholder: '搜尋筆記…',
+    external_notes_search_empty: '搜尋已設定的筆記來源後，可在這裡預覽筆記。',
     not_available: '\u7121',
     profile_active: '\u555f\u7528\u4e2d',
     profile_api_key_placeholder: 'API \u91d1\u9470\uff08\u9078\u586b\uff09',
@@ -9683,6 +9940,7 @@ const LOCALES = {
     cron_prompt_label: '提示',
     cron_deliver_label: '發送至',
     cron_deliver_local: '僅本地儲存',
+    cron_deliver_custom: '自訂推送目標',
     cron_profile_label: '設定檔',
     cron_profile_server_default: '伺服器預設',
     cron_profile_server_default_hint: '執行時使用 WebUI 伺服器預設設定檔。沒有設定檔的既有工作會保留此舊行為。',
@@ -9770,6 +10028,18 @@ const LOCALES = {
     insights_model_share: 'Share',
     insights_no_usage_data: 'No usage data yet',
     insights_footer: 'Showing data from the last {days} days',  // TODO: translate
+    insights_skill_usage_title: '技能使用統計',
+    insights_skill_usage_sub: '工具調用頻次',
+    insights_skill_usage_total: '總調用次數',
+    insights_skill_usage_skills_used: '已使用技能',
+    insights_skill_usage_no_data: '暫無技能使用數據',
+    insights_skill_usage_no_data_hint: '在會話中使用技能後，數據將在此顯示。',
+    insights_skill_usage_footer: '數據來源於 ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
+    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
+    insights_skill_usage_col_views: 'Views',  // TODO: translate
+    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
+    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
     insights_input_tokens: 'Input',  // TODO: translate
     insights_messages: 'Messages',  // TODO: translate
     insights_models: 'Models',  // TODO: translate
@@ -9870,6 +10140,7 @@ const LOCALES = {
     model_unavailable_title: 'Este modelo não está mais na sua lista de provedores',
     provider_mismatch_warning: (m,p)=>`"${m}" pode não funcionar com seu provedor configurado (${p}). Enviar assim mesmo, ou execute \`hermes model\` no terminal para trocar.`,
     provider_mismatch_label: 'Provedor incompatível',
+    gateway_auth_label: 'Falha na autenticação do Gateway',
     model_not_found_label: 'Modelo não encontrado',
     composer_mobile_workspace: 'Workspace',
     composer_mobile_model: 'Modelo',
@@ -10463,6 +10734,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'Bloqueado: variável HERMES_WEBUI_PASSWORD está definida',
     disable_auth: 'Desativar Auth',
     sign_out: 'Sair',
+    settings_label_shutdown: 'Parar o servidor Hermes WebUI',
+    settings_desc_shutdown: 'Encerra de forma controlada o servidor WebUI local. Útil se você iniciou via <code>./ctl.sh start</code> e quer parar sem precisar trocar para o terminal. Para acessar o WebUI novamente, será necessário reiniciar o servidor (<code>./ctl.sh start</code> ou o app nativo).',
+    settings_btn_shutdown: 'Parar servidor',
+    settings_shutdown_confirm_title: 'Parar Hermes WebUI',
+    settings_shutdown_confirm_message: 'Parar o servidor Hermes WebUI?',
+    settings_shutdown_confirm_btn: 'Parar',
+    settings_shutdown_stopped_message: 'Servidor parado. Você pode fechar esta aba.',
     // Providers panel
     providers_tab_title: 'Provedores',
     providers_section_title: 'Provedores',
@@ -10720,6 +10998,19 @@ const LOCALES = {
     memory_saved: 'Memória salva',
     my_notes: 'Minhas Notas',
     user_profile: 'Perfil do Usuário',
+    external_notes_sources: 'Notas de terceiros',
+    external_notes_empty: 'Nenhuma fonte MCP de notas ou conhecimento está visível ainda. Configure Joplin, Obsidian, Notion, llm-wiki ou outro servidor de notas para listá-lo aqui.',
+    external_notes_auto_recall_hint: 'A recuperação automática da sessão não muda; esta gaveta mostra apenas fontes configuradas e ferramentas de leitura/pesquisa disponíveis.',
+    external_notes_no_tools: 'Nenhuma ferramenta de leitura/pesquisa está visível para esta fonte no momento.',
+    external_notes_tool_count: (count) => `${count} ferramenta${Number(count)===1?'':'s'} de notas ${Number(count)===1?'disponível':'disponíveis'}`,
+    external_notes_configured_hint: 'Nomes de ferramentas são esperados desta fonte configurada; esquemas ao vivo aparecerão quando o runtime do WebUI os expuser.',
+    external_notes_recent_ai: 'Usado recentemente pela IA',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: 'Recuperação automática',
+    external_notes_search_placeholder: 'Pesquisar notas…',
+    external_notes_search_empty: 'Pesquise em uma fonte de notas configurada para pré-visualizar notas aqui.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'Nenhuma nota ainda.',
     no_profile_yet: 'Nenhum perfil definido.',
     agent_soul: 'Alma do Agente',
@@ -10741,6 +11032,7 @@ const LOCALES = {
     cron_prompt_label: 'Prompt',
     cron_deliver_label: 'Entregar output para',
     cron_deliver_local: 'Local (salvar output apenas)',
+    cron_deliver_custom: 'Destino personalizado',
     cron_profile_label: 'Perfil',
     cron_profile_server_default: 'padrão do servidor',
     cron_profile_server_default_hint: 'Usa o perfil padrão do servidor WebUI no momento da execução. Tarefas existentes sem perfil mantêm esse comportamento legado.',
@@ -10837,6 +11129,18 @@ const LOCALES = {
     insights_activity_by_hour: 'Activity by Hour',  // TODO: translate
     insights_cost: 'Estimated Cost',  // TODO: translate
     insights_footer: 'Showing data from the last {days} days',  // TODO: translate
+    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
+    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
+    insights_skill_usage_total: 'Total invocations',  // TODO: translate
+    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
+    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
+    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
+    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
+    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
+    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
+    insights_skill_usage_col_views: 'Views',  // TODO: translate
+    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
+    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
     insights_input_tokens: 'Input',  // TODO: translate
     insights_messages: 'Messages',  // TODO: translate
     insights_models: 'Models',  // TODO: translate
@@ -11006,6 +11310,7 @@ const LOCALES = {
     model_unavailable_title: 'This model is no longer in your current provider list',
     provider_mismatch_warning: (m,p)=>`"${m}" may not work with your configured provider (${p}). Send anyway, or run \`hermes model\` in your terminal to switch.`,
     provider_mismatch_label: 'Provider mismatch',
+    gateway_auth_label: 'Gateway 인증 실패',
     model_not_found_label: 'Model not found',
     model_custom_label: 'Custom model ID',
     model_custom_placeholder: 'e.g. openai/gpt-5.4',
@@ -11616,6 +11921,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: '잠금: HERMES_WEBUI_PASSWORD 환경 변수가 설정되어 있습니다',
     disable_auth: '인증 비활성화',
     sign_out: '로그아웃',
+    settings_label_shutdown: 'Hermes WebUI 서버 중지',
+    settings_desc_shutdown: '로컬 WebUI 서버를 정상적으로 중지합니다. <code>./ctl.sh start</code> 로 시작했고 터미널로 전환하지 않고 중지하고 싶을 때 유용합니다. 다시 WebUI에 접근하려면 서버(<code>./ctl.sh start</code> 또는 네이티브 앱)를 재시작해야 합니다.',
+    settings_btn_shutdown: '서버 중지',
+    settings_shutdown_confirm_title: 'Hermes WebUI 중지',
+    settings_shutdown_confirm_message: 'Hermes WebUI 서버를 중지할까요?',
+    settings_shutdown_confirm_btn: '중지',
+    settings_shutdown_stopped_message: '서버가 중지되었습니다. 이 탭을 닫아도 됩니다.',
     // Providers panel
     providers_tab_title: 'Providers',
     providers_section_title: 'Providers',
@@ -11880,6 +12192,19 @@ const LOCALES = {
     memory_saved: 'Memory saved',
     my_notes: 'My Notes',
     user_profile: 'User Profile',
+    external_notes_sources: '타사 노트',
+    external_notes_empty: '아직 표시되는 노트 또는 지식 MCP 소스가 없습니다. Joplin, Obsidian, Notion, llm-wiki 또는 다른 노트 서버를 설정하면 여기에 표시됩니다.',
+    external_notes_auto_recall_hint: '자동 세션 리콜은 변경되지 않습니다. 이 드로어는 설정된 소스와 사용 가능한 읽기/검색 도구만 보여줍니다.',
+    external_notes_no_tools: '이 소스에 대해 현재 표시되는 읽기/검색 도구가 없습니다.',
+    external_notes_tool_count: (count) => `${count}개의 노트 도구 사용 가능`,
+    external_notes_configured_hint: '이 설정된 소스에서 도구 이름이 제공될 것으로 예상됩니다. WebUI 런타임이 노출하면 실시간 스키마가 표시됩니다.',
+    external_notes_recent_ai: 'AI가 최근 사용',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: '자동 리콜',
+    external_notes_search_placeholder: '노트 검색…',
+    external_notes_search_empty: '설정된 노트 소스를 검색하면 여기에 노트 미리보기가 표시됩니다.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'No notes yet.',
     no_profile_yet: 'No profile yet.',
     agent_soul: 'Agent Soul',
@@ -11965,6 +12290,7 @@ const LOCALES = {
     cron_prompt_label: 'Prompt',
     cron_deliver_label: 'Deliver output to',
     cron_deliver_local: 'Local (save output only)',
+    cron_deliver_custom: '사용자 지정 전달 대상',
     cron_profile_label: 'Profile',
     cron_profile_server_default: 'server default',
     cron_profile_server_default_hint: 'Uses the WebUI server default profile at run time. Existing jobs without a profile keep this legacy behavior.',
@@ -12081,6 +12407,18 @@ const LOCALES = {
     insights_model_share: '비율',
     insights_no_usage_data: '아직 사용 데이터가 없습니다',
     insights_footer: 'Showing data from the last {days} days',  // TODO: translate
+    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
+    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
+    insights_skill_usage_total: 'Total invocations',  // TODO: translate
+    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
+    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
+    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
+    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
+    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
+    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
+    insights_skill_usage_col_views: 'Views',  // TODO: translate
+    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
+    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
     insights_input_tokens: 'Input',  // TODO: translate
     insights_messages: 'Messages',  // TODO: translate
     insights_models: 'Models',  // TODO: translate
@@ -12260,6 +12598,7 @@ const LOCALES = {
     model_unavailable: '(indisponible)',
     model_unavailable_title: 'Ce modèle ne figure plus dans votre liste de fournisseurs actuelle',
     provider_mismatch_label: 'Inadéquation des fournisseurs',
+    gateway_auth_label: 'Échec de l’authentification Gateway',
     model_not_found_label: 'Modèle introuvable',
     model_custom_label: 'ID de modèle personnalisé',
     model_custom_placeholder: 'par ex. openai/gpt-5.4',
@@ -12739,6 +13078,18 @@ const LOCALES = {
     insights_model_share: 'Partager',
     insights_no_usage_data: 'Aucune donnée d\'utilisation pour l\'instant',
     insights_footer: 'Affichage des données des {days} derniers jours',
+    insights_skill_usage_title: 'Utilisation des Skills',
+    insights_skill_usage_sub: 'Fréquence d\'invocation des outils',
+    insights_skill_usage_total: 'Invocations totales',
+    insights_skill_usage_skills_used: 'Skills utilisés',
+    insights_skill_usage_no_data: 'Aucune donnée d\'utilisation des skills pour le moment',
+    insights_skill_usage_no_data_hint: 'Les skills apparaîtront ici une fois utilisés dans les conversations.',
+    insights_skill_usage_footer: 'Comptages depuis ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
+    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
+    insights_skill_usage_col_views: 'Views',  // TODO: translate
+    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
+    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
     workspace_desc: 'Ajoutez et changez d\'espace de travail pour vos sessions.',
     session_lineage_segment_untitled: 'Segment sans titre',
     session_lineage_segment_open: 'Segment de lignée ouverte',
@@ -12793,6 +13144,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'Verrouillé : la variable d\'environnement HERMES_WEBUI_PASSWORD est définie',
     disable_auth: 'Désactiver l\'authentification',
     sign_out: 'Se déconnecter',
+    settings_label_shutdown: 'Arrêter le serveur Hermes WebUI',
+    settings_desc_shutdown: 'Arrête proprement le serveur WebUI local. Pratique si vous l\'avez démarré via <code>./ctl.sh start</code> et que vous voulez l\'arrêter sans passer par un terminal. Pour rendre la WebUI à nouveau accessible, vous devrez redémarrer le serveur (<code>./ctl.sh start</code> ou l\'application native).',
+    settings_btn_shutdown: 'Arrêter le serveur',
+    settings_shutdown_confirm_title: 'Arrêter Hermes WebUI',
+    settings_shutdown_confirm_message: 'Arrêter le serveur Hermes WebUI ?',
+    settings_shutdown_confirm_btn: 'Arrêter',
+    settings_shutdown_stopped_message: 'Serveur arrêté. Vous pouvez fermer cet onglet.',
     providers_tab_title: 'Fournisseurs',
     providers_section_title: 'Fournisseurs',
     providers_section_meta: 'Gérez les clés API pour les fournisseurs d\'IA. Les modifications prennent effet immédiatement.',
@@ -13051,6 +13409,19 @@ const LOCALES = {
     memory_saved: 'Mémoire sauvegardée',
     my_notes: 'Mes notes',
     user_profile: 'Profil utilisateur',
+    external_notes_sources: 'Notes tierces',
+    external_notes_empty: 'Aucune source MCP de notes ou de connaissances n’est encore visible. Configurez Joplin, Obsidian, Notion, llm-wiki ou un autre serveur de notes pour l’afficher ici.',
+    external_notes_auto_recall_hint: 'Le rappel automatique de session reste inchangé ; ce tiroir affiche seulement les sources configurées et les outils de lecture/recherche disponibles.',
+    external_notes_no_tools: 'Aucun outil de lecture/recherche n’est actuellement visible pour cette source.',
+    external_notes_tool_count: (count) => `${count} outil${Number(count)===1?'':'s'} de notes disponible${Number(count)===1?'':'s'}`,
+    external_notes_configured_hint: 'Des noms d’outils sont attendus depuis cette source configurée ; les schémas live apparaîtront quand le runtime WebUI les exposera.',
+    external_notes_recent_ai: 'Utilisé récemment par l’IA',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: 'Rappel automatique',
+    external_notes_search_placeholder: 'Rechercher des notes…',
+    external_notes_search_empty: 'Recherchez dans une source de notes configurée pour prévisualiser les notes ici.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'Aucune note pour l\'instant.',
     no_profile_yet: 'Pas encore de profil.',
     agent_soul: 'Âme de l\'agent',
@@ -13122,6 +13493,7 @@ const LOCALES = {
     cron_prompt_label: 'Rapide',
     cron_deliver_label: 'Livrer la sortie à',
     cron_deliver_local: 'Local (enregistrer la sortie uniquement)',
+    cron_deliver_custom: 'Destination personnalisee',
     cron_profile_label: 'Profil',
     cron_profile_server_default: 'serveur par défaut',
     cron_profile_server_default_hint: 'Utilise le profil par défaut du serveur WebUI au moment de l\'exécution. Les tâches existantes sans profil conservent ce comportement hérité.',
@@ -13445,6 +13817,7 @@ const LOCALES = {
     model_unavailable_title: 'Bu model artık mevcut sağlayıcı listenizde değil',
     provider_mismatch_warning: (m,p) => `"${m}" yapılandırılmış sağlayıcınızla (${p}) çalışmayabilir. Yine de gönderin veya geçiş yapmak için terminalinizde \`hermes model\` komutunu çalıştırın.`,
     provider_mismatch_label: 'Sağlayıcı uyumsuzluğu',
+    gateway_auth_label: 'Gateway kimlik doğrulaması başarısız',
     model_not_found_label: 'Model bulunamadı',
     model_custom_label: 'Özel model kimliği',
     model_custom_placeholder: 'örneğin openai/gpt-5.4',
@@ -14051,6 +14424,13 @@ const LOCALES = {
     password_env_var_locked_placeholder: 'Kilitli: HERMES_WEBUI_PASSWORD ortam değişkeni ayarlandı',
     disable_auth: 'Kimlik Doğrulamasını Devre Dışı Bırak',
     sign_out: 'Oturumu Kapat',
+    settings_label_shutdown: 'Hermes WebUI sunucusunu durdur',
+    settings_desc_shutdown: 'Yerel WebUI sunucusunu düzgün şekilde durdurur. <code>./ctl.sh start</code> ile başlattıysanız ve terminale geçmeden durdurmak istiyorsanız faydalıdır. WebUI\'a yeniden erişmek için sunucuyu yeniden başlatmanız (<code>./ctl.sh start</code> veya yerel uygulama) gerekir.',
+    settings_btn_shutdown: 'Sunucuyu durdur',
+    settings_shutdown_confirm_title: 'Hermes WebUI\'yi durdur',
+    settings_shutdown_confirm_message: 'Hermes WebUI sunucusu durdurulsun mu?',
+    settings_shutdown_confirm_btn: 'Durdur',
+    settings_shutdown_stopped_message: 'Sunucu durduruldu. Bu sekmeyi kapatabilirsiniz.',
     // Providers panel
     providers_tab_title: 'Sağlayıcılar',
     providers_section_title: 'Sağlayıcılar',
@@ -14315,6 +14695,19 @@ const LOCALES = {
     memory_saved: 'Bellek kaydedildi',
     my_notes: 'Notlarım',
     user_profile: 'Kullanıcı Profili',
+    external_notes_sources: 'Üçüncü taraf notlar',
+    external_notes_empty: 'Henüz görünür not veya bilgi MCP kaynağı yok. Burada listelemek için Joplin, Obsidian, Notion, llm-wiki veya başka bir not sunucusu yapılandırın.',
+    external_notes_auto_recall_hint: 'Otomatik oturum hatırlama değişmedi; bu çekmece yalnızca yapılandırılmış kaynakları ve kullanılabilir okuma/arama araçlarını gösterir.',
+    external_notes_no_tools: 'Bu kaynak için şu anda görünür okuma/arama aracı yok.',
+    external_notes_tool_count: (count) => `${count} not aracı kullanılabilir`,
+    external_notes_configured_hint: 'Bu yapılandırılmış kaynaktan araç adları beklenir; WebUI runtime bunları sunduğunda canlı şemalar görünecek.',
+    external_notes_recent_ai: 'AI tarafından yakın zamanda kullanıldı',
+    external_notes_auto: 'auto',
+    external_notes_recent_ai_reason: 'Otomatik hatırlama',
+    external_notes_search_placeholder: 'Notlarda ara…',
+    external_notes_search_empty: 'Notları burada önizlemek için yapılandırılmış bir not kaynağında arama yapın.',
+    source_active: 'active',
+    source_configured: 'configured',
     no_notes_yet: 'Henüz not yok.',
     no_profile_yet: 'Henüz profil yok.',
     agent_soul: 'Ajan Ruhu',
@@ -14400,6 +14793,7 @@ const LOCALES = {
     cron_prompt_label: 'Çabuk',
     cron_deliver_label: 'Çıktıyı şuraya ilet:',
     cron_deliver_local: 'Yerel (yalnızca çıktıyı kaydet)',
+    cron_deliver_custom: 'Ozel teslimat hedefi',
     cron_profile_label: 'Profil',
     cron_profile_server_default: 'sunucu varsayılanı',
     cron_profile_server_default_hint: 'Çalışma zamanında WebUI sunucusunun varsayılan profilini kullanır. Profili olmayan mevcut işler bu eski davranışı sürdürüyor.',
@@ -14516,6 +14910,18 @@ const LOCALES = {
     insights_model_share: 'Paylaşmak',
     insights_no_usage_data: 'Henüz kullanım verisi yok',
     insights_footer: 'Son {days} günün verileri gösteriliyor',
+    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
+    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
+    insights_skill_usage_total: 'Total invocations',  // TODO: translate
+    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
+    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
+    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
+    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
+    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
+    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
+    insights_skill_usage_col_views: 'Views',  // TODO: translate
+    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
+    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
     insights_input_tokens: 'Giriş',
     insights_messages: 'Mesajlar',
     insights_models: 'Modeller',

@@ -127,6 +127,7 @@ def _dirty_suffix(path: Path, timeout=1) -> str:
         return ""
     # diff-index exits 1 with no output for a dirty tree. Timeouts and real git
     # failures include a diagnostic; skip the suffix so the base version remains.
+    # Hash the tracked diff so dev asset URLs change for each local edit.
     diagnostic = (r.stderr or r.stdout or "").strip()
     if r.returncode != 1 or diagnostic:
         return ""

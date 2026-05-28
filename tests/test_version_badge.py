@@ -11,6 +11,7 @@ Covers:
   7. server.py: server_version is not the old hardcoded string
 """
 import importlib
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -109,24 +110,31 @@ class TestDetectWebUIVersion:
             calls.append((args, timeout))
             if args[:3] == ['describe', '--tags', '--always']:
                 return ('v0.50.123', True)
-            if args[:2] == ['diff-index', '--quiet']:
-                return ('', False)
+            if args[:2] == ['diff', '--binary']:
+                return ('changed file content', True)
             return ('unexpected', False)
 
-        result = self._fresh_detect(mock_run_git=fake_run_git, tmp_path=tmp_path)
-        assert result == 'v0.50.123-dirty'
-        assert calls[1][0][:2] == ['diff-index', '--quiet']
+        dirty_exit = subprocess.CompletedProcess(
+            ['git', 'diff-index', '--quiet', 'HEAD', '--'],
+            1,
+            stdout='',
+            stderr='',
+        )
+        with patch('api.updates.subprocess.run', return_value=dirty_exit):
+            result = self._fresh_detect(mock_run_git=fake_run_git, tmp_path=tmp_path)
+        assert result.startswith('v0.50.123-dirty-')
+        assert calls[1][0][:2] == ['diff', '--binary']
 
     def test_dirty_check_timeout_does_not_hide_base_version(self, tmp_path):
         """If dirty detection times out, keep the base version instead of unknown."""
         def fake_run_git(args, cwd, timeout=10):
             if args[:3] == ['describe', '--tags', '--always']:
                 return ('v0.50.123', True)
-            if args[:2] == ['diff-index', '--quiet']:
-                return ('git diff-index --quiet HEAD -- timed out after 1s', False)
             return ('unexpected', False)
 
-        result = self._fresh_detect(mock_run_git=fake_run_git, tmp_path=tmp_path)
+        timeout = subprocess.TimeoutExpired(['git', 'diff-index', '--quiet', 'HEAD', '--'], 1)
+        with patch('api.updates.subprocess.run', side_effect=timeout):
+            result = self._fresh_detect(mock_run_git=fake_run_git, tmp_path=tmp_path)
         assert result == 'v0.50.123'
 
 

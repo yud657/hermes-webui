@@ -28,7 +28,7 @@
 | P-010 | "供应商" 改"大模型供应商" + Plugins 面板硬编码 i18n 化 | `static/i18n.js`（zh 7 处 "供应商" 加"大模型"前缀；en/zh 各加 10 个 plugins_* 与 settings_section_plugins_* 新 key），`static/index.html`（Plugins 标题/meta/empty 3 处 markup 加 data-i18n），`static/panels.js`（`_buildPluginCard` + 加载错误兜底 6 处硬编码改 `t()`） |
 | P-011 | Usage Analytics 面板全面中文化 | `static/i18n.js`（zh 翻译 14 个 insights_* TODO stub；en/zh 各加 27 个新 key：4 个 insights_range_*、7 个 system_health_*、16 个 llm_wiki_*），`static/index.html`（4 个区间 option 补 data-i18n），`static/panels.js`（`_renderSystemHealthPanel` + `_renderLlmWikiStatus` 全部硬编码改 `t()`），`static/ui.js`（`renderSystemHealth` 状态文案改 `t()`），`api/routes.py`（LLM Wiki `toggle_reason` 默认文案翻译为中文）|
 | P-012 | v0.51.92 rebase 后的回归适配 | `static/i18n.js`（补齐 P-011 新增 key 到 ja/ru/es/de/pt/ko/fr/it/zh-Hant 等 locale，zh/zh-Hant 使用中文文案，其余暂用英文兜底；保留通用 resolver 的上游 `en` 兜底，同时 `loadLocale()` 默认仍落到中文），`static/boot.js`（异常路径默认中文），`static/panels.js`（保留上游源码字符串回归测试锚点），`README.md`（中文 README 补 Docker 与 WSL 文档链接），`api/routes.py`（未知 login locale 兜底 en，但无设置时仍默认 zh；登录页保留英文元数据锚点），`api/onboarding.py`（保留 `.invalid` 等保留域名的 DNS 分类），`api/profiles.py`（兼容旧 hermes_cli 缺少 `_LOAD_CONFIG_CACHE` 的本地测试环境） |
-| P-013 | 避免根目录长文档被 Hermes Agent 当作项目上下文加载 | `HERMES.md` → `HERMES.README.md`，`README.en.md` 链接同步更新，`tests/test_root_context_file_policy.py` 防止根目录 `HERMES.md` 回归 |
+| P-013 | 避免根目录长文档被 Hermes Agent 当作项目上下文加载 | `HERMES.md` → `docs/why-hermes.md`（上游最终路径），`README.en.md` 跟随上游链接，`tests/test_root_context_file_policy.py` 防止根目录 `HERMES.md` 回归 |
 
 新增补丁约定：
 - 单一关切（不要把多个无关改动塞进同一个 P）

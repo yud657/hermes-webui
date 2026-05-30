@@ -11,11 +11,11 @@
 ## 与上游的关系
 
 - **上游**：[`nesquena/hermes-webui`](https://github.com/nesquena/hermes-webui)
-- **当前基线**：`v0.51.92`
+- **当前基线**：`v0.51.163`
 - **同步策略**：`scripts/sync-upstream.sh` 周期性 `git merge upstream/master`，本地化补丁以 `[CN-fork] P-XXX:` 前缀的提交叠加在 upstream 之上
 - **本地化范围**：默认语言、登录页 locale 兜底、`<html lang>` 等"开箱即中文"相关的小改动；UI 字符串仍由上游 `static/i18n.js` 的 `zh` / `zh-Hant` 字典维护
 
-完整本地化补丁列表见 [`MAINTAINING.md`](./MAINTAINING.md)。
+完整本地化补丁列表见 [`MAINTAINING.md`](./MAINTAINING.md)。Hermes 的定位、心智模型与竞品对比长文见 [`docs/why-hermes.md`](docs/why-hermes.md)。
 
 ## 快速开始
 
@@ -28,6 +28,8 @@ python3 bootstrap.py
 服务默认监听 `http://127.0.0.1:8787`，首次启动即为中文界面。
 
 更详细的部署、配置环境变量、对接 hermes-agent 等内容，请参考 [上游英文 README](./README.en.md)——本分支不修改部署逻辑，所有运行手册仍以上游为准。Docker 深度部署见 [`docs/docker.md`](docs/docker.md)，Windows / WSL 登录自启动见 [`docs/wsl-autostart.md`](docs/wsl-autostart.md)。
+
+上游网关健康载荷说明：`gateway_chat` is an operator diagnostic and not currently rendered as a user-facing health banner.
 
 ## 检查更新走哪？
 

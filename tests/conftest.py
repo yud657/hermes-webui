@@ -378,6 +378,11 @@ def pytest_collection_modifyitems(config, items):
         'test_cron_update_unknown_job_404',
         'test_cron_delete_unknown_404',
         'test_crons_output_limit_param',
+        'test_delivery_options_returns_200',
+        'test_delivery_options_has_platforms',
+        'test_delivery_options_structure',
+        'test_delivery_options_includes_common_platforms',
+        'test_delivery_options_local_label',
         # Skills endpoints (need tools.skills_tool module)
         'test_skills_list',
         'test_skills_list_has_required_fields',
@@ -536,6 +541,7 @@ def test_server():
     # pytest-side block can't see.
     env["HERMES_WEBUI_TEST_NETWORK_BLOCK"] = "1"
     env.update({
+        "HERMES_WEBUI_WORKSPACE_GIT_DESTRUCTIVE": "1",
         "HERMES_WEBUI_PORT":              str(TEST_PORT),
         "HERMES_WEBUI_HOST":              "127.0.0.1",
         "HERMES_WEBUI_STATE_DIR":         str(TEST_STATE_DIR),

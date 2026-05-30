@@ -359,8 +359,8 @@ def test_switching_away_counts_as_background_completion():
 
 
 def test_restore_settled_background_stream_marks_completion_unread():
-    restore_idx = MESSAGES_JS.find("async function _restoreSettledSession()")
-    assert restore_idx != -1, "_restoreSettledSession not found"
+    restore_idx = MESSAGES_JS.find("async function _restoreSettledSession(source)")
+    assert restore_idx != -1, "_restoreSettledSession(source) not found"
     restore_block = MESSAGES_JS[restore_idx:MESSAGES_JS.find("function _handleStreamError", restore_idx)]
 
     assert "const isSessionViewed=_isSessionActivelyViewed(activeSid);" in restore_block
@@ -389,7 +389,7 @@ def test_focus_visibility_return_marks_active_session_viewed_and_clears_marker()
 
 
 def test_completion_unread_clears_only_when_session_is_opened():
-    load_idx = SESSIONS_JS.find("async function loadSession(sid)")
+    load_idx = SESSIONS_JS.find("async function loadSession(sid")
     assert load_idx != -1, "loadSession not found"
     load_block = SESSIONS_JS[load_idx:SESSIONS_JS.find("function _resolveSessionModelForDisplaySoon", load_idx)]
 

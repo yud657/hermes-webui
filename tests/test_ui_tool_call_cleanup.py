@@ -273,10 +273,10 @@ class TestToolCallGroupingStatic:
             "Compact settled transcript rendering should preserve Thinking cards after switching sessions."
         )
         assert "_thinkingActivityNode(thinkingText, false)" in render_fn, (
-            "Settled Thinking cards should render as collapsed timeline entries before related tools."
+            "Settled Thinking cards should render inside the compact Activity disclosure."
         )
-        assert "anchorParent.insertBefore(thinkingNode, anchorRow)" in render_fn, (
-            "Settled Thinking cards should appear before their visible assistant process text."
+        assert "body.appendChild(_thinkingActivityNode(thinkingText, false))" in render_fn, (
+            "Settled Thinking cards should stay inside the same Activity body as the related tools."
         )
         assert ".agent-activity-thinking:not([data-live-thinking=\"1\"])" in render_fn, (
             "Settled rerenders must remove previously inserted Thinking activity rows before rebuilding."
@@ -285,18 +285,18 @@ class TestToolCallGroupingStatic:
             "The non-simplified path should preserve standalone settled thinking cards."
         )
 
-    def test_live_visible_interim_text_splits_tool_bursts_not_thinking(self):
+    def test_live_visible_interim_text_preserves_timeline_boundary(self):
         live_thinking_fn = _function_body(UI_JS, "appendThinking")
         live_tool_fn = _function_body(UI_JS, "appendLiveToolCard")
         helper = _function_body(UI_JS, "ensureActivityGroup")
         assert "isSimplifiedToolCalling()" in live_thinking_fn, (
             "Live thinking should branch on the Compact tool activity toggle."
         )
-        assert "body.insertBefore(row, body.firstChild)" not in live_thinking_fn, (
-            "Live thinking should not be moved into the top Activity dropdown."
-        )
         assert "_thinkingActivityNode(thinkingText, false)" in live_thinking_fn, (
-            "Compact live thinking should render a collapsed Thinking card in the timeline."
+            "Compact live thinking should render inside the Activity disclosure."
+        )
+        assert "ensureActivityGroup(blocks,{live:true" in live_thinking_fn and "body.appendChild(row)" in live_thinking_fn, (
+            "Compact live thinking should share the same Activity body as live tool cards."
         )
         assert "removeAttribute('data-live-activity-current')" not in live_thinking_fn, (
             "Reasoning/Thinking updates alone should not split consecutive tools into one-tool Activity rows."
@@ -312,22 +312,28 @@ class TestToolCallGroupingStatic:
         )
         finalize_fn = _function_body(UI_JS, "finalizeThinkingCard")
         assert "turn.querySelector('.agent-activity-thinking[data-thinking-active=\"1\"]')" in finalize_fn, (
-            "Compact Thinking cards live directly in assistant-turn blocks, so finalization must clear the active marker from the whole turn, not only the tool group."
+            "Compact Thinking cards live inside the assistant turn, so finalization must clear the active marker from the whole turn."
         )
-        assert "thinkingCards.filter" in live_thinking_fn and "setAttribute('data-thinking-active','1')" in live_thinking_fn, (
+        assert "body.querySelector('.agent-activity-thinking[data-thinking-active=\"1\"]')" in live_thinking_fn and "setAttribute('data-thinking-active','1')" in live_thinking_fn, (
             "Compact live thinking should reactivate the latest existing Thinking card instead of stacking a new card after every tool boundary."
         )
-        close_activity_fn = _function_body(MESSAGES_JS, "_closeCurrentLiveActivityGroup")
-        assert "data-live-activity-current" in close_activity_fn, (
-            "Visible interim assistant boundaries should close the previous live Activity burst."
-        )
         reset_fn = _function_body(MESSAGES_JS, "_resetAssistantSegment")
-        assert "closeActivity" in reset_fn and "_closeCurrentLiveActivityGroup()" in reset_fn, (
-            "Assistant text reset and Activity burst closing should stay separate."
+        assert "function closeCurrentLiveActivityGroup()" in UI_JS, (
+            "Visible interim assistant progress needs a shared helper to close the current Activity burst."
         )
         interim_match = re.search(r"source\.addEventListener\('interim_assistant',e=>\{(.*?)\n\s*\}\);", MESSAGES_JS, re.S)
-        assert interim_match and "_resetAssistantSegment({closeActivity:true});" in interim_match.group(1), (
-            "Visible interim assistant text should split the previous tool burst before the next tool starts."
+        assert interim_match and "closeCurrentLiveActivityGroup()" in interim_match.group(1), (
+            "Visible interim assistant progress is timeline content and must split the current Activity burst."
+        )
+        assert interim_match and "ensureAssistantRow(true)" in interim_match.group(1), (
+            "Visible interim assistant progress must create a visible assistant timeline segment."
+        )
+        assert interim_match and "_flushPendingSegmentRender({force:true})" in interim_match.group(1), (
+            "Visible interim assistant progress must be synchronously rendered before the segment reset."
+        )
+        timer_fn = _function_body(UI_JS, "_updateActiveActivityElapsedTimer")
+        assert "data-live-activity-current" in timer_fn, (
+            "Elapsed timers should clear once an Activity group is no longer current."
         )
         tool_start_segment = MESSAGES_JS.split("source.addEventListener('tool',e=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
         assert "_resetAssistantSegment();" in tool_start_segment, (

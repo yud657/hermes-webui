@@ -3,6 +3,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Workspace path autocomplete now preserves `~/` suggestions while browsing under the user's home directory (#3173).
+
 ## [v0.51.171] — 2026-05-30 — Release EQ (stage-batch53 — tool-output card badge + Neon opt-in skin)
 
 ### Added

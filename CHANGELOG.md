@@ -3,6 +3,13 @@
 
 ## [Unreleased]
 
+## [v0.51.187] — 2026-05-31 — Release FG (stage-batchG — workspace-preview persistence + repaired-sidecar order + scroll-intent window)
+
+### Fixed
+- Workspace file preview no longer closes when a chat response finishes and the UI refreshes the workspace file tree. Background `loadDir('.')` on stream `done` now preserves an open preview instead of always calling `clearPreview()`, and reloads the open file when a write/edit tool touched that path during the turn (skipping reload while the preview has unsaved local edits) (#3262, @pamnard).
+- Repaired messaging sidecars now keep their authoritative order when merged with CLI/state rows for display: the sidecar ordering is preserved verbatim and only non-overlapping CLI rows outside the sidecar timestamp window are added, instead of timestamp-sorting the whole union (which replayed older compression-lineage rows into the middle/tail and made repeated user turns reappear after reload) (#3268, @ai-ag2026).
+- During streaming, scrolling up to read earlier content no longer snaps back to the bottom after a brief pause: the upward-scroll intent window was widened from 450ms to 2000ms so DOM-layout changes from the markdown parser / tool-card insertions are still recognized as co-occurring with user intent and don't re-pin the view. Downward scroll, the scroll-to-bottom button, and trackpad-momentum protection are unaffected (#3250, @emanon312).
+
 ## [v0.51.186] — 2026-05-31 — Release FF (stage-batchF — update-checker ff-reachability fall-through + utf-8 git-output test coverage)
 
 ### Fixed

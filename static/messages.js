@@ -1941,6 +1941,8 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
           }
           clearLiveToolCards();
           S.busy=false;
+          // Suppress external poll for 5s after settling to avoid race
+          if(typeof window._setSessionRefreshCooldown==='function') window._setSessionRefreshCooldown();
           // No-reply guard (#373): if agent returned nothing, show inline error
           if(!S.messages.some(m=>m.role==='assistant'&&String(m.content||'').trim())&&!assistantText){removeThinking();S.messages.push({role:'assistant',content:'**No response received.** Check your API key and model selection.'});}
           if(_markerOnlyAssistantError&&typeof showToast==='function') showToast('No response received after context compression. Please retry.',5000,'error');
@@ -2347,6 +2349,8 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       if(isActiveSession){
         S.activeStreamId=null;
         clearLiveToolCards();if(!assistantText)removeThinking();
+        // Suppress external poll for 5s after stream-end settle
+        if(typeof window._setSessionRefreshCooldown==='function') window._setSessionRefreshCooldown();
         S.session=session;
         const _nextMsgs3018=(session.messages||[]).filter(m=>m&&m.role);
         S.messages=_carryForwardEphemeralTurnFields(S.messages||[], _nextMsgs3018);

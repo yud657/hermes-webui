@@ -753,9 +753,10 @@ async function loadSession(sid){
       // can cause _ensureMessagesLoaded to throw. Without a try/catch here the
       // "Loading conversation..." div injected at the top of loadSession would
       // persist forever with no recovery path.
+      console.error('[hermes] Phase 2b _ensureMessagesLoaded threw:', e.message, 'status:', e.status, 'sid:', sid);
       const _msgInner = $('msgInner');
       if (_msgInner) {
-        _msgInner.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px;padding:40px;text-align:center;">Failed to load messages. Try switching sessions or refreshing.</div>';
+        _msgInner.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px;padding:40px;text-align:center;">Failed to load messages.<br><button onclick="location.reload()" style="margin-top:12px;padding:8px 20px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer;font-size:13px;">Retry</button></div>';
       }
       if (typeof showToast === 'function') showToast('Failed to load conversation messages', 3000, 'error');
       if (_loadingSessionId === sid) _loadingSessionId = null;
@@ -860,6 +861,10 @@ async function loadSession(sid){
 
   // Clear the in-flight session marker now that this load has completed (#1060).
   if (_loadingSessionId === sid) _loadingSessionId = null;
+
+  // Set a cooldown so the external poll doesn't race to trigger a redundant
+  // loadSession right after we just loaded and rendered messages.
+  _activeSessionRefreshCooldownUntil = Date.now() + 5000;
 
   if(typeof renderSessionArtifacts==='function') renderSessionArtifacts();
 
@@ -1308,12 +1313,30 @@ async function _ensureMessagesLoaded(sid) {
     return;
   }
   // Fetch session messages with a tail window for fast initial load.
-  const data = await api(`/api/session?session_id=${encodeURIComponent(sid)}&messages=1&resolve_model=0&msg_limit=${_INITIAL_MSG_LIMIT}`);
+  // Retry once on transient failures (network blip, server restart race).
+  let data;
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      data = await api(`/api/session?session_id=${encodeURIComponent(sid)}&messages=1&resolve_model=0&msg_limit=${_INITIAL_MSG_LIMIT}`);
+      break;
+    } catch (e) {
+      lastErr = e;
+      if (attempt === 0) {
+        console.warn('[hermes] _ensureMessagesLoaded attempt 1 failed, retrying...', e.message);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+  }
+  if (!data) {
+    if (lastErr) console.error('[hermes] _ensureMessagesLoaded failed after retries:', lastErr.message, lastErr.status);
+    return;
+  }
   // Guard: api() may have redirected (401) and returned undefined.
-  if (!data || !data.session) return;
+  if (!data.session) return;
   _messagesTruncated = !!data.session._messages_truncated;
   _oldestIdx = data.session._messages_offset || 0;
-  const msgs = (data.session.messages || []).filter(m => m && m.role);
+  let msgs = (data.session.messages || []).filter(m => m && m.role);
   // Check for tool-call metadata on messages (for tool-call card rendering)
   const hasMessageToolMetadata = msgs.some(m => {
     if (!m || m.role !== 'assistant') return false;
@@ -2370,11 +2393,21 @@ function ensureSessionTimeRefreshPoll(){
   }, _sessionTimeRefreshMs);
 }
 
+let _activeSessionRefreshCooldownUntil = 0;
+
+// Exposed so messages.js (done/stream_end handlers) can suppress the poll
+// for 5s after a local session update, preventing redundant loadSession calls.
+if(typeof window !== 'undefined') window._setSessionRefreshCooldown = function(ms) {
+  _activeSessionRefreshCooldownUntil = Date.now() + (ms || 5000);
+};
+
 async function refreshActiveSessionIfExternallyUpdated(reason){
   if(_activeSessionExternalRefreshInFlight) return;
   if(!S.session || !S.session.session_id) return;
   if(S.busy || S.activeStreamId) return;
   if(typeof document !== 'undefined' && document.hidden) return;
+  // Respect cooldown to avoid racing with local state persistence
+  if(Date.now() < _activeSessionRefreshCooldownUntil) return;
   const sid = S.session.session_id;
   const localCount = Number(S.session.message_count || (Array.isArray(S.messages)?S.messages.length:0) || 0);
   const localLast = Number(S.session.last_message_at || S.session.updated_at || 0);

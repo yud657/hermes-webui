@@ -141,24 +141,17 @@ def _detect_webui_version() -> str:
     """Detect the running WebUI version from git or a baked-in fallback file.
 
     Resolution order:
-      1. ``git describe --tags --always --dirty`` — works in any git checkout.
+      1. ``api/_version.py`` — checked first so a manually written version file
+         takes priority over a bare git SHA on mirror checkouts without tags.
+      2. ``git describe --tags --always --dirty`` — works in any git checkout.
          Returns the exact tag on tagged commits (e.g. ``v0.50.124``), a
          post-tag descriptor between releases (e.g. ``v0.50.124-1-ge91325d``),
          or a bare SHA when no tags exist (shallow clones, fresh forks).
-      2. ``api/_version.py`` — a fallback written by the Docker / CI release
-         workflow when ``.git`` is not present in the image.  Expected to define
-         ``__version__ = 'vX.Y.Z'``.
       3. ``'unknown'`` — last resort; displayed as-is in the settings badge.
     """
-    # Timeout capped at 3s: git describe on a healthy local repo is <50ms;
-    # a 10s stall on import (NFS-mounted .git, broken git binary) is unacceptable.
-    out = _describe_git_version(REPO_ROOT)
-    if out:
-        return out
-
-    # Docker / baked-image fallback: api/_version.py written by CI at build time.
-    # Parse with regex rather than exec() — the file holds exactly one assignment
-    # and regex is sufficient; exec() on a build artifact is an unnecessary surface.
+    # 1. Check api/_version.py first — written by CI / release workflow or
+    #    manually for non-tagged checkouts. Gives priority to a stable version
+    #    string over a bare git SHA when the remote mirror does not publish tags.
     version_file = REPO_ROOT / 'api' / '_version.py'
     if version_file.exists():
         try:
@@ -171,6 +164,14 @@ def _detect_webui_version() -> str:
                 return m.group(1)
         except Exception:
             pass
+
+    # 2. Fallback to git describe (works on tagged checkouts, returns bare SHA
+    #    when no tags exist, e.g. mirror clones).
+    # Timeout capped at 3s: git describe on a healthy local repo is <50ms;
+    # a 10s stall on import (NFS-mounted .git, broken git binary) is unacceptable.
+    out = _describe_git_version(REPO_ROOT)
+    if out:
+        return out
 
     return 'unknown'
 

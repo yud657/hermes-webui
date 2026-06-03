@@ -243,7 +243,7 @@ async function switchPanel(name, opts = {}) {
   // showing-<name> class on <main>; no class means chat (the default).
   const mainEl = document.querySelector('main.main');
   if (mainEl) {
-    ['settings','skills','memory','tasks','kanban','workspaces','profiles','insights','logs'].forEach(p => {
+    ['settings','skills','memory','tasks','kanban','workspaces','profiles','insights','logs','plugin'].forEach(p => {
       mainEl.classList.toggle('showing-' + p, nextPanel === p);
     });
   }
@@ -2650,35 +2650,48 @@ async function loadKanbanTask(taskId){
 function loadTodos() {
   const panel = $('todoPanel');
   if (!panel) return;
-  const sourceMessages = (S.session && Array.isArray(S.session.messages) && S.session.messages.length) ? S.session.messages : S.messages;
-  // Parse the most recent todo state from message history
-  let todos = [];
-  for (let i = sourceMessages.length - 1; i >= 0; i--) {
-    const m = sourceMessages[i];
-    if (m && m.role === 'tool') {
-      try {
-        const d = JSON.parse(typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
-        if (d && Array.isArray(d.todos) && d.todos.length) {
-          todos = d.todos;
-          break;
-        }
-      } catch(e) {}
-    }
+
+  const sessionTodoState = S.session && S.session.todo_state;
+  let todos;
+  if (sessionTodoState && Array.isArray(sessionTodoState.todos)) {
+    todos = sessionTodoState.todos;
+  } else {
+    todos = _legacyTodosFromMessages();
   }
+
   if (!todos.length) {
     panel.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:4px 0">${esc(t('todos_no_active'))}</div>`;
     return;
   }
   const statusIcon = {pending:li('square',14), in_progress:li('loader',14), completed:li('check',14), cancelled:li('x',14)};
   const statusColor = {pending:'var(--muted)', in_progress:'var(--blue)', completed:'rgba(100,200,100,.8)', cancelled:'rgba(200,100,100,.5)'};
-  panel.innerHTML = todos.map(t => `
+  panel.innerHTML = todos.map(todo => `
     <div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
-      <span style="font-size:14px;display:inline-flex;align-items:center;flex-shrink:0;margin-top:1px;color:${statusColor[t.status]||'var(--muted)'}">${statusIcon[t.status]||li('square',14)}</span>
+      <span style="font-size:14px;display:inline-flex;align-items:center;flex-shrink:0;margin-top:1px;color:${statusColor[todo.status]||'var(--muted)'}">${statusIcon[todo.status]||li('square',14)}</span>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;color:${t.status==='completed'?'var(--muted)':t.status==='in_progress'?'var(--text)':'var(--text)'};${t.status==='completed'?'text-decoration:line-through;opacity:.5':''};line-height:1.4">${esc(t.content)}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px;opacity:.6">${esc(t.id)} · ${esc(t.status)}</div>
+        <div style="font-size:13px;color:${todo.status==='completed'?'var(--muted)':todo.status==='in_progress'?'var(--text)':'var(--text)'};${todo.status==='completed'?'text-decoration:line-through;opacity:.5':''};line-height:1.4">${esc(todo.content)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;opacity:.6">${esc(todo.id)} · ${esc(todo.status)}</div>
       </div>
     </div>`).join('');
+}
+
+function _legacyTodosFromMessages() {
+  const sourceMessages = (S.session && Array.isArray(S.session.messages) && S.session.messages.length) ? S.session.messages : S.messages;
+  if (!Array.isArray(sourceMessages)) return [];
+  for (let i = sourceMessages.length - 1; i >= 0; i--) {
+    const m = sourceMessages[i];
+    if (!m || m.role !== 'tool') continue;
+    let content = m.content;
+    if (typeof content !== 'string') {
+      try { content = JSON.stringify(content); } catch (_) { continue; }
+    }
+    if (!content || content.indexOf('"todos"') < 0) continue;
+    try {
+      const d = JSON.parse(content);
+      if (d && Array.isArray(d.todos) && d.todos.length) return d.todos;
+    } catch (_) {}
+  }
+  return [];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -3228,17 +3241,14 @@ function _formatLlmWikiTimestamp(value) {
 }
 
 function _renderSystemHealthPanel() {
-  // Keep the English source strings near the translated render path so the
-  // upstream source-string regression tests still see the canonical labels:
-  // "System health", "Current VPS resource usage", "raw/ files".
   return `
     <section class="insights-card system-health-panel loading" id="systemHealthPanel" aria-label="Host resource health" aria-live="polite">
       <div class="system-health-head">
         <div>
-          <div class="insights-card-title">${esc(t('system_health_title'))}</div>
-          <div class="system-health-sub">${esc(t('system_health_sub'))}</div>
+          <div class="insights-card-title">System health</div>
+          <div class="system-health-sub">Current VPS resource usage</div>
         </div>
-        <span class="system-health-status" id="systemHealthStatus"><span class="system-health-dot" aria-hidden="true"></span>${esc(t('system_health_loading'))}</span>
+        <span class="system-health-status" id="systemHealthStatus"><span class="system-health-dot" aria-hidden="true"></span>Loading…</span>
       </div>
       <div class="system-health-metrics">
         <div class="system-health-metric" data-system-health-metric="cpu">
@@ -3254,7 +3264,7 @@ function _renderSystemHealthPanel() {
           <div class="system-health-bar" role="progressbar" aria-label="Disk usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="system-health-bar-fill"></div></div>
         </div>
       </div>
-      <div class="system-health-foot">${esc(t('system_health_foot'))}</div>
+      <div class="system-health-foot">Live snapshot only; historical resource charts can build on this surface later.</div>
     </section>`;
 }
 
@@ -3264,42 +3274,42 @@ function _renderLlmWikiStatus(d) {
   const isEmpty = status.available && status.status === 'empty';
   const isError = status.status === 'error';
   const badgeClass = isReady ? 'ok' : isError ? 'err' : isEmpty ? 'warn' : 'muted';
-  const badgeText = isReady ? t('llm_wiki_badge_available') : isError ? t('llm_wiki_badge_error') : isEmpty ? t('llm_wiki_badge_empty') : t('llm_wiki_badge_unavailable');
+  const badgeText = isReady ? 'Available' : isError ? 'Error' : isEmpty ? 'Empty' : 'Unavailable';
   const rawDocsUrl = status.docs_url || 'https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/research/research-llm-wiki';
   // Guard against unsafe URL schemes (e.g. js: / data:) if docs_url ever
   // becomes config-driven. esc() HTML-escapes but doesn't validate URL scheme.
   const docsUrl = /^https?:\/\//i.test(rawDocsUrl) ? rawDocsUrl : '#';
   const toggleNote = status.toggle_available
-    ? t('llm_wiki_toggle_available')
-    : (status.toggle_reason || t('llm_wiki_toggle_unavailable'));
+    ? 'Toggle available from configured Hermes Agent setting.'
+    : (status.toggle_reason || 'No stable LLM Wiki on/off config flag was detected, so this panel is read-only.');
   const statusNote = isReady
-    ? t('llm_wiki_status_ready')
+    ? 'LLM Wiki is configured and page metadata is visible without exposing wiki content.'
     : isEmpty
-      ? t('llm_wiki_status_empty')
+      ? 'LLM Wiki exists but has no entity, concept, comparison, or query pages yet.'
       : isError
-        ? `${t('llm_wiki_status_error')}${status.error ? ': ' + status.error : ''}.`
-        : t('llm_wiki_status_missing');
+        ? `Unable to inspect LLM Wiki status${status.error ? ': ' + status.error : ''}.`
+        : 'No LLM Wiki directory was found. Set WIKI_PATH or skills.config.wiki.path to enable status visibility.';
   return `
     <div class="insights-card wiki-status-card" id="llmWikiStatusCard">
       <div class="wiki-status-head">
         <div>
-          <div class="insights-card-title">${esc(t('llm_wiki_title'))}</div>
-          <div class="wiki-status-sub">${esc(t('llm_wiki_sub'))}</div>
+          <div class="insights-card-title">LLM Wiki</div>
+          <div class="wiki-status-sub">Knowledge-base observability</div>
         </div>
         <span class="wiki-status-badge ${badgeClass}">${esc(badgeText)}</span>
       </div>
       <div class="wiki-status-note">${esc(statusNote)}</div>
       <div class="wiki-status-grid">
-        <div><span>${esc(t('llm_wiki_field_enabled'))}</span><strong>${esc(status.enabled ? t('llm_wiki_value_yes') : t('llm_wiki_value_no'))}</strong></div>
-        <div><span>${esc(t('llm_wiki_field_entries'))}</span><strong>${Number(status.entry_count || 0).toLocaleString()}</strong></div>
-        <div><span>${esc(t('llm_wiki_field_pages'))}</span><strong>${Number(status.page_count || 0).toLocaleString()}</strong></div>
-        <div><span>${esc(t('llm_wiki_field_raw_files'))}</span><strong>${Number(status.raw_source_count || 0).toLocaleString()}</strong></div>
-        <div><span>${esc(t('llm_wiki_field_last_updated'))}</span><strong>${esc(_formatLlmWikiTimestamp(status.last_updated))}</strong></div>
-        <div><span>${esc(t('llm_wiki_field_last_writer'))}</span><strong>${esc(status.last_writer || t('llm_wiki_value_not_available'))}</strong></div>
+        <div><span>Enabled</span><strong>${status.enabled ? 'Yes' : 'No'}</strong></div>
+        <div><span>Entries</span><strong>${Number(status.entry_count || 0).toLocaleString()}</strong></div>
+        <div><span>Pages</span><strong>${Number(status.page_count || 0).toLocaleString()}</strong></div>
+        <div><span>raw/ files</span><strong>${Number(status.raw_source_count || 0).toLocaleString()}</strong></div>
+        <div><span>Last updated</span><strong>${esc(_formatLlmWikiTimestamp(status.last_updated))}</strong></div>
+        <div><span>Last writer</span><strong>${esc(status.last_writer || 'Not available')}</strong></div>
       </div>
       <div class="wiki-status-footer">
         <span>${esc(toggleNote)}</span>
-        <a href="${esc(docsUrl)}" target="_blank" rel="noopener noreferrer">${esc(t('llm_wiki_docs_link'))}</a>
+        <a href="${esc(docsUrl)}" target="_blank" rel="noopener noreferrer">Docs</a>
       </div>
     </div>`;
 }
@@ -3643,6 +3653,19 @@ function _stripYamlFrontmatter(content) {
   return { frontmatter: m[1], body: content.slice(m[0].length) };
 }
 
+function _skillMarkdownHtml(markdown) {
+  return `<div class="preview-md">${renderMd(markdown || '')}</div>`;
+}
+
+function _enhanceSkillMarkdown(root) {
+  if (!root) return;
+  requestAnimationFrame(() => {
+    const mdRoot = root.querySelector('.preview-md') || root;
+    if (typeof highlightCode === 'function') highlightCode(mdRoot);
+    if (typeof renderKatexBlocks === 'function') renderKatexBlocks(mdRoot);
+  });
+}
+
 function _renderSkillDetail(name, content, linkedFiles) {
   const title = $('skillDetailTitle');
   const body = $('skillDetailBody');
@@ -3655,7 +3678,7 @@ function _renderSkillDetail(name, content, linkedFiles) {
   if (frontmatter) {
     html += `<details class="skill-frontmatter"><summary>${esc(t('skill_metadata'))}</summary><pre><code>${esc(frontmatter)}</code></pre></details>`;
   }
-  html += renderMd(markdownBody || '(no content)');
+  html += _skillMarkdownHtml(markdownBody || '(no content)');
   const lf = linkedFiles || {};
   const categories = Object.entries(lf).filter(([,files]) => files && files.length > 0);
   if (categories.length) {
@@ -3670,6 +3693,7 @@ function _renderSkillDetail(name, content, linkedFiles) {
     html += '</div>';
   }
   body.innerHTML = `<div class="main-view-content skill-detail-content">${html}</div>`;
+  _enhanceSkillMarkdown(body);
   body.querySelectorAll('.skill-linked-file').forEach(a => {
     a.addEventListener('click', e => { e.preventDefault(); openSkillFile(a.dataset.skillName, a.dataset.skillFile); });
   });
@@ -3741,7 +3765,7 @@ async function openSkillFile(skillName, filePath) {
     const header = `<div class="skill-file-breadcrumb"><a href="#" class="skill-file-back" data-skill-name="${esc(skillName)}">&larr; ${esc(backLabel)}</a><span class="skill-file-path">${esc(filePath)}</span></div>`;
     let content;
     if (isMd) {
-      content = `<div class="main-view-content">${renderMd(data.content || '')}</div>`;
+      content = `<div class="main-view-content">${_skillMarkdownHtml(data.content || '')}</div>`;
     } else {
       const escaped = esc(data.content || '');
       content = `<pre class="skill-file-code"><code>${escaped}</code></pre>`;
@@ -3760,7 +3784,8 @@ async function openSkillFile(skillName, filePath) {
         }
       });
     });
-    if (!isMd) requestAnimationFrame(() => { if (typeof highlightCode === 'function') highlightCode(); });
+    if (isMd) _enhanceSkillMarkdown(body);
+    else requestAnimationFrame(() => { if (typeof highlightCode === 'function') highlightCode(); });
   } catch(e) { setStatus(t('skill_file_load_failed') + e.message); }
 }
 
@@ -5023,7 +5048,7 @@ async function loadProfilesPanel() {
       const meta = [];
       if (p.model) meta.push(p.model.split('/').pop());
       if (p.provider) meta.push(p.provider);
-      if (p.skill_count) meta.push(t('profile_skill_count', p.skill_count));
+      if (p.total_skills && p.total_skills > 0) meta.push(t('profile_skill_count', p.total_skills).replace(String(p.total_skills), `${p.enabled_skills} / ${p.total_skills}`));
       const gwDot = p.gateway_running
         ? `<span class="profile-opt-badge running" title="${esc(t('profile_gateway_running'))}"></span>`
         : `<span class="profile-opt-badge stopped" title="${esc(t('profile_gateway_stopped'))}"></span>`;
@@ -5097,7 +5122,7 @@ function _renderProfileDetail(p, activeName){
   if (p.provider) rows.push(`<div class="detail-row"><div class="detail-row-label">Provider</div><div class="detail-row-value">${esc(p.provider)}</div></div>`);
   if (p.base_url) rows.push(`<div class="detail-row"><div class="detail-row-label">Base URL</div><div class="detail-row-value"><code>${esc(p.base_url)}</code></div></div>`);
   rows.push(`<div class="detail-row"><div class="detail-row-label">API key</div><div class="detail-row-value">${p.has_env ? esc(t('profile_api_keys_configured')) : '<span style="color:var(--muted)">Not configured</span>'}</div></div>`);
-  if (typeof p.skill_count === 'number') rows.push(`<div class="detail-row"><div class="detail-row-label">Skills</div><div class="detail-row-value">${esc(t('profile_skill_count', p.skill_count))}</div></div>`);
+  if (p.total_skills && p.total_skills > 0) rows.push(`<div class="detail-row"><div class="detail-row-label">Skills</div><div class="detail-row-value">${esc(t('profile_skill_count', p.total_skills).replace(String(p.total_skills), `${p.enabled_skills} / ${p.total_skills}`))}</div></div>`);
   if (p.default_workspace) rows.push(`<div class="detail-row"><div class="detail-row-label">Default space</div><div class="detail-row-value"><code>${esc(p.default_workspace)}</code></div></div>`);
   body.innerHTML = `
     <div class="main-view-content">
@@ -5187,7 +5212,7 @@ function renderProfileDropdown(data) {
     opt.className = 'profile-opt' + (p.name === active ? ' active' : '');
     const meta = [];
     if (p.model) meta.push(p.model.split('/').pop());
-    if (p.skill_count) meta.push(t('profile_skill_count', p.skill_count));
+    if (p.total_skills && p.total_skills > 0) meta.push(t('profile_skill_count', p.total_skills).replace(String(p.total_skills), `${p.enabled_skills} / ${p.total_skills}`));
     const gwDot = `<span class="profile-opt-badge ${p.gateway_running ? 'running' : 'stopped'}"></span>`;
     const checkmark = p.name === active ? ' <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--link)" stroke-width="3" style="vertical-align:-1px"><polyline points="20 6 9 17 4 12"/></svg>' : '';
     const defaultBadge = p.is_default ? ` <span style="opacity:.5;font-weight:400">${esc(t('profile_default_label'))}</span>` : '';
@@ -5310,7 +5335,17 @@ async function switchToProfile(name) {
       if (S.session && !sessionInProgress) {
         S.session.model = modelToUse;
         S.session.model_provider = modelState.model_provider||providerId||null;
+        S.session.profile = data.active || name;
       }
+    }
+    // #3331 follow-up (Codex gate): retag the in-memory session's profile on
+    // ANY profile switch, even when the switched-to profile returns no
+    // default_model (empty session / model-less profile). Without this the
+    // profile chip + project-picker filter keep the stale profile after a
+    // switch to a model-less profile. Guarded by !sessionInProgress like the
+    // model patch above (don't touch a session about to be replaced).
+    if (S.session && !sessionInProgress) {
+      S.session.profile = data.active || name;
     }
 
     // ── Apply workspace ────────────────────────────────────────────────────
@@ -5678,6 +5713,16 @@ function _toggleTabVisibilityChip(panel){
 }
 
 function switchSettingsSection(name){
+  // If the main content is not showing settings, switch back first
+  if (_currentPanel !== 'settings') {
+    _currentPanel = 'settings';
+    var mainEl = document.querySelector('main.main');
+    if (mainEl) {
+      ['settings','skills','memory','tasks','kanban','workspaces','profiles','insights','logs','plugin'].forEach(function(p) {
+        mainEl.classList.toggle('showing-' + p, p === 'settings');
+      });
+    }
+  }
   const section=(name==='appearance'||name==='preferences'||name==='providers'||name==='plugins'||name==='system')?name:'conversation';
   _settingsSection=section;
   _currentSettingsSection=section;
@@ -5804,6 +5849,7 @@ function _appearancePayloadFromUi(){
     font_size: ($('settingsFontSize')||{}).value || localStorage.getItem('hermes-font-size') || 'default',
     session_jump_buttons: !!($('settingsSessionJumpButtons')||{}).checked,
     session_endless_scroll: !!($('settingsSessionEndlessScroll')||{}).checked,
+    activity_feed_expanded_default: !!($('settingsActivityFeedExpandedDefault')||{}).checked,
     hidden_tabs: _getHiddenTabs(),
   };
 }
@@ -5857,6 +5903,9 @@ async function _autosaveAppearanceSettings(payload){
       if(typeof _applySessionNavigationPrefs==='function') _applySessionNavigationPrefs();
     }
     window._sessionEndlessScrollEnabled=!!(saved&&saved.session_endless_scroll);
+    if(saved&&Object.prototype.hasOwnProperty.call(saved,'activity_feed_expanded_default')){
+      window._activityFeedExpandedDefault=!!saved.activity_feed_expanded_default;
+    }
     _setAppearanceAutosaveStatus('saved');
   }catch(e){
     console.warn('[settings] appearance autosave failed', e);
@@ -6071,6 +6120,15 @@ async function loadSettingsPanel(){
         _scheduleAppearanceAutosave();
       };
     }
+    const activityExpandedCb=$('settingsActivityFeedExpandedDefault');
+    if(activityExpandedCb){
+      activityExpandedCb.checked=!!settings.activity_feed_expanded_default;
+      window._activityFeedExpandedDefault=activityExpandedCb.checked;
+      activityExpandedCb.onchange=function(){
+        window._activityFeedExpandedDefault=this.checked;
+        _scheduleAppearanceAutosave();
+      };
+    }
     // Tab visibility chips (dynamically populated from DOM)
     var hiddenTabs=[];
     if(Array.isArray(settings.hidden_tabs)){
@@ -6085,7 +6143,7 @@ async function loadSettingsPanel(){
     _renderTabVisibilityChips();
     const resolvedLanguage=(typeof resolvePreferredLocale==='function')
       ? resolvePreferredLocale(settings.language, localStorage.getItem('hermes-lang'))
-      : (settings.language || localStorage.getItem('hermes-lang') || 'zh');
+      : (settings.language || localStorage.getItem('hermes-lang') || 'en');
     // Keep settings modal and current page strings in sync with the resolved locale.
     if(typeof setLocale==='function'){
       setLocale(resolvedLanguage);
@@ -6231,12 +6289,45 @@ async function loadSettingsPanel(){
         if(typeof window._applyVoiceModePref==='function') window._applyVoiceModePref();
       };
     }
-    // Populate voice selector from speechSynthesis
+    // TTS engine selector
+    const ttsEngineSel=$('settingsTtsEngine');
+    if(ttsEngineSel){
+      const saved=localStorage.getItem('hermes-tts-engine')||'browser';
+      ttsEngineSel.value=saved;
+      ttsEngineSel.onchange=function(){
+        localStorage.setItem('hermes-tts-engine',this.value);
+        window._populateTtsVoices();
+      };
+    }
+    // Populate voice selector based on engine
     const ttsVoiceSel=$('settingsTtsVoice');
-    if(ttsVoiceSel&&'speechSynthesis' in window){
-      const populateVoices=()=>{
+    window._populateTtsVoices=function(){
+      if(!ttsVoiceSel) return;
+      const engine=localStorage.getItem('hermes-tts-engine')||'browser';
+      const current=localStorage.getItem('hermes-tts-voice')||'';
+      if(engine==='edge'){
+        const edgeVoices=[
+          {value:'zh-CN-XiaoxiaoNeural',label:'Xiaoxiao (Chinese, Female)'},
+          {value:'zh-CN-XiaoyiNeural',label:'Xiaoyi (Chinese, Female)'},
+          {value:'zh-CN-YunxiNeural',label:'Yunxi (Chinese, Male)'},
+          {value:'zh-CN-YunjianNeural',label:'Yunjian (Chinese, Male)'},
+          {value:'zh-CN-YunyangNeural',label:'Yunyang (Chinese, Male)'},
+          {value:'en-US-AriaNeural',label:'Aria (English, Female)'},
+          {value:'en-US-GuyNeural',label:'Guy (English, Male)'},
+        ];
+        ttsVoiceSel.innerHTML='<option value="">Default (Xiaoxiao)</option>';
+        edgeVoices.forEach(v=>{
+          const opt=document.createElement('option');
+          opt.value=v.value;opt.textContent=v.label;
+          if(v.value===current) opt.selected=true;
+          ttsVoiceSel.appendChild(opt);
+        });
+      } else {
+        if(!('speechSynthesis' in window)){
+          ttsVoiceSel.innerHTML='<option value="">Speech synthesis not available</option>';
+          return;
+        }
         const voices=speechSynthesis.getVoices();
-        const current=localStorage.getItem('hermes-tts-voice')||'';
         ttsVoiceSel.innerHTML='<option value="">Default system voice</option>';
         voices.forEach(v=>{
           const opt=document.createElement('option');
@@ -6244,9 +6335,14 @@ async function loadSettingsPanel(){
           if(v.name===current) opt.selected=true;
           ttsVoiceSel.appendChild(opt);
         });
-      };
-      populateVoices();
-      speechSynthesis.addEventListener('voiceschanged',populateVoices,{once:true});
+      }
+    };
+    if(ttsVoiceSel&&'speechSynthesis' in window){
+      window._populateTtsVoices();
+      speechSynthesis.addEventListener('voiceschanged',function(){
+        const engine=localStorage.getItem('hermes-tts-engine')||'browser';
+        if(engine==='browser') window._populateTtsVoices();
+      },{once:false});
       ttsVoiceSel.onchange=function(){localStorage.setItem('hermes-tts-voice',this.value);};
     }
     // TTS rate/pitch sliders
@@ -6343,6 +6439,17 @@ async function loadSettingsPanel(){
 
 // ── Plugins panel (read-only plugin/hook visibility) ───────────────────────
 
+async function handlePluginEnableToggle(pluginKey, checked){
+  try{
+    const body={dashboard_plugins:{}};
+    body.dashboard_plugins[pluginKey]=!!checked;
+    await api('/api/settings',{method:'POST',body:JSON.stringify(body)});
+    loadPluginsPanel();
+  }catch(e){
+    showToast(t('settings_save_failed')+e.message);
+  }
+}
+
 async function loadPluginsPanel(){
   const list=$('pluginsList');
   const empty=$('pluginsEmpty');
@@ -6362,7 +6469,7 @@ async function loadPluginsPanel(){
       list.appendChild(_buildPluginCard(plugin));
     }
   }catch(e){
-    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">'+esc(t('plugins_load_failed'))+esc(e.message||String(e))+'</div>';
+    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">'+t('plugins_load_failed')+esc(e.message||String(e))+'</div>';
   }
 }
 
@@ -6384,19 +6491,46 @@ function _buildPluginCard(plugin){
   // "No registered lifecycle hooks" when the visibility-hook list is empty.
   const hookHtml=hooks.length
     ? hooks.map(h=>`<span class="plugin-hook-badge">${esc(h)}</span>`).join('')
-    : `<span class="plugin-hook-empty">${esc(t(isProvider?'plugins_provider_no_hooks':'plugins_no_hooks'))}</span>`;
-  const version=(plugin&&plugin.version)?` · v${esc(plugin.version)}`:'';
-  const desc=(plugin&&plugin.description)?esc(plugin.description):esc(t('plugins_no_description'));
+    : '<span class="plugin-hook-empty">'+t(isProvider?'plugins_provider_no_hooks':'plugins_no_hooks')+'</span>';
+  const version=(plugin&&plugin.version)?' · v'+esc(plugin.version):'';
+  const desc=(plugin&&plugin.description)?esc(plugin.description):t('plugins_no_description');
+const enabled=plugin&&plugin.enabled!==false;
+  const tab=plugin&&plugin.tab;
+  const isDashboardPlugin=!!(tab&&tab.path);
+  // No inline onclick/onchange: an inline handler interpolates tab.path/key into
+  // a JS-string-in-attribute context where HTML-escaping is insufficient (a
+  // crafted value could break out). Render inert markup + bind listeners below
+  // with the raw closure values.
+  const openBtn=enabled&&tab&&tab.path
+    ? `<a href="${esc(tab.path)}" class="plugin-open-btn">${esc(tab.label||plugin.name||'Open')} \u2197</a>`
+    : '';
+  const toggleHtml=enabled&&isDashboardPlugin
+    ? `<div class="plugin-card-footer-row">
+         <span class="plugin-toggle-label">${t('plugins_enable_toggle')||'Enabled'}</span>
+         <label class="plugin-toggle-switch">
+           <input type="checkbox" class="plugin-enable-toggle" checked>
+           <span class="plugin-toggle-slider"></span>
+         </label>
+       </div>`
+    : (isDashboardPlugin
+    ? `<div class="plugin-card-footer-row">
+         <span class="plugin-toggle-label">${t('plugins_enable_toggle')||'Enable'}</span>
+         <label class="plugin-toggle-switch">
+           <input type="checkbox" class="plugin-enable-toggle">
+           <span class="plugin-toggle-slider"></span>
+         </label>
+       </div>`
+    : '');
   let badgeText;
   let badgeClass;
   if(isProvider){
-    badgeText=esc(t('plugins_active_provider'));
+    badgeText=t('plugins_active_provider');
     badgeClass='plugin-card-badge-provider';
   }else if(activation==='enabled'){
-    badgeText=esc(t('plugins_enabled'));
+    badgeText=t('plugins_enabled');
     badgeClass='';
   }else{
-    badgeText=esc(t('plugins_disabled'));
+    badgeText=t('plugins_disabled');
     badgeClass='plugin-card-badge-disabled';
   }
   card.innerHTML=`
@@ -6409,14 +6543,74 @@ function _buildPluginCard(plugin){
     </div>
     <div class="provider-card-body plugin-card-body">
       <div class="provider-card-hint">${desc}</div>
-      <div class="provider-card-label">${esc(t('plugins_registered_hooks'))}</div>
+      <div class="provider-card-label">${t('plugins_registered_hooks')}</div>
       <div class="plugin-hook-list">${hookHtml}</div>
+      ${openBtn ? `<div class="plugin-card-footer">${openBtn}</div>` : ''}
+      ${toggleHtml}
     </div>
   `;
+  // Bind handlers with the RAW closure values (not interpolated into inline JS),
+  // so a hostile tab.path/key can't break out of a JS-string attribute context.
+  if(tab&&tab.path){
+    const _openEl=card.querySelector('.plugin-open-btn');
+    if(_openEl){
+      const _p=tab.path, _l=tab.label||plugin.name;
+      _openEl.addEventListener('click', function(ev){ switchPluginPage(ev, _p, _l); });
+    }
+  }
+  if(isDashboardPlugin){
+    const _tog=card.querySelector('.plugin-enable-toggle');
+    if(_tog){
+      const _k=plugin.key;
+      _tog.addEventListener('change', function(){ handlePluginEnableToggle(_k, this.checked); });
+    }
+  }
   return card;
 }
 
-// ── Providers panel ───────────────────────────────────────────────────────
+// ── Plugin pages ─────────────────────────────────────────────────────────────
+
+let _currentPluginPage = null;
+
+async function switchPluginPage(event, path, label) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if (!_currentPluginPage || _currentPluginPage.path !== path) {
+    await _loadPluginPage(path, label);
+  }
+  // Update _currentPanel so clicking sidebar items won't short-circuit,
+  // but keep the sidebar panel views intact (no panelPlugin exists).
+  _currentPanel = 'plugin';
+  const mainEl = document.querySelector('main.main');
+  if (mainEl) {
+    ['settings','skills','memory','tasks','kanban','workspaces','profiles','insights','logs','plugin'].forEach(p => {
+      mainEl.classList.toggle('showing-' + p, p === 'plugin');
+    });
+  }
+}
+
+async function _loadPluginPage(path, label) {
+  const container = $('pluginPageContainer');
+  const titleEl = $('pluginPageTitle');
+  if (!container) return;
+  if (titleEl) titleEl.textContent = label || path;
+  container.innerHTML = '';
+
+  // Use an iframe for full isolation (styles, scripts, modals stay sandboxed).
+  // Security note: plugins are locally-installed (~/.hermes/plugins/), similar
+  // trust model to VS Code extensions — only install plugins you trust.
+  const iframe = document.createElement('iframe');
+  iframe.src = path;
+  iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;';
+  iframe.setAttribute('title', label || 'Plugin');
+  iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
+  container.appendChild(iframe);
+  _currentPluginPage = { path, label };
+}
+
+// ── Providers panel ─────────────────────────────────────────────────────────
 
 const _providerCardEls = new Map(); // providerId → {card, statusDot, input, saveBtn, removeBtn}
 
@@ -7426,7 +7620,7 @@ async function saveSettings(andClose){
   const theme=($('settingsTheme')||{}).value||'dark';
   const skin=($('settingsSkin')||{}).value||'default';
   const fontSize=($('settingsFontSize')||{}).value||localStorage.getItem('hermes-font-size')||'default';
-  const language=($('settingsLanguage')||{}).value||'zh';
+  const language=($('settingsLanguage')||{}).value||'en';
   const sidebarDensity=($('settingsSidebarDensity')||{}).value==='detailed'?'detailed':'compact';
   const busyInputMode=($('settingsBusyInputMode')||{}).value||'queue';
   const body={};

@@ -1,3 +1,6 @@
+// Early boot initialization that must run before any other code.
+// These run during script evaluation to handle server-stopped state
+// and cross-tab shutdown broadcasts as early as possible.
 (function(){
   // Clear stale stop-server flag on successful page load (server is reachable)
   try{localStorage.removeItem('hermes-webui-server-stopped');}catch(_){}
@@ -442,6 +445,13 @@ $('btnAttach').onclick=e=>{if(e&&e.preventDefault)e.preventDefault();$('fileInpu
   const _micForceMediaRecorderKey='mic_force_mediarecorder';
   let _forceMediaRecorder=!SpeechRecognition||localStorage.getItem(_micForceMediaRecorderKey)==='1';
 
+  // Raw audio mode preference: send audio file instead of transcribing
+  let _rawAudioMode = localStorage.getItem('hermes-raw-audio-mode') === 'true';
+  // Capture backend pinned at recording start ('speech' | 'media' | null) so
+  // _stopMic / onstop act on the backend that actually started, even if the
+  // raw-audio toggle changes mid-recording (#3169 Codex review).
+  let _activeCaptureMode = null;
+
   const btn=$('btnMic');
   const status=$('micStatus');
   const ta=$('msg');
@@ -456,15 +466,52 @@ $('btnAttach').onclick=e=>{if(e&&e.preventDefault)e.preventDefault();$('fileInpu
   let _prefix='';
   let _isRecording=false;
 
+  function _setButtonTooltipAndKey(btn, key){
+    const text = t(key);
+    btn.setAttribute('data-i18n-title', key);
+    if(btn.hasAttribute('data-tooltip')){
+      btn.setAttribute('data-tooltip', text);
+      if(btn.hasAttribute('title')) btn.removeAttribute('title');
+    } else {
+      btn.title = text;
+    }
+  }
+
   function _setRecording(on){
     window._micActive=on;
     btn.classList.toggle('recording',on);
     // Active-state title flips so the tooltip is honest about what
     // pressing the button will do (#1488).
-    _setButtonTooltip(btn, on ? t('voice_dictate_active') : t('voice_dictate'));
+    _setButtonTooltipAndKey(btn, on ? (_rawAudioMode ? 'voice_recording_active' : 'voice_dictate_active') : (_rawAudioMode ? 'voice_send_raw' : 'voice_dictate'));
     status.style.display=on?'':'none';
     if(statusText) statusText.textContent=on?'Listening':'Listening';
     if(!on){ _finalText=''; _prefix=''; }
+  }
+
+  function _updateMicTooltip(){
+    if(!window._micActive){
+      _setButtonTooltipAndKey(btn, _rawAudioMode ? 'voice_send_raw' : 'voice_dictate');
+    }
+  }
+
+  async function _sendRawAudio(blob){
+    const ext=(blob.type&&blob.type.includes('ogg'))?'ogg':'webm';
+    const file=new File([blob],`voice-input-${Date.now()}.${ext}`,{type:blob.type||`audio/${ext}`});
+    S.pendingFiles.push(file);
+    renderTray();
+    // An explicit Send-button click while recording sets _micPendingSend — that
+    // is an unambiguous send intent, so honor it even when the composer already
+    // has text (mirrors the transcribe path). Otherwise (manual mic-stop): send
+    // immediately only if the composer is empty, else just attach + toast so the
+    // user can keep composing.
+    if(window._micPendingSend){
+      window._micPendingSend=false;
+      send();
+    }else if(!ta.value.trim()){
+      send();
+    }else{
+      showToast(t('voice_raw_attached'));
+    }
   }
 
   function _commitTranscript(text){
@@ -509,7 +556,11 @@ $('btnAttach').onclick=e=>{if(e&&e.preventDefault)e.preventDefault();$('fileInpu
 
   function _stopMic(){
     if(!window._micActive) return;
-    if(recognition){
+    // Stop the backend that was ACTIVE WHEN RECORDING STARTED — not whatever
+    // _rawAudioMode says now. The user can toggle Settings → Sound mid-recording,
+    // which would otherwise make us stop the wrong backend and orphan the other
+    // (#3169 Codex review). _activeCaptureMode is pinned at start.
+    if(recognition && _activeCaptureMode==='speech'){
       recognition.stop();
       return;
     }
@@ -589,7 +640,8 @@ $('btnAttach').onclick=e=>{if(e&&e.preventDefault)e.preventDefault();$('fileInpu
     _isRecording=true;
     _finalText='';
     _prefix=ta.value;
-    if(recognition && !_forceMediaRecorder){
+    if(recognition && !_forceMediaRecorder && !_rawAudioMode){
+      _activeCaptureMode='speech';
       recognition.start();
       _setRecording(true);
       return;
@@ -618,11 +670,18 @@ $('btnAttach').onclick=e=>{if(e&&e.preventDefault)e.preventDefault();$('fileInpu
         const blob=new Blob(audioChunks,{type:mediaRecorder.mimeType||mimeType||'audio/webm'});
         _setRecording(false);
         _stopTracks();
-        if(blob.size){ await _transcribeBlob(blob); }
+        if(blob.size){
+          if(_activeCaptureMode==='media-raw'){
+            await _sendRawAudio(blob);
+          }else{
+            await _transcribeBlob(blob);
+          }
+        }
         else if(window._micPendingSend){
           window._micPendingSend=false;
         }
       };
+      _activeCaptureMode=_rawAudioMode?'media-raw':'media-transcribe';
       mediaRecorder.start();
       _setRecording(true);
     }catch(err){
@@ -632,6 +691,18 @@ $('btnAttach').onclick=e=>{if(e&&e.preventDefault)e.preventDefault();$('fileInpu
       showToast(t('mic_denied'));
     }
   };
+
+  // Wire up the settings checkbox
+  const rawAudioCheckbox = document.getElementById('settingsRawAudio');
+  if(rawAudioCheckbox){
+    rawAudioCheckbox.checked = _rawAudioMode;
+    rawAudioCheckbox.addEventListener('change', function(){
+      _rawAudioMode = this.checked;
+      localStorage.setItem('hermes-raw-audio-mode', _rawAudioMode ? 'true' : 'false');
+      _updateMicTooltip();
+    });
+  }
+  _updateMicTooltip();
 })();
 window._micActive=window._micActive||false;
 window._micPendingSend=window._micPendingSend||false;
@@ -821,7 +892,56 @@ window._micPendingSend=window._micPendingSend||false;
         .trim();
     }
     if(!clean){ _startListening(); return; }
-
+    const engine=localStorage.getItem("hermes-tts-engine")||"browser";
+    if(engine==="edge"){
+      const voice=localStorage.getItem("hermes-tts-voice")||"zh-CN-XiaoxiaoNeural";
+      const savedRate=parseFloat(localStorage.getItem("hermes-tts-rate"));
+      const savedPitch=parseFloat(localStorage.getItem("hermes-tts-pitch"));
+      let rate='', pitch='';
+      if(!isNaN(savedRate)){const pct=Math.round((savedRate-1)*100);const sign=pct>=0?'+':'';rate=sign+pct+'%';}
+      if(!isNaN(savedPitch)){const hz=Math.round((savedPitch-1)*50);const sign=hz>=0?'+':'';pitch=sign+hz+'Hz';}
+      _ttsSpeaking=true;
+      fetch(new URL('api/tts', document.baseURI || location.href).href, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: clean, voice, rate, pitch})
+      })
+      .then(r => {
+        if(!r.ok) throw new Error('TTS request failed: ' + r.status);
+        return r.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        // Register with the shared handle (declared in ui.js, same global scope;
+        // both scripts are fully evaluated before any voice interaction) so
+        // stopTTS() — called from _deactivate() — can actually pause hands-free
+        // Edge playback. Without this the audio is local here and unstoppable.
+        _playingEdgeAudio=audio;
+        audio.onended = () => {
+          _ttsSpeaking=false;
+          if(_playingEdgeAudio===audio) _playingEdgeAudio=null;
+          URL.revokeObjectURL(url);
+          if(_voiceModeActive) setTimeout(()=>_startListening(),500);
+        };
+        audio.onerror = () => {
+          _ttsSpeaking=false;
+          if(_playingEdgeAudio===audio) _playingEdgeAudio=null;
+          URL.revokeObjectURL(url);
+          if(_voiceModeActive) setTimeout(()=>_startListening(),1000);
+        };
+        audio.play().catch(e => {
+          _ttsSpeaking=false;
+          if(_playingEdgeAudio===audio) _playingEdgeAudio=null;
+          if(_voiceModeActive) setTimeout(()=>_startListening(),1000);
+        });
+      })
+      .catch(() => {
+        _ttsSpeaking=false;
+        if(_voiceModeActive) setTimeout(()=>_startListening(),1000);
+      });
+      return;
+    }
     const utter=new SpeechSynthesisUtterance(clean);
 
     // Apply saved voice preferences
@@ -1343,6 +1463,7 @@ const _SKINS=[
   {name:'Catppuccin',colors:['#CBA6F7','#B4BEFE','#8839EF']},
   {name:'Hepburn',   colors:['#c6246a','#ec5597','#f2abca']},
   {name:'Nous',     colors:['#4682B4','#3A6E9A','#2C5F88']},
+  {name:'Neon',     colors:['#B347FF','#C76BFF','#00DDFF']},
   {name:'Geist Contrast', value:'geist-contrast', colors:['#000000','#ffffff','#FFF175']},
 ];
 const _VALID_THEMES=new Set((_THEMES||[]).map(t=>t.value));
@@ -1561,6 +1682,7 @@ function applyBotName(){
     window._whatsNewSummaryEnabled=!!s.whats_new_summary_enabled;
     window._showThinking=s.show_thinking!==false;
     window._simplifiedToolCalling=s.simplified_tool_calling!==false;
+    window._activityFeedExpandedDefault=!!s.activity_feed_expanded_default;
     window._sidebarDensity=(s.sidebar_density==='detailed'?'detailed':'compact');
     window._pinnedSessionsLimit=parseInt(s.pinned_sessions_limit||3,10)||3;
     window._inflightStateLimits={

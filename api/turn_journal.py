@@ -94,16 +94,16 @@ def append_turn_journal_event(
             fh.write(line)
             fh.flush()
             os.fsync(fh.fileno())
-    try:
-        O_DIRECTORY = getattr(os, 'O_DIRECTORY', 0)
-        if O_DIRECTORY:
-            dir_fd = os.open(path.parent, O_DIRECTORY)
+    o_directory = getattr(os, "O_DIRECTORY", None)
+    if o_directory is not None:
+        try:
+            dir_fd = os.open(path.parent, o_directory)
             try:
                 os.fsync(dir_fd)
             finally:
                 os.close(dir_fd)
-    except OSError:
-        pass
+        except OSError:
+            pass
     return payload
 
 

@@ -1219,7 +1219,7 @@ def _apply_update_inner(target):
     # Split tracking refs like 'origin/main' into separate remote + branch
     # arguments — git treats 'origin/main' as a repository name otherwise.
     remote, branch = _split_remote_ref(compare_ref)
-    pull_args = ['pull', '--ff-only']
+    pull_args = ['pull', '--ff']
     if remote:
         pull_args.extend([remote, branch])
     else:

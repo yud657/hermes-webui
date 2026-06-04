@@ -5513,7 +5513,9 @@ function syncTopbar(){
   const vis=S.messages.filter(m=>m&&m.role&&m.role!=='tool');
   const _topbarMeta=$('topbarMeta');
   if(_topbarMeta){
-    const sourceLabel=(S.session&&S.session.is_cli_session&&(S.session.source_label||S.session.source_tag||S.session.raw_source))||'';
+    let sourceLabel=(S.session&&(S.session.source_label||S.session.source_tag||S.session.raw_source))||'';
+    // Recovered sidecars stamp source_label 'WebUI' (api/session_recovery.py); don't badge a native session as its own source (#3338).
+    if(/^webui$/i.test(sourceLabel)) sourceLabel='';
     const metaText=t('n_messages',vis.length);
     _topbarMeta.textContent=metaText;
     if(sourceLabel){
@@ -8537,6 +8539,7 @@ function renderBreadcrumb(){
   root.textContent='~';
   root.onclick=()=>loadDir('.');
   _bindWorkspaceMoveDropTarget(root,'.');
+  _bindWorkspaceOsUploadDropTarget(root,'.');
   bar.appendChild(root);
   // Path segments
   const parts=S.currentDir.split('/');
@@ -8553,6 +8556,7 @@ function renderBreadcrumb(){
       const target=accumulated;
       seg.onclick=()=>loadDir(target);
       _bindWorkspaceMoveDropTarget(seg,target);
+      _bindWorkspaceOsUploadDropTarget(seg,target);
     } else {
       seg.className='breadcrumb-seg breadcrumb-current';
     }
@@ -8936,6 +8940,7 @@ function _renderTreeItems(container, entries, depth){
     const el=document.createElement('div');el.className='file-item';
     el.style.paddingLeft=(8+depth*16)+'px';
     el.setAttribute('draggable','true');
+    el.dataset.wsType=item.type;
     el.oncontextmenu=(e)=>{e.preventDefault();e.stopPropagation();_showFileContextMenu(e,item);};
     el.ondragstart=(e)=>{e.dataTransfer.setData('application/ws-path',item.path);e.dataTransfer.setData('application/ws-type',item.type);e.dataTransfer.effectAllowed='copy';el.classList.add('dragging');};
     el.ondragend=()=>{el.classList.remove('dragging');_clearWorkspaceMoveDragOver();};
@@ -9054,6 +9059,7 @@ function _renderTreeItems(container, entries, depth){
 
     if(item.type==='dir'){
       _bindWorkspaceMoveDropTarget(el,item.path);
+      _bindWorkspaceOsUploadDropTarget(el,item.path);
       // Single-click toggles expand/collapse
       el.onclick=async(e)=>{
         e.stopPropagation();

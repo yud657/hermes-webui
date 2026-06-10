@@ -3,6 +3,30 @@
 
 ## [Unreleased]
 
+## [v0.51.350] — 2026-06-10 — Release LN (session-move / project-delete timeout fix)
+
+### Fixed
+
+- **Moving a session into a project, or deleting a project, no longer times out with "Request timed out" while a session is streaming.** Two distinct causes: (1) `/api/session/move` acquired the per-session lock with no deadline, so a slow checkpoint save on the streaming thread (e.g. on WSL/DrvFs) could outlast the browser's 30s abort — it now acquires with a 5s timeout and returns an actionable HTTP 503 instead of hanging; (2) `/api/projects/delete` re-saved every assigned session (O(N) full-history rewrites), which alone could exceed 30s for a project with many large sessions — for an actively-streaming session it now clears the project link on the live in-memory session (persisted by the streaming thread's own next save) instead of issuing a competing write, and guards each per-session update. (#3746)
+
+## [v0.51.349] — 2026-06-10 — Release LM (custom-proxy model ID preservation)
+
+### Fixed
+
+- **Custom providers with a remote `base_url` no longer truncate model IDs that contain a `/`.** A `custom` provider (bare or named `custom:<slug>`) pointed at a vendor-routing proxy (LiteLLM, a Bedrock gateway, etc.) is now passed the model ID exactly as selected when the prefix is an intrinsic routing segment — e.g. `bedrock/opus-4-6` reaches the proxy whole instead of being silently truncated to `opus-4-6`, which caused `403 model "opus-4-6" is not allowed`. A prefix that is genuinely redundant with the model's own first-party namespace is still stripped (`openai/gpt-5.4` → `gpt-5.4`), and the strip for real first-party providers pointed at an OpenAI-compatible proxy (e.g. `provider: openai`) is unchanged. If your proxy registers a model under a first-party-prefixed key (e.g. `anthropic/claude-opus-4.6`), list it under a `custom_providers[]` entry to route the full id through. (#3872)
+
+## [v0.51.348] — 2026-06-10 — Release LL (Phase 0 hotfix: timeout regression + data-loss + leaks)
+
+### Fixed
+
+- **"Request timed out" during approval/clarify turns no longer fires from browser connection-pool exhaustion.** v0.51.340 added `/api/session/stream` as a 6th persistent SSE `EventSource`. Browsers cap HTTP/1.1 at 6 connections per origin, so with all 6 long-lived streams open the next `fetch()` — including the approval/clarify POST itself — queued indefinitely and surfaced as a timeout toast even though the server responded normally. Approval and clarify prompts now use HTTP polling (approval 1.5 s, clarify 3 s) via the existing fallback-poll helpers, freeing 2 connection slots. (#3913, fixes #3807 / #3748 / #3014)
+- **Queued follow-up messages and draft-only sessions are more durable across refresh and tab restore.** Session queues now mirror to both `sessionStorage` and `localStorage`, restore through one shared helper (falling back to the durable copy when `sessionStorage` is missing after a tab/process restore), clear stale queue state from both layers, and keep zero-message sessions when they still own unsent composer draft text or files. (#3906, #3108)
+- **Settings panel no longer auto-reopens while you are on the Chat panel.** `switchSettingsSection()` force-mutated the current panel back to `settings` instead of just remembering the section for the next time settings is opened; visible on iPad/touch. (#3909)
+
+### Performance
+
+- **Kanban API requests no longer leak a file descriptor each.** `api/kanban_bridge.py::_conn()` returned a raw connection used as a `with` block, but sqlite3's context manager only scopes the transaction and never closes the FD. On a long-lived server these accumulated, pinning stale WAL snapshots and starving checkpoints for gateway/CLI workers sharing the board DB. `_conn()` now uses the closing context manager. (#3904)
+
 ## [v0.51.347] — 2026-06-09 — Release LK (streaming & render reliability cluster)
 
 ### Fixed

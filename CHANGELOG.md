@@ -3,6 +3,12 @@
 
 ## [Unreleased]
 
+## [v0.51.414] — 2026-06-14 — Release OA (fix misleading regenerate-title error message, #4186)
+
+### Fixed
+
+- **The read-only error for the regenerate-title action now reads correctly.** Attempting to regenerate a title on a read-only imported session returned "Read-only imported sessions cannot be renamed" (copy-pasted from the rename handler); it now says "cannot regenerate titles" to match the actual action. (#4186)
+
 ## [v0.51.413] — 2026-06-14 — Release NZ (restore approval pending-fallback reliability, #4107)
 
 ### Fixed

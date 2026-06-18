@@ -125,3 +125,31 @@ def test_checkpoint_diff_renders_large_workspace_file_as_modified_not_deleted(tm
         "(the capped read_file_content path regressed this): got "
         f"{statuses.get('big.txt')!r}"
     )
+
+
+def test_checkpoint_diff_skips_workspace_fifo_without_hanging(tmp_path, monkeypatch):
+    """Regression (Codex gate): a workspace FIFO/special file at a checkpoint-
+    tracked regular-file path must NOT hang the diff (open_anchored_fd opens
+    blocking O_RDONLY, which blocks forever on a FIFO with no writer) and must
+    not leak an fd — the leaf type is pre-checked via lstat before any open.
+    """
+    import threading
+
+    workspace, ckpt_dir, checkpoint = _init_checkpoint(tmp_path, monkeypatch)
+    _commit_checkpoint_file(ckpt_dir, "pipe.txt", "checkpoint content\n")
+    # Replace the workspace-side file with a FIFO (no writer → blocking open hangs).
+    os.mkfifo(workspace / "pipe.txt")
+
+    result_box = {}
+
+    def _run():
+        result_box["r"] = rollback.get_checkpoint_diff(str(workspace), checkpoint)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout=10)
+    assert not t.is_alive(), "get_checkpoint_diff hung on a workspace FIFO"
+    # FIFO workspace side is treated as absent → checkpoint file renders as deleted,
+    # never blocks and never leaks the secret/hangs.
+    statuses = {f["file"]: f.get("status") for f in result_box["r"]["files_changed"]}
+    assert statuses.get("pipe.txt") == "deleted"

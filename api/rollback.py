@@ -169,21 +169,38 @@ def _read_workspace_text(workspace_root: Path, rel_path: str) -> str | None:
         target = safe_resolve_ws(workspace_root, rel_path)
     except (ValueError, OSError):
         return None
+    # Pre-check the leaf type WITHOUT opening it: open_anchored_fd opens with
+    # blocking O_RDONLY, which would HANG on a FIFO/special file swapped in at a
+    # regular-file path. lstat on the already-symlink-resolved target tells us the
+    # type without an open, so we never block on a non-regular leaf. (The old
+    # Path.is_file() guard likewise never opened a FIFO.)
+    try:
+        if not stat.S_ISREG(os.lstat(target).st_mode):
+            return None
+    except OSError:
+        return None
     try:
         fd = open_anchored_fd(workspace_root, target, want_dir=False)
     except (FileNotFoundError, ValueError, OSError):
         return None
+    # From here the fd is owned; make sure every path closes it exactly once.
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
+            os.close(fd)
             return None
-        with os.fdopen(fd, "rb") as fh:
-            return fh.read().decode(errors="replace")
+        fh = os.fdopen(fd, "rb")
     except OSError:
         try:
             os.close(fd)
         except OSError:
             pass
+        return None
+    # os.fdopen succeeded → the file object owns the fd and will close it.
+    try:
+        with fh:
+            return fh.read().decode(errors="replace")
+    except OSError:
         return None
 
 

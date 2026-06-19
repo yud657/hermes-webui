@@ -692,7 +692,10 @@ async function newSession(flash, options={}){
     if(S.session&&S.session.session_id) reqBody.prev_session_id=S.session.session_id;
     if(options&&options.worktree) reqBody.worktree=true;
     if(_activeProject&&_activeProject!==NO_PROJECT_FILTER) reqBody.project_id=_activeProject;
-    if(Array.isArray(S._pendingSessionToolsets)) reqBody.enabled_toolsets=S._pendingSessionToolsets;
+    // Only forward a pre-session toolset override staged on the empty composer
+    // (no active session). Once a real session is loaded, an abandoned staged
+    // value must not silently leak into a later New Chat (#4490 follow-up).
+    if(!S.session && Array.isArray(S._pendingSessionToolsets)) reqBody.enabled_toolsets=S._pendingSessionToolsets;
     // Carry the visible picker selection into the new session. Without this,
     // /api/session/new falls back to config.yaml defaults (e.g. gpt-5.5) even
     // when the user already chose cursor/composer-2.5 in the composer chip.
@@ -1069,6 +1072,10 @@ async function loadSession(sid){
     return;
   }
   S.session=data.session;
+  // Loading a real existing session abandons any pre-session toolset override
+  // staged on the empty composer — clear it so it can't leak into a later New
+  // Chat started from this session (#4490 follow-up).
+  S._pendingSessionToolsets=null;
   if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
   S.session._modelResolutionDeferred=true;
   S.lastUsage={...(data.session.last_usage||{})};

@@ -97,6 +97,32 @@ def test_new_session_request_consumes_pending_toolsets_once():
     assert "S._pendingSessionToolsets=null" in after_assignment
 
 
+def test_pending_toolsets_only_forwarded_from_empty_composer():
+    """The staged override must only be forwarded when there is no active session.
+
+    Without the `!S.session` guard, a toolset staged on the empty composer would
+    leak into a later New Chat started from an existing session (#4490 follow-up).
+    """
+    compact = SESSIONS_JS.replace(" ", "")
+    post_start = compact.index("api('/api/session/new'")
+    before_post = compact[:post_start]
+    # The forwarding line must be gated on the no-session (empty composer) state.
+    assert "!S.session&&Array.isArray(S._pendingSessionToolsets)" in before_post
+
+
+def test_load_existing_session_clears_staged_toolsets():
+    """Loading a real existing session must clear any abandoned staged override.
+
+    loadSession() assigns S.session=data.session on the success path; the staged
+    value is cleared there so a subsequent New Chat does not inherit it (#4490).
+    """
+    body = _function_body(SESSIONS_JS, "async function loadSession")
+    compact = body.replace(" ", "")
+    assign = compact.index("S.session=data.session")
+    # The clear must accompany the real-session assignment, not only the create path.
+    assert "S._pendingSessionToolsets=null" in compact[assign : assign + 400]
+
+
 def test_workspace_and_profile_switches_clear_pending_toolsets():
     for marker in (
         "function promptWorkspacePath",

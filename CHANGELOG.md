@@ -3,6 +3,73 @@
 
 ## [Unreleased]
 
+## [v0.51.502] — 2026-06-18 — Release RL (CLI/gateway sessions appear immediately; sidebar-cache invalidation hardened)
+
+### Fixed
+
+- **A newly created CLI / gateway / messaging session now appears in the sidebar immediately instead of after a delay of up to ~5 seconds.** The CLI-session cache (`_CLI_SESSIONS_CACHE`, 5s TTL) and the session-list cache were keyed for invalidation on a file-stat stamp `(st_mtime_ns, st_size)` of `state.db` and its `-wal`/`-shm` sidecars. In WAL mode a commit lands in the `-wal` file, and under fast writes those stat stamps can collide with a previously cached entry (same mtime-nanosecond bucket plus a WAL frame at the same size after a prior checkpoint), so a freshly-committed session was intermittently served from the stale cache. The cache key now includes a commit-reliable content fingerprint of the `sessions`/`messages` tables, which advances on every commit (including external gateway writes) and is immune to mtime granularity. `POST /api/settings` also now invalidates the session-list cache directly when a session-visibility setting (`show_cli_sessions` / `show_cron_sessions` / `show_previous_messaging_sessions`) changes, rather than relying on the settings-file mtime stamp. This was also the root cause of the long-recurring `test_gateway_sync` CI flake.
+
+## [v0.51.501] — 2026-06-18 — Release RK (Ctrl/Cmd+, opens Settings)
+
+### Added
+
+- **`Ctrl+,` (or `Cmd+,` on macOS) now opens and closes Settings (#4391).** Following the VS Code convention, the shortcut fires globally — including from text inputs — and toggles the Settings panel. Thanks @rodboev.
+
+## [v0.51.500] — 2026-06-18 — Release RJ (fix stuck-scroll on long sessions with dense tool blocks)
+
+### Fixed
+
+- **Scrolling up through a long virtualized transcript with dense tool-call blocks no longer gets stuck (#4346 family).** `_compensateScrollForMeasurementDelta` captures a viewport anchor before a re-render and adjusts `scrollTop` to keep it in place, but when estimated row heights run much larger than measured ones (tool-call rows default to ~400px vs ~150px actual), the correction could form a feedback loop that trapped the user near the top of a 400+ message session. The compensation now short-circuits when the user is already at the scroll ceiling (`scrollTop < 1`) with no preceding virtual spacer, breaking the loop. Thanks @rodboev.
+
+## [v0.51.499] — 2026-06-18 — Release RI (archiving a parent hides its stranded child rows)
+
+### Fixed
+
+- **Archiving a parent conversation no longer leaves child, delegate, or fork rows stranded in the sidebar (#4293).** The sidebar now checks the active project/session set before rendering orphan child rows, suppresses children whose archived parent is intentionally hidden, and clears stale child-session decorations during each render rebuild. This is a display-only change (the rows reappear when "show archived" is on); it does not alter any session's archived state. Thanks @santastabber.
+
+## [v0.51.498] — 2026-06-18 — Release RH (profile runtime env no longer clobbers core shell identity)
+
+### Fixed
+
+- **A profile's runtime env no longer overrides the WebUI server's own core shell-identity variables during a turn.** When a profile-scoped turn projected the profile's `config.yaml` terminal settings and `.env` into the process environment, a profile that set `HOME`, `PATH`, `PWD`, `SHELL`, `USER`, `PYTHONPATH`, `VIRTUAL_ENV`, `LD_LIBRARY_PATH`, or an `XDG_*` var could clobber the running server's identity/import path for the duration of the run. WebUI now filters those core-identity keys out of the projected profile env (matching Hermes Agent gateway semantics) while still projecting credentials, `HERMES_HOME`, and `TERMINAL_*` settings. Thanks @lunarnexus.
+
+## [v0.51.497] — 2026-06-18 — Release RG (rollback checkpoint diffs no longer follow symlinks)
+
+### Security
+
+- **Rollback checkpoint diffs no longer follow checkpoint or workspace symlinks when rendering file contents (#4410).** The diff path previously read tracked checkpoint files and workspace files through pathname APIs, so a symlink entry could redirect the rendered diff to a readable file outside the checkpoint/workspace boundary. Diff reads now reject non-regular checkpoint entries (using the git index mode as source of truth) and read content from the git object database rather than the worktree path; workspace-side content goes through the workspace's anchored file reader, and restore also skips symlink checkpoint sources. Companion to the v0.51.491 restore-write containment (#4405). Thanks @Hinotoi-agent.
+
+## [v0.51.496] — 2026-06-18 — Release RF (compact provider quota chip on narrow composer)
+
+### Fixed
+
+- **The provider quota chip no longer gets truncated on a narrow composer (#4358).** The chip is now more compact (smaller height, padding, and gap, `max-width` 120px) and is hidden entirely on a very narrow composer where it would otherwise be clipped, matching how the context indicator already behaves at that width. Thanks @bergeouss.
+
+## [v0.51.495] — 2026-06-18 — Release RE (suppress ERR_ABORTED console noise on SSE close)
+
+### Fixed
+
+- **Closing an SSE/EventSource stream that has already closed no longer logs `ERR_ABORTED` console noise (#4313).** Every `EventSource.close()` teardown site (chat stream, session stream, approval/clarify/kanban/gateway SSE, terminal) now checks `readyState !== 2` (not already CLOSED) before calling `close()`, wrapped in a `try/catch`. Functionally identical — it only avoids the redundant `close()` on an already-aborted source that produced the spurious console errors. Thanks @bergeouss.
+
+## [v0.51.494] — 2026-06-18 — Release RD (TLS-aware launcher health probes)
+
+### Fixed
+
+- **Launcher health probes now work over HTTPS when TLS is enabled.** When `HERMES_WEBUI_TLS_CERT` and `HERMES_WEBUI_TLS_KEY` are set the server serves HTTPS, but `start.sh`, `ctl.sh status`, `bootstrap.py`, the WSL autostart helper, and the Docker `HEALTHCHECK` previously probed `http://` and reported a healthy server as down. All five now share a single TLS-aware probe (`scripts/lib/health_probe.sh`) that mirrors the server scheme. Self-signed certificates (common for home setups) are accepted with a one-line warning; set `HERMES_WEBUI_TLS_INSECURE_PROBE=1` to skip verification up front silently. If the cert/key are present but unloadable, the server falls back to plain HTTP and the probes now follow it instead of polling HTTPS forever — and the "ready"/"already running" URL printed to the user (and the browser that `bootstrap.py` opens) now reflects the scheme the server is actually reachable on, not the configured one. An explicitly-set `HERMES_WEBUI_HEALTH_URL` (documented WSL-autostart override) remains the authoritative probe target. Thanks @tomas-forgac.
+- **`ctl.sh status` no longer crashes when `.env` contains shell-readonly variables.** `status` now loads `.env` (to learn the TLS scheme) and, like `start.sh`, filters out `UID`/`GID`/`EUID`/`EGID`/`PPID` before sourcing so a `.env` carrying `UID=...` (documented for docker-compose) doesn't abort the command under `set -euo pipefail`.
+- **TLS probe follow-up hardening now cleans `ctl.sh`'s filtered `.env` temp file on early aborts and locks the insecure-opt-in HTTP fallback with regression tests.** The `.env` loader now registers a `RETURN` trap right after `mktemp`, so a failing sourced line cannot leave stale `hermes-webui-ctl-env.*` files behind under `set -euo pipefail`. The TLS-aware probe tests now also cover the `HERMES_WEBUI_TLS_INSECURE_PROBE=1` + plain-HTTP server-fallback path for both `bootstrap.py` and the shared shell helper.
+
+## [v0.51.493] — 2026-06-18 — Release RC (ignore malformed background-process wakeup events)
+
+### Fixed
+
+- **Malformed background-process wakeup events no longer appear as empty `unknown completed` prompts.** WebUI now ignores empty or unknown completion-queue payloads and renders watch-pattern overflow summaries as explicit watch notifications instead of fake process completions. Thanks @ai-ag2026.
+
+## [v0.51.492] — 2026-06-18 — Release RB (large context window preserved on session reload)
+
+### Fixed
+
+- **Reloading a session with a large model context window no longer snaps it back to the 256k fallback (#4248).** The session reload path now resolves context-window metadata with the same base URL / API-key lookup inputs used by streaming saves, and it refuses to overwrite a larger persisted context window with the generic 256k fallback. The reload model-identity check also normalizes slash-qualified model ids (`provider/model`, OpenRouter-style) so a slash-stored model resolving to its bare id is not mistaken for a model change. Thanks @franksong2702.
 ## [v0.51.489] — 2026-06-18 — Release QY (outline button no longer collides with the scroll control)
 
 ### Fixed

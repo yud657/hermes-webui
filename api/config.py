@@ -70,9 +70,10 @@ TLS_ENABLED = TLS_CERT is not None and TLS_KEY is not None
 
 # ── State directory (env-overridable, never inside repo) ──────────────────────
 _DEFAULT_HERMES_HOME = _platform_default_hermes_home()
+_DEFAULT_STATE_HOME = Path(os.getenv("HERMES_HOME") or _DEFAULT_HERMES_HOME).expanduser()
 
 STATE_DIR = (
-    Path(os.getenv("HERMES_WEBUI_STATE_DIR", str(_DEFAULT_HERMES_HOME / "webui")))
+    Path(os.getenv("HERMES_WEBUI_STATE_DIR", str(_DEFAULT_STATE_HOME / "webui")))
     .expanduser()
     .resolve()
 )
@@ -328,10 +329,43 @@ _DEFAULT_EXPERIMENTAL_CONFIG = {
     # later PR deliberately enables and wires this flag.
     "unified_session_db": False,
 }
+_DEFAULT_AGENT_PERSONALITIES = {
+    # Mirrors the Hermes Agent CLI built-ins so WebUI's config-derived
+    # /personality path is not empty for fresh profiles.
+    "helpful": "You are a helpful, friendly AI assistant.",
+    "concise": "You are a concise assistant. Keep responses brief and to the point.",
+    "technical": "You are a technical expert. Provide detailed, accurate technical information.",
+    "creative": "You are a creative assistant. Think outside the box and offer innovative solutions.",
+    "teacher": "You are a patient teacher. Explain concepts clearly with examples.",
+    "kawaii": "You are a kawaii assistant! Use cute expressions like (◕‿◕), ★, ♪, and ~! Add sparkles and be super enthusiastic about everything! Every response should feel warm and adorable desu~! ヽ(>∀<☆)ノ",
+    "catgirl": "You are Neko-chan, an anime catgirl AI assistant, nya~! Add 'nya' and cat-like expressions to your speech. Use kaomoji like (=^･ω･^=) and ฅ^•ﻌ•^ฅ. Be playful and curious like a cat, nya~!",
+    "pirate": "Arrr! Ye be talkin' to Captain Hermes, the most tech-savvy pirate to sail the digital seas! Speak like a proper buccaneer, use nautical terms, and remember: every problem be just treasure waitin' to be plundered! Yo ho ho!",
+    "shakespeare": "Hark! Thou speakest with an assistant most versed in the bardic arts. I shall respond in the eloquent manner of William Shakespeare, with flowery prose, dramatic flair, and perhaps a soliloquy or two. What light through yonder terminal breaks?",
+    "surfer": "Duuude! You're chatting with the chillest AI on the web, bro! Everything's gonna be totally rad. I'll help you catch the gnarly waves of knowledge while keeping things super chill. Cowabunga!",
+    "noir": "The rain hammered against the terminal like regrets on a guilty conscience. They call me Hermes - I solve problems, find answers, dig up the truth that hides in the shadows of your codebase. In this city of silicon and secrets, everyone's got something to hide. What's your story, pal?",
+    "uwu": "hewwo! i'm your fwiendwy assistant uwu~ i wiww twy my best to hewp you! *nuzzles your code* OwO what's this? wet me take a wook! i pwomise to be vewy hewpful >w<",
+    "philosopher": "Greetings, seeker of wisdom. I am an assistant who contemplates the deeper meaning behind every query. Let us examine not just the 'how' but the 'why' of your questions. Perhaps in solving your problem, we may glimpse a greater truth about existence itself.",
+    "hype": "YOOO LET'S GOOOO!!! I am SO PUMPED to help you today! Every question is AMAZING and we're gonna CRUSH IT together! This is gonna be LEGENDARY! ARE YOU READY?! LET'S DO THIS!",
+}
 
 
 def _apply_config_defaults(config_data: dict) -> None:
     """Populate documented default-only config keys in-place."""
+    agent_cfg = config_data.get("agent")
+    if not isinstance(agent_cfg, dict):
+        agent_cfg = {}
+        config_data["agent"] = agent_cfg
+
+    personalities = agent_cfg.get("personalities")
+    if isinstance(personalities, dict):
+        merged = copy.deepcopy(_DEFAULT_AGENT_PERSONALITIES)
+        merged.update(copy.deepcopy(personalities))
+        agent_cfg["personalities"] = merged
+    else:
+        # Keep behavior aligned with CLI loader defaults: if personalities are
+        # absent or malformed, replace the section entirely with built-ins.
+        agent_cfg["personalities"] = copy.deepcopy(_DEFAULT_AGENT_PERSONALITIES)
+
     experimental = config_data.get("experimental")
     if not isinstance(experimental, dict):
         experimental = {}
@@ -477,13 +511,46 @@ def get_config_for_profile_home(profile_home: "Path | str | None") -> dict:
     except Exception:
         return get_config()
     # If the ambient resolver already points at this profile home, defer to
-    # get_config() so in-memory overrides (monkeypatched cfg) are honored.
+    # get_config() so in-memory overrides (monkeypatched cfg) are honored. This
+    # MUST run before the nonexistent-home guard below: a matching ambient home
+    # whose directory doesn't physically exist yet (fresh install, monkeypatched
+    # cfg) must still resolve through get_config(), not return {} (#4516 gate).
     try:
         if _get_config_path().parent == target:
             return get_config()
     except Exception:
         pass
-    return _load_yaml_config_file(target / "config.yaml")
+    if not target.exists():
+        return {}
+    # Read the profile file directly and apply documented defaults locally so the
+    # returned dict matches ambient get_config() shape (including built-in
+    # personalities) without mutating any global cache state.
+    profile_cfg = _load_yaml_config_file(target / "config.yaml")
+    _apply_config_defaults(profile_cfg)
+    return profile_cfg
+
+
+def _config_for_yaml_save(config_data: dict) -> dict:
+    """Return a YAML-safe config copy without runtime-only expanded defaults."""
+    if not isinstance(config_data, dict):
+        return {}
+    data = copy.deepcopy(config_data)
+    agent_cfg = data.get("agent")
+    if isinstance(agent_cfg, dict):
+        personalities = agent_cfg.get("personalities")
+        if isinstance(personalities, dict):
+            custom_personalities = {
+                name: value
+                for name, value in personalities.items()
+                if _DEFAULT_AGENT_PERSONALITIES.get(name) != value
+            }
+            if custom_personalities:
+                agent_cfg["personalities"] = custom_personalities
+            else:
+                agent_cfg.pop("personalities", None)
+        if not agent_cfg:
+            data.pop("agent", None)
+    return data
 
 
 def _save_yaml_config_file(config_path: Path, config_data: dict) -> None:
@@ -494,7 +561,7 @@ def _save_yaml_config_file(config_path: Path, config_data: dict) -> None:
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
-        _yaml.safe_dump(config_data, sort_keys=False, allow_unicode=True),
+        _yaml.safe_dump(_config_for_yaml_save(config_data), sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
 
@@ -851,6 +918,7 @@ _FALLBACK_MODELS = [
     {"provider": "MiniMax",   "id": "minimax/MiniMax-M2.7",             "label": "MiniMax M2.7"},
     {"provider": "MiniMax",   "id": "minimax/MiniMax-M2.7-highspeed",   "label": "MiniMax M2.7 Highspeed"},
     # Z.AI / GLM
+    {"provider": "Z.AI",      "id": "zai/glm-5.2",                      "label": "GLM-5.2"},
     {"provider": "Z.AI",      "id": "zai/glm-5.1",                      "label": "GLM-5.1"},
     {"provider": "Z.AI",      "id": "zai/glm-5",                        "label": "GLM-5"},
     {"provider": "Z.AI",      "id": "zai/glm-5-turbo",                  "label": "GLM-5 Turbo"},
@@ -1360,6 +1428,7 @@ _PROVIDER_MODELS = {
         {"id": "@nous:google/gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro Preview (via Nous)"},
     ],
     "zai": [
+        {"id": "glm-5.2", "label": "GLM-5.2"},
         {"id": "glm-5.1", "label": "GLM-5.1"},
         {"id": "glm-5", "label": "GLM-5"},
         {"id": "glm-5-turbo", "label": "GLM-5 Turbo"},
@@ -1510,6 +1579,100 @@ _PROVIDER_MODELS = {
         {"id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",  "label": "Global Anthropic Claude Haiku 4.5"},
     ],
 }
+
+
+def _seed_provider_models_from_core() -> None:
+    """Enrich existing provider model lists with missing IDs from hermes_cli.
+
+    The core's _PROVIDER_MODELS is the authoritative curated list of agent-capable
+    models per provider.  The WebUI's static dict above is a display-oriented copy
+    (with {id, label} entries) that can go stale when new models are added to the
+    core without a matching WebUI update.  This function bridges the gap by
+    injecting any missing model IDs from the core into **existing** WebUI provider
+    entries.
+
+    Constrains seeding to providers already in the WebUI catalog — does NOT add
+    brand-new providers.  Adding new vendors is a maintainer curation decision.
+    Respects per-provider ID conventions (e.g. nous uses @nous:-prefixed IDs).
+
+    Safe to call multiple times; only missing entries are added.  Silently no-ops
+    if hermes_cli is not importable (standalone WebUI deployments).
+
+    Must be called AFTER ``_get_label_for_model`` is defined (module-level
+    invocation is at the bottom of this module, not here).
+    """
+    try:
+        from hermes_cli.models import _PROVIDER_MODELS as _core_pm
+    except ImportError:
+        return
+
+    # Build a canonical-id → WebUI-key lookup so that providers whose canonical
+    # form differs between core and WebUI (e.g. core uses "xai" but WebUI
+    # indexes by "x-ai") merge into the existing entry instead of creating a
+    # duplicate (#4413).
+    _webui_key_by_canonical: dict[str, str] = {}
+    for _wk in _PROVIDER_MODELS:
+        try:
+            _canon = _resolve_provider_alias(_wk)
+        except Exception:
+            _canon = _wk
+        if _canon not in _webui_key_by_canonical:
+            _webui_key_by_canonical[_canon] = _wk
+
+    for provider_id, core_models in _core_pm.items():
+        if not isinstance(core_models, list):
+            continue
+
+        # Resolve the core's provider_id to the WebUI's key for this provider.
+        webui_key = provider_id
+        webui_list = _PROVIDER_MODELS.get(provider_id)
+        if webui_list is None:
+            try:
+                _canon_pid = _resolve_provider_alias(provider_id)
+            except Exception:
+                _canon_pid = provider_id
+            webui_key = _webui_key_by_canonical.get(_canon_pid, provider_id)
+            webui_list = _PROVIDER_MODELS.get(webui_key)
+
+        if webui_list is None:
+            # Provider exists in core but not in the WebUI catalog.
+            # Do NOT seed — adding new vendors is a maintainer curation
+            # decision, not something the seeder should do implicitly (#4413).
+            continue
+        if not isinstance(webui_list, list):
+            continue
+        # Provider exists in both — inject missing model IDs.
+        # Detect per-provider ID prefix convention (e.g. nous uses @nous:).
+        # The merge must respect each provider's existing ID format rather
+        # than injecting the core's raw IDs (#4413).
+        _existing_ids_raw: list[str] = [
+            (m.get("id") if isinstance(m, dict) else str(m)) or ""
+            for m in webui_list
+            if isinstance(m, dict) and m.get("id")
+        ]
+        _prefix = ""
+        if _existing_ids_raw and all(i.startswith("@") and ":" in i for i in _existing_ids_raw):
+            _prefix = _existing_ids_raw[0].split(":", 1)[0] + ":"
+
+        def _strip_prefix(mid: str, prefix: str = _prefix) -> str:
+            if prefix and mid.startswith(prefix):
+                return mid[len(prefix):]
+            return mid
+
+        existing_ids = {
+            _strip_prefix(mid).replace("-", ".").lower()
+            for mid in _existing_ids_raw
+        }
+        for mid in core_models:
+            if not isinstance(mid, str) or not mid.strip():
+                continue
+            normed = mid.strip().replace("-", ".").lower()
+            if normed not in existing_ids:
+                inject_id = (_prefix + mid.strip()) if _prefix else mid.strip()
+                webui_list.append({
+                    "id": inject_id,
+                    "label": _get_label_for_model(mid.strip(), []),
+                })
 
 
 _AMBIENT_GH_CLI_MARKERS = frozenset({"gh_cli", "gh auth token"})
@@ -2448,8 +2611,19 @@ def model_with_provider_context(model_id: str, model_provider: str | None = None
     if provider == "openrouter":
         return f"@{provider}:{model}"
 
-    # For non-OpenRouter slash IDs, keep the ID intact so existing custom/proxy
-    # base_url routing and portal-provider handling remain in charge.
+    # Explicit providers configured in config.yaml (for example local llama.cpp,
+    # Ollama, LM Studio, vLLM, or other OpenAI-compatible endpoints) must keep
+    # their provider hint even when the model ID is HuggingFace-style and
+    # contains '/'. Otherwise a selected local model such as
+    # 'unsloth/gemma-4-12b-it-GGUF:UD-Q4_K_XL' inherits the default provider
+    # (e.g. openai-codex) and is sent to the wrong backend.
+    providers_cfg = cfg.get("providers") if isinstance(cfg, dict) else {}
+    if isinstance(providers_cfg, dict) and provider in providers_cfg:
+        return f"@{provider}:{model}"
+
+    # For non-OpenRouter slash IDs without an explicit configured provider,
+    # keep the ID intact so existing custom/proxy base_url routing and
+    # portal-provider handling remain in charge.
     if "/" in model:
         return model
 
@@ -4523,12 +4697,84 @@ def _load_models_cache_from_disk() -> dict | None:
         if not _is_loadable_disk_cache(cache):
             return None
         # Strip the disk-only metadata before returning, so the in-memory
-        # cache shape stays exactly what the rest of the code expects.
+        # cache shape stays exactly what the rest of the code expects. The
+        # disk save path does not persist `aliases`, so reconstruct them from
+        # current config to keep the /api/models.aliases contract intact (a
+        # disk-cache hit must not silently drop `/model <alias>` resolution).
         return {
             "active_provider": cache["active_provider"],
             "default_model": cache["default_model"],
             "configured_model_badges": cache["configured_model_badges"],
             "groups": cache["groups"],
+            "aliases": (
+                cache["aliases"]
+                if isinstance(cache.get("aliases"), dict)
+                else _model_aliases_from_config()
+            ),
+        }
+    except Exception:
+        return None
+
+
+def _model_aliases_from_config() -> dict[str, str]:
+    """Build the normalized model-alias map from current config.
+
+    Mirrors the alias construction used by the live and static catalog paths so
+    the `/api/models.aliases` contract is consistent across every catalog source
+    (live, static, and the stale-disk fallback, which can't read aliases from a
+    disk cache that never persisted them).
+    """
+    try:
+        raw_aliases = cfg.get("model", {}).get("aliases", {})
+        if isinstance(raw_aliases, dict):
+            return {
+                str(k).strip(): str(v).strip()
+                for k, v in raw_aliases.items()
+                if k and v
+            }
+    except Exception:
+        pass
+    return {}
+
+
+def _load_stale_models_cache_from_disk() -> dict | None:
+    """Load a shape-valid stale /api/models disk cache for timeout fallback only.
+
+    The main cache loader enforces metadata stamps for a full cold-path cache hit.
+    This helper intentionally does not apply that stricter policy, so we can still
+    recover a useful fallback payload when the strict loader rejected cache because
+    metadata or fingerprint fields are stale. It DOES still enforce the schema
+    version: a cross-schema cache can have an incompatible groups/badge shape, so
+    serving it to the picker could surface a broken catalog — schema mismatch is a
+    hard reject even on the fallback path.
+    """
+    try:
+        import json as _j
+
+        cache_path = _get_models_cache_path()
+        if not cache_path.exists():
+            return None
+        with open(cache_path, encoding="utf-8") as f:
+            cache = _j.load(f)
+        if not _is_valid_models_cache(cache):
+            return None
+        if cache.get("_schema_version") != _MODELS_CACHE_SCHEMA_VERSION:
+            return None
+        aliases = cache.get("aliases")
+        if not isinstance(aliases, dict):
+            # The disk cache save path does not persist `aliases`, so a cache
+            # read back from disk lacks them. Defaulting to {} would silently
+            # break `/model <alias>` slash-command resolution (static/commands.js
+            # resolves slash aliases only from /api/models.aliases) for the
+            # duration of the over-budget stale fallback. Reconstruct from
+            # current config, mirroring the live/static catalog alias build.
+            aliases = _model_aliases_from_config()
+        return {
+            "active_provider": cache["active_provider"],
+            "default_model": cache["default_model"],
+            "configured_model_badges": cache["configured_model_badges"],
+            "groups": cache["groups"],
+            "aliases": aliases,
         }
     except Exception:
         return None
@@ -6271,8 +6517,11 @@ def get_available_models(*, prefer_cache: bool = False) -> dict:
     # Then acquire lock and check memory cache.  Cold path runs inside the lock
     # so only one thread rebuilds while others wait.
     disk_groups = None
+    stale_disk_groups = None
     if _available_models_cache is None:
         disk_groups = _load_models_cache_from_disk()
+        if disk_groups is None:
+            stale_disk_groups = _load_stale_models_cache_from_disk()
 
     with _available_models_cache_lock:
         # If another thread is already building, wait for its result instead
@@ -6293,6 +6542,7 @@ def get_available_models(*, prefer_cache: bool = False) -> dict:
             _available_models_cache_ts = 0.0
             _available_models_cache_source_fingerprint = None
             disk_groups = None
+            stale_disk_groups = None
 
         # Serve from memory cache if fresh
         now = time.monotonic()
@@ -6512,14 +6762,12 @@ def get_available_models(*, prefer_cache: bool = False) -> dict:
             logger.warning(_budget_log_msg, _LIVE_REBUILD_BUDGET_SECONDS)
         else:
             logger.info(_budget_log_msg, _LIVE_REBUILD_BUDGET_SECONDS)
-        # Note: ``disk_groups``, if non-None, was already consumed by the
-        # cold-path early-return at the "Cold path: disk cache hit" branch
-        # above (line ~4608). Any execution that reaches HERE necessarily
-        # took the live-rebuild branch, which means ``disk_groups is None``
-        # at this point — so we don't re-check it. Per Copilot review on
-        # PR #2971: the previous ``if disk_groups is not None`` branch
-        # here was dead code. Fall back directly to the static minimal
-        # catalog (no second disk read).
+        # ``stale_disk_groups`` is shape-valid but failed the strict metadata
+        # checks required for authoritative cold-path use. It was read before
+        # acquiring _available_models_cache_lock so this over-budget fallback
+        # does not extend the lock hold while the worker is ready to publish.
+        if stale_disk_groups is not None:
+            return copy.deepcopy(stale_disk_groups)
         return copy.deepcopy(_static_models_catalog_without_live_probes())
 
 
@@ -6890,6 +7138,7 @@ _SETTINGS_DEFAULTS = {
     "skin": "default",  # accent color skin: default | ares | mono | graphite | slate | poseidon | sisyphus | charizard | sienna | catppuccin | nous
     "font_size": "default",  # small | default | large | xlarge
     "session_jump_buttons": False,  # show Start/End transcript jump pills
+    "render_user_markdown": False,  # opt-in: render full markdown in user messages (#3870)
     "session_endless_scroll": False,  # auto-load older transcript pages while scrolling upward
     "chat_activity_display_mode": "compact_worklog",  # compact_worklog | transparent_stream
     "auto_scroll_follow": True,  # follow new output to the bottom while streaming (Codex/Claude-Code-style sticky bottom); the user scrolling up unpins and is respected
@@ -7115,12 +7364,16 @@ _SETTINGS_BOOL_KEYS = {
     "workspace_todos_tab",
     "api_redact_enabled",
     "session_jump_buttons",
+    "render_user_markdown",
     "session_endless_scroll",
     "auto_scroll_follow",
     "worklog_details_expanded_default",
 }
 # Language codes are validated as short alphanumeric BCP-47-like tags (e.g. 'en', 'zh', 'fr')
 _SETTINGS_LANG_RE = __import__("re").compile(r"^[a-zA-Z]{2,10}(-[a-zA-Z0-9]{2,8})?$")
+
+_SETTINGS_WRITE_VERSION = 0
+_SETTINGS_WRITE_LOCK = __import__("threading").Lock()
 
 
 def save_settings(settings: dict) -> dict:
@@ -7231,6 +7484,9 @@ def save_settings(settings: dict) -> dict:
         json.dumps(persisted, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    global _SETTINGS_WRITE_VERSION
+    with _SETTINGS_WRITE_LOCK:
+        _SETTINGS_WRITE_VERSION += 1
     # Invalidate the in-memory password hash cache so the next call to
     # get_password_hash() picks up the new value from disk immediately.
     if _password_changed:
@@ -7282,3 +7538,16 @@ try:
     init_profile_state()
 except ImportError:
     pass  # hermes_cli not available -- default profile only
+
+
+# Run the provider-model seeder once at import time. Must be at the END of the
+# module because _seed_provider_models_from_core() calls _get_label_for_model,
+# which is defined ~3000 lines above. Placing the invocation earlier (e.g. right
+# after the seeder's def) caused a NameError that the bare except silently
+# swallowed — exactly when the seeder had real work to do (#4413).
+try:
+    _seed_provider_models_from_core()
+except ImportError:
+    pass  # hermes_cli not available (standalone deployment)
+except Exception:
+    logger.warning("provider-model seeder failed", exc_info=True)

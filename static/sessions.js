@@ -381,9 +381,16 @@ function _isServerIdleSessionRow(s) {
 
 function _reconcileActiveSessionIdleStateFromList(serverRows) {
   if (!S || !S.session || !S.session.session_id) return false;
-  if (typeof _sendInProgress !== 'undefined' && _sendInProgress) return false;
   if (!Array.isArray(serverRows)) return false;
   const sid=S.session.session_id;
+  // #4354: clear a stuck indicator when the server reports idle — server
+  // is_streaming/active_stream_id is authoritative. BUT skip the ONE session
+  // that is actively mid-send (#2689 start-race): during the /api/chat/start
+  // round-trip the server row is still idle while the client owns the optimistic
+  // turn, so reconciling it here would blank the just-sent bubble + queue a
+  // spurious force-reload. A long-hung session has _sendInProgress===false, so
+  // it still gets unstuck — only the in-flight start window is protected.
+  if (typeof _sendInProgress !== 'undefined' && _sendInProgress && sid === _sendInProgressSid) return false;
   const serverRow=serverRows.find(s=>s&&s.session_id===sid);
   if (!serverRow) return false;
   if (!_isServerIdleSessionRow(serverRow)) return false;
@@ -435,6 +442,10 @@ function _purgeStaleInflightEntries() {
     }
   }
   for (const sid of Object.keys(INFLIGHT)) {
+    // #4354: purge stale INFLIGHT even for a hung/idle session, BUT skip the one
+    // session actively mid-send (#2689 start-race) — during /api/chat/start the
+    // server row is briefly idle while the client owns the optimistic INFLIGHT
+    // entry; purging it here would drop the in-flight turn's local state.
     if (typeof _sendInProgress !== 'undefined' && _sendInProgress && sid === _sendInProgressSid) {
       continue;
     }
@@ -515,11 +526,15 @@ function _serverLiveSnapshotInflight(snapshot, uploaded){
       _journal_snapshot:true,
     });
   }
-  if(!messages.length&&!toolCalls.length&&!lastAssistantText&&!lastReasoningText) return null;
   const replayAfterSeq=Number(snapshot.last_seq||0);
   const activityBurstAnchors=Array.isArray(snapshot.activity_burst_anchors)
     ? snapshot.activity_burst_anchors
     : (Array.isArray(snapshot.activityBurstAnchors)?snapshot.activityBurstAnchors:[]);
+  const anchorActivityScene=(snapshot.anchor_activity_scene&&snapshot.anchor_activity_scene.version==='activity_scene_v1')
+    ? snapshot.anchor_activity_scene
+    : ((snapshot.anchorActivityScene&&snapshot.anchorActivityScene.version==='activity_scene_v1')?snapshot.anchorActivityScene:null);
+  const hasAnchorActivityScene=!!(anchorActivityScene&&Array.isArray(anchorActivityScene.activity_rows)&&anchorActivityScene.activity_rows.length);
+  if(!messages.length&&!toolCalls.length&&!lastAssistantText&&!lastReasoningText&&!hasAnchorActivityScene) return null;
   return {
     messages,
     uploaded:Array.isArray(uploaded)?[...uploaded]:[],
@@ -531,10 +546,28 @@ function _serverLiveSnapshotInflight(snapshot, uploaded){
     lastAssistantText,
     lastReasoningText,
     lastRunJournalSeq:Number.isFinite(replayAfterSeq)?Math.max(0,replayAfterSeq):0,
+    anchorActivityScene,
     currentActivityBurstId:Number(snapshot.current_activity_burst_id||snapshot.currentActivityBurstId||0)||0,
     currentLiveSegmentSeq:Number(snapshot.current_live_segment_seq||snapshot.currentLiveSegmentSeq||0)||0,
     activityBurstAnchors,
   };
+}
+
+function _runtimeJournalAnchorActivitySceneForSession(sid){
+  const inflight=INFLIGHT&&sid?INFLIGHT[sid]:null;
+  if(inflight&&inflight.anchorActivityScene&&inflight.anchorActivityScene.version==='activity_scene_v1'){
+    return inflight.anchorActivityScene;
+  }
+  const snapshot=S.session&&S.session.runtime_journal_snapshot;
+  const scene=snapshot&&(snapshot.anchor_activity_scene||snapshot.anchorActivityScene);
+  return scene&&scene.version==='activity_scene_v1'?scene:null;
+}
+
+function _renderRuntimeJournalAnchorActivityScene(activeStreamId, sid){
+  if(!activeStreamId||typeof window==='undefined'||typeof window._renderLiveAnchorActivitySceneSnapshotForStream!=='function') return false;
+  const scene=_runtimeJournalAnchorActivitySceneForSession(sid);
+  if(!scene) return false;
+  return !!window._renderLiveAnchorActivitySceneSnapshotForStream(activeStreamId, scene, sid, {mode:'compact_worklog'});
 }
 
 function _rememberRenderedSessionSnapshot(s) {
@@ -692,6 +725,8 @@ async function newSession(flash, options={}){
     if(S.session&&S.session.session_id) reqBody.prev_session_id=S.session.session_id;
     if(options&&options.worktree) reqBody.worktree=true;
     if(_activeProject&&_activeProject!==NO_PROJECT_FILTER) reqBody.project_id=_activeProject;
+    // Forward a pre-session toolset override only from the empty composer (#4490).
+    if(!S.session && Array.isArray(S._pendingSessionToolsets)) reqBody.enabled_toolsets=S._pendingSessionToolsets;
     // Carry the visible picker selection into the new session. Without this,
     // /api/session/new falls back to config.yaml defaults (e.g. gpt-5.5) even
     // when the user already chose cursor/composer-2.5 in the composer chip.
@@ -747,6 +782,7 @@ async function newSession(flash, options={}){
     }
     const data=await api('/api/session/new',{method:'POST',body:JSON.stringify(reqBody)});
     S.session=data.session;S.messages=data.session.messages||[];
+    S._pendingSessionToolsets=null;
     if(_sessionSourceFilter==='cli') _sessionSourceFilter='webui';
     if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
     S.lastUsage={...(data.session.last_usage||{})};
@@ -901,6 +937,7 @@ async function loadSession(sid){
   // draft survives page refresh and syncs across clients.
   if (currentSid && currentSid !== sid) {
     if(typeof window._clearPendingSelections==='function') window._clearPendingSelections();
+    if(typeof _clearQueueCardDisplay==='function') _clearQueueCardDisplay(currentSid);
     await _saveComposerDraftNow(currentSid, ($('msg') || {}).value || '', S.pendingFiles ? [...S.pendingFiles] : []);
     // The awaited draft save above yields the event loop. If another
     // loadSession() started for a different session while we were waiting
@@ -1067,6 +1104,10 @@ async function loadSession(sid){
     return;
   }
   S.session=data.session;
+  // Loading a real existing session abandons any pre-session toolset override
+  // staged on the empty composer — clear it so it can't leak into a later New
+  // Chat started from this session (#4490 follow-up).
+  S._pendingSessionToolsets=null;
   if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
   S.session._modelResolutionDeferred=true;
   S.lastUsage={...(data.session.last_usage||{})};
@@ -1142,6 +1183,7 @@ async function loadSession(sid){
         lastReasoningText:String(stored.lastReasoningText||''),
         lastRunJournalSeq:Number(stored.lastRunJournalSeq||0)||0,
         journalReplayFromStart:!!stored.journalReplayFromStart,
+        anchorActivityScene:(stored.anchorActivityScene&&stored.anchorActivityScene.version==='activity_scene_v1')?stored.anchorActivityScene:null,
         currentActivityBurstId:Number(stored.currentActivityBurstId||0)||0,
         currentLiveSegmentSeq:Number(stored.currentLiveSegmentSeq||0)||0,
         activityBurstAnchors:Array.isArray(stored.activityBurstAnchors)?stored.activityBurstAnchors:[],
@@ -1173,6 +1215,9 @@ async function loadSession(sid){
     _ensureInflightLiveAssistantMessage(INFLIGHT[sid]);
     const inflightMessages=_projectInflightMessagesForActivityBursts(INFLIGHT[sid]);
     S.toolCalls=[];
+    // Switching between active sessions should rebuild the live worklog from
+    // this session's INFLIGHT snapshot, not leave prior-session rows in place.
+    if(typeof clearLiveToolCards==='function') clearLiveToolCards();
     try {
       await _ensureMessagesLoaded(sid);
     } catch(e) {
@@ -1189,7 +1234,7 @@ async function loadSession(sid){
     }
     // Refresh todos from cold-load or persisted INFLIGHT before painting.
     if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
-    S.busy=true;
+    S.busy=!!activeStreamId;  // #4354: Only assert busy if server confirms active stream.
     // appendLiveToolCard() is guarded by S.activeStreamId; restore it before
     // replaying persisted live tools so the compact Activity count survives
     // switching away from and back to an active chat (#1715).
@@ -1215,15 +1260,20 @@ async function loadSession(sid){
       attachLiveStream(sid, activeStreamId, S.session.pending_attachments||[], {reconnecting:true});
     }
     syncTopbar();renderMessages(sameSessionForceReload?{preserveScroll:true}:undefined);
+    const restoredAnchorScene=activeStreamId&&typeof window!=='undefined'
+      ? ((typeof window._renderLiveAnchorActivitySceneForStream==='function'&&window._renderLiveAnchorActivitySceneForStream(activeStreamId, sid, {mode:'compact_worklog'}))||
+        _renderRuntimeJournalAnchorActivityScene(activeStreamId, sid))
+      : false;
     if(typeof ensureRunActivityForCurrentTurn==='function') ensureRunActivityForCurrentTurn();
     const hasStructuredLiveState=!!(INFLIGHT[sid]&&(
       String(INFLIGHT[sid].lastAssistantText||'').trim()||
       String(INFLIGHT[sid].lastReasoningText||'').trim()||
+      !!(INFLIGHT[sid].anchorActivityScene&&Array.isArray(INFLIGHT[sid].anchorActivityScene.activity_rows)&&INFLIGHT[sid].anchorActivityScene.activity_rows.length)||
       (Array.isArray(INFLIGHT[sid].activityBurstAnchors)&&INFLIGHT[sid].activityBurstAnchors.length)||
       (Array.isArray(INFLIGHT[sid].toolCalls)&&INFLIGHT[sid].toolCalls.length)
     ));
-    let restoredLiveTurn=false;
-    if(typeof restoreLiveTurnHtmlForSession==='function'){
+    let restoredLiveTurn=!!restoredAnchorScene;
+    if(!restoredLiveTurn&&typeof restoreLiveTurnHtmlForSession==='function'){
       if(!hasStructuredLiveState){
         restoredLiveTurn=restoreLiveTurnHtmlForSession(sid);
       }else{
@@ -1250,7 +1300,7 @@ async function loadSession(sid){
       else appendThinking();
       replayPersistedLiveToolCards();
     }
-    if(typeof ensureLiveWorklogShell==='function'){
+    if(!restoredAnchorScene&&typeof ensureLiveWorklogShell==='function'){
       const liveTurn=document.getElementById('liveAssistantTurn');
       if(!liveTurn||!liveTurn.querySelector('.tool-call-group[data-tool-worklog-group="1"]')) ensureLiveWorklogShell();
     }
@@ -1321,8 +1371,12 @@ async function loadSession(sid){
       setStatus('');
       setComposerStatus('');
       syncTopbar();renderMessages(sameSessionForceReload?{preserveScroll:true}:undefined);
-      let restoredLiveTurn=false;
-      if(typeof restoreLiveTurnHtmlForSession==='function'){
+      const restoredAnchorScene=activeStreamId&&typeof window!=='undefined'
+        ? ((typeof window._renderLiveAnchorActivitySceneForStream==='function'&&window._renderLiveAnchorActivitySceneForStream(activeStreamId, sid, {mode:'compact_worklog'}))||
+          _renderRuntimeJournalAnchorActivityScene(activeStreamId, sid))
+        : false;
+      let restoredLiveTurn=!!restoredAnchorScene;
+      if(!restoredLiveTurn&&typeof restoreLiveTurnHtmlForSession==='function'){
         restoredLiveTurn=restoreLiveTurnHtmlForSession(sid);
       }
       if(!restoredLiveTurn){

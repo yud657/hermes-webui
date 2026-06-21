@@ -469,7 +469,10 @@
         <strong id="agentHealthTitle">Hermes agent is not responding</strong>
         <span id="agentHealthDetails">The gateway heartbeat failed. Messages may not be delivered until it comes back.</span>
       </div>
-      <button class="agent-health-dismiss" id="agentHealthDismiss" type="button" onclick="dismissAgentHealthAlert()" aria-label="Dismiss Hermes agent heartbeat alert">Dismiss</button>
+      <div class="agent-health-actions">
+        <button class="agent-health-restart" id="btnRestartGateway" type="button" onclick="restartGatewayService()">Restart Service</button>
+        <button class="agent-health-dismiss" id="agentHealthDismiss" type="button" onclick="dismissAgentHealthAlert()" aria-label="Dismiss Hermes agent heartbeat alert">Dismiss</button>
+      </div>
     </div>
     <div class="composer-wrap" id="composerWrap">
       <div class="composer-flyout">
@@ -1048,6 +1051,13 @@
                 <span data-i18n="settings_label_auto_scroll_follow">Auto-follow new content</span>
               </label>
               <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_auto_scroll_follow">When enabled, the view scrolls to the bottom as new tokens stream in. When disabled, you control the scroll position manually.</div>
+            </div>
+            <div class="settings-field" style="margin-top:8px">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="settingsRenderUserMarkdown" style="width:15px;height:15px;accent-color:var(--accent)">
+                <span data-i18n="settings_label_render_user_markdown">Render markdown in user messages</span>
+              </label>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_render_user_markdown">When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.</div>
             </div>
             <div class="settings-field" style="margin-top:8px">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -1642,6 +1652,18 @@
       <label for="kanbanTaskModalTenant" data-i18n="kanban_tenant">Tenant</label>
       <input type="text" id="kanbanTaskModalTenant" list="kanbanTaskModalTenantList" maxlength="64" autocomplete="off" data-i18n-placeholder="kanban_tenant_placeholder" placeholder="Optional — project or team slug">
       <datalist id="kanbanTaskModalTenantList"></datalist>
+    </div>
+    <div class="kanban-modal-row">
+      <label for="kanbanTaskModalWorkspaceKind" data-i18n="kanban_workspace_kind">Workspace kind</label>
+      <select id="kanbanTaskModalWorkspaceKind" onchange="_kanbanOnWorkspaceKindChange()">
+        <option value="scratch" data-i18n="kanban_workspace_scratch">Scratch</option>
+        <option value="worktree" data-i18n="kanban_workspace_worktree">Worktree</option>
+        <option value="dir" data-i18n="kanban_workspace_dir">Directory</option>
+      </select>
+    </div>
+    <div class="kanban-modal-row" id="kanbanTaskModalWorkspacePathRow" style="display:none">
+      <label for="kanbanTaskModalWorkspacePath" data-i18n="kanban_workspace_path">Workspace path</label>
+      <input type="text" id="kanbanTaskModalWorkspacePath" maxlength="255" autocomplete="off" data-i18n-placeholder="kanban_workspace_path_placeholder" placeholder="Path to workspace">
     </div>
     <div class="kanban-modal-error" id="kanbanTaskModalError" aria-live="polite"></div>
     <div class="kanban-modal-actions">

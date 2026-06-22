@@ -297,8 +297,36 @@ function _stripWorkspaceDisplayPrefix(text){
 }
 function _renderUserFencedBlocks(text){
   const stash=[];
+  const contextStash=[];
   const mathStash=[];
   const stashMath=(type,src)=>{mathStash.push({type,src});return '\x00UM'+(mathStash.length-1)+'\x00';};
+  const sentContextHtml=(label,quoteText)=>{
+    const safeLabel=String(label||'').trim()||'Context';
+    const safeQuote=String(quoteText||'').replace(/\s+$/,'');
+    return `<figure class="sent-selection-context" data-selected-context="1"><figcaption class="sent-selection-context-label">${esc(safeLabel)}</figcaption><blockquote class="sent-selection-context-quote">${esc(safeQuote)}</blockquote></figure>`;
+  };
+  const stashContext=(label,quote)=>{contextStash.push(sentContextHtml(label,quote));return '\x00UC'+(contextStash.length-1)+'\x00';};
+  const stashSelectedContextBlocks=(value)=>{
+    const lines=String(value||'').split('\n');
+    const marker='<!-- hermes-selected-context -->';
+    const out=[];
+    for(let i=0;i<lines.length;i++){
+      const labelMatch=lines[i].match(/^\*\*([^\n]{1,200}):\*\*\s*$/);
+      if(!labelMatch){out.push(lines[i]);continue;}
+      const quoteLines=[];
+      let j=i+1;
+      if(lines[j]!==marker){out.push(lines[i]);continue;}
+      j++;
+      while(j<lines.length&&/^>/.test(lines[j])){
+        quoteLines.push(lines[j].replace(/^>[ \t]?/,''));
+        j++;
+      }
+      if(!quoteLines.length){out.push(lines[i]);continue;}
+      out.push(stashContext(labelMatch[1], quoteLines.join('\n')));
+      i=j-1;
+    }
+    return out.join('\n');
+  };
   const restoreMath=html=>String(html||'').replace(/\x00UM(\d+)\x00/g,(_,i)=>{
     const item=mathStash[+i];
     if(!item) return '';
@@ -321,6 +349,7 @@ function _renderUserFencedBlocks(text){
     if(code.endsWith('\n')) code=code.slice(0,-1);
     const h=lang?`<div class="pre-header">${esc(lang)}</div>`:'';
     const langAttr=lang?` class="language-${esc(lang)}"`:'';
+    const preClass=/^(md|markdown|mdx)$/.test(lang)?' class="md-source-block"':'';
     if(lang==='diff'||lang==='patch'){
       const colored=esc(code).split('\n').map(line=>{
         if(line.startsWith('@@')) return `<span class="diff-line diff-hunk">${line}</span>`;
@@ -330,7 +359,7 @@ function _renderUserFencedBlocks(text){
       }).join('\n');
       stash.push(`${h}<pre class="diff-block"><code${langAttr}>${colored}</code></pre>`);
     } else {
-      stash.push(`${h}<pre><code${langAttr}>${esc(code)}</code></pre>`);
+      stash.push(`${h}<pre${preClass}><code${langAttr}>${esc(code)}</code></pre>`);
     }
     return lead+'\x00UF'+(stash.length-1)+'\x00';
   });
@@ -340,10 +369,15 @@ function _renderUserFencedBlocks(text){
   s=s.replace(/\\\[([\s\S]+?)\\\]/g,(_,m)=>stashMath('display',m));
   s=s.replace(/\$([^\s$\n][^$\n]*?[^\s$\n]|\S)\$/g,(_,m)=>stashMath('inline',m));
   s=s.replace(/\\\((.+?)\\\)/g,(_,m)=>stashMath('inline',m));
+  // Render selected-context payloads produced by Reply with selection as calm
+  // quote cards in the sent user bubble. Keep ordinary user Markdown escaped;
+  // only blocks carrying the internal marker get custom treatment.
+  s=stashSelectedContextBlocks(s);
   // Escape remaining plain text and convert newlines to <br>
   s=esc(s).replace(/\n/g,'<br>');
-  // Restore stashed code blocks, then math placeholders as KaTeX targets.
+  // Restore stashed code/context blocks, then math placeholders as KaTeX targets.
   s=s.replace(/\x00UF(\d+)\x00/g,(_,i)=>stash[+i]);
+  s=s.replace(/\x00UC(\d+)\x00/g,(_,i)=>contextStash[+i]||'');
   s=restoreMath(s);
   return s;
 }
@@ -701,6 +735,35 @@ function _messageVisibleIndexForRawIdx(rawIdx, visWithIdx){
   }
   return -1;
 }
+function _messageViewportAnchorKeyForMessage(m){
+  if(typeof _compressionMessageAnchorKey!=='function') return '';
+  const key=_compressionMessageAnchorKey(m);
+  if(!key) return '';
+  return [key.role||'',key.ts??'',key.attachments??0,key.text||''].map(v=>encodeURIComponent(String(v))).join('|');
+}
+function _messageVisibleIndexForAnchorKey(anchorKey, visWithIdx){
+  const key=String(anchorKey||'');
+  if(!key) return -1;
+  const list=Array.isArray(visWithIdx)?visWithIdx:_getVisibleMessagesWithIdx();
+  for(let i=0;i<list.length;i++){
+    if(list[i]&&_messageViewportAnchorKeyForMessage(list[i].m)===key) return i;
+  }
+  return -1;
+}
+function _messageSessionIndexBase(){
+  const n=Number(typeof _oldestIdx!=='undefined'?_oldestIdx:0);
+  return Number.isFinite(n)?Math.max(0,n):0;
+}
+function _messageSessionIndexForRawIdx(rawIdx){
+  const n=Number(rawIdx);
+  if(!Number.isFinite(n)) return null;
+  return _messageSessionIndexBase()+n;
+}
+function _messageRawIdxForSessionIndex(sessionIdx){
+  const n=Number(sessionIdx);
+  if(!Number.isFinite(n)) return null;
+  return n-_messageSessionIndexBase();
+}
 function _messageVirtualScrollTopForVisibleIdx(visWithIdx, visibleIdx, container){
   const idx=Math.max(0,Number(visibleIdx)||0);
   _syncMessageVirtualHeightCache(visWithIdx);
@@ -726,7 +789,13 @@ function _captureMessageViewportAnchor(){
     if(!Number.isFinite(rawIdx)) continue;
     const rect=row.getBoundingClientRect();
     if(rect.bottom>containerRect.top+1){
-      return {rawIdx, topOffset:rect.top-containerRect.top};
+      const sessionIdx=Number(row&&row.dataset&&row.dataset.sessionMsgIdx);
+      return {
+        rawIdx,
+        sessionIdx:Number.isFinite(sessionIdx)?sessionIdx:_messageSessionIndexForRawIdx(rawIdx),
+        key:row&&row.dataset?String(row.dataset.messageAnchorKey||''):'',
+        topOffset:rect.top-containerRect.top,
+      };
     }
   }
   return null;
@@ -734,9 +803,16 @@ function _captureMessageViewportAnchor(){
 function _restoreMessageViewportAnchor(anchor, rawIdxDelta){
   const container=$('messages');
   if(!container||!anchor) return false;
+  const anchorKey=String(anchor.key||'');
+  let row=anchorKey?Array.from(container.querySelectorAll('[data-message-anchor-key]')).find(el=>el&&el.dataset&&el.dataset.messageAnchorKey===anchorKey):null;
+  if(row&&row.getClientRects&&row.getClientRects().length===0) row=null;
+  if(!row&&anchorKey) return false;
+  const sessionIdx=Number(anchor.sessionIdx);
+  const hasSessionIdx=Number.isFinite(sessionIdx);
+  if(!row&&hasSessionIdx) row=container.querySelector(`[data-session-msg-idx="${sessionIdx}"]`);
+  if(!row&&hasSessionIdx) return false;
   const targetIdx=Number(anchor.rawIdx)+Number(rawIdxDelta||0);
-  if(!Number.isFinite(targetIdx)) return false;
-  const row=container.querySelector(`[data-msg-idx="${targetIdx}"]`);
+  if(!row&&Number.isFinite(targetIdx)) row=container.querySelector(`[data-msg-idx="${targetIdx}"]`);
   if(!row) return false;
   const containerRect=container.getBoundingClientRect();
   const rect=row.getBoundingClientRect();
@@ -745,6 +821,50 @@ function _restoreMessageViewportAnchor(anchor, rawIdxDelta){
   container.scrollTop+=(rect.top-containerRect.top)-targetTop;
   requestAnimationFrame(()=>{ _programmaticScroll=false; });
   return true;
+}
+let _messageViewportAnchorRemounting=false;
+function _remountMessageViewportAnchor(anchor){
+  const container=$('messages');
+  if(!container||!anchor||_messageViewportAnchorRemounting) return false;
+  const anchorKey=String(anchor.key||'');
+  const visibleKeyNode=anchorKey
+    ? Array.from(container.querySelectorAll('[data-message-anchor-key]')).find(node=>node&&node.dataset&&node.dataset.messageAnchorKey===anchorKey&&(!node.getClientRects||node.getClientRects().length>0))
+    : null;
+  if(visibleKeyNode) return true;
+  const sessionIdx=Number(anchor.sessionIdx);
+  const hasSessionIdx=Number.isFinite(sessionIdx);
+  if(!anchorKey&&hasSessionIdx&&container.querySelector(`[data-session-msg-idx="${sessionIdx}"]`)) return true;
+  const targetIdx=Number(anchor.rawIdx);
+  if(!anchorKey&&!hasSessionIdx&&Number.isFinite(targetIdx)&&container.querySelector(`[data-msg-idx="${targetIdx}"]`)) return true;
+  if(typeof _getVisibleMessagesWithIdx!=='function'||
+     typeof _messageVisibleIndexForRawIdx!=='function'||
+     typeof _messageVirtualScrollTopForVisibleIdx!=='function'||
+     typeof renderMessages!=='function') return false;
+  const visWithIdx=_getVisibleMessagesWithIdx();
+  let visIdx=anchorKey?_messageVisibleIndexForAnchorKey(anchorKey,visWithIdx):-1;
+  if(visIdx<0&&hasSessionIdx){
+    const rawFromSession=_messageRawIdxForSessionIndex(sessionIdx);
+    if(Number.isFinite(rawFromSession)) visIdx=_messageVisibleIndexForRawIdx(rawFromSession,visWithIdx);
+  }
+  if(visIdx<0&&Number.isFinite(targetIdx)) visIdx=_messageVisibleIndexForRawIdx(targetIdx,visWithIdx);
+  if(visIdx<0) return false;
+  // A virtualized anchor may be outside the current DOM. Scroll to its virtual
+  // row and render once so the semantic restore below has a real target.
+  _programmaticScroll=true;
+  container.scrollTop=_messageVirtualScrollTopForVisibleIdx(visWithIdx,visIdx,container);
+  _messageVirtualWindowKey='';
+  _messageViewportAnchorRemounting=true;
+  try{
+    renderMessages({preserveScroll:true});
+  }finally{
+    _messageViewportAnchorRemounting=false;
+    requestAnimationFrame(()=>{ setTimeout(()=>{ _programmaticScroll=false; },0); });
+  }
+  if(anchorKey){
+    return !!Array.from(container.querySelectorAll('[data-message-anchor-key]')).find(node=>node&&node.dataset&&node.dataset.messageAnchorKey===anchorKey&&(!node.getClientRects||node.getClientRects().length>0));
+  }
+  if(hasSessionIdx) return !!container.querySelector(`[data-session-msg-idx="${sessionIdx}"]`);
+  return Number.isFinite(targetIdx)&&!!container.querySelector(`[data-msg-idx="${targetIdx}"]`);
 }
 function _compensateScrollForMeasurementDelta(renderFn){
   const container=$('messages');
@@ -3008,13 +3128,61 @@ function _applyReasoningChip(eff){
   _highlightReasoningOption(effort);
 }
 
+// Tracks the model/provider identity of the last reasoning fetch so routine
+// topbar syncs can serve the cached chip state instead of re-hitting the
+// network. null = never fetched.
+let _lastReasoningFetchKey=null;
+// Monotonic dispatch counter. Each fetchReasoningChip() increments it and the
+// async handlers capture their own value; a response (success OR failure) only
+// applies if it is still the most recent dispatch. This defeats out-of-order
+// resolution even when two fetches share the same model/provider key (e.g. a
+// profile switch that resets the cache and refetches the same default model but
+// a different agent.reasoning_effort) — #4650 review.
+let _reasoningFetchSeq=0;
+
 function fetchReasoningChip(){
-  api('/api/reasoning'+_reasoningEffortQuery()).then(function(st){
+  // Set the cache key OPTIMISTICALLY before the request so rapid routine syncs
+  // while this GET is in flight short-circuit instead of re-dispatching (that
+  // in-flight window is exactly where the #4650 storm lived).
+  const key=_reasoningEffortQuery();
+  const seq=++_reasoningFetchSeq;
+  _lastReasoningFetchKey=key;
+  api('/api/reasoning'+key).then(function(st){
+    // Ignore a stale/superseded response: only the most recent dispatch may
+    // apply, so an older in-flight GET can't poison the current chip (#4650).
+    if(seq!==_reasoningFetchSeq) return;
     _applyReasoningChip((st&&st.reasoning_effort)||'', st||{});
-  }).catch(function(){_applyReasoningChip('', {supported_efforts:[]});});
+  }).catch(function(){
+    // Same staleness guard on failure: a stale error must neither hide the chip
+    // nor clear a newer fetch's key. Only the latest dispatch clears the key so
+    // routine syncs retry after a genuine transient failure.
+    if(seq!==_reasoningFetchSeq) return;
+    _lastReasoningFetchKey=null;
+    _applyReasoningChip('', {supported_efforts:[]});
+  });
 }
 
 function syncReasoningChip(){
+  // #4650: syncTopbar() calls this on every routine UI refresh, and during
+  // streaming those fire at high frequency. Before a9ce2889 this served the
+  // cached _currentReasoningEffort after the first load; that commit made it
+  // refetch unconditionally to refresh supported-efforts after a model switch,
+  // which turned ordinary syncs into a GET /api/reasoning storm (one per token).
+  // Restore the cache short-circuit but keep a9ce2889's intent: only hit the
+  // network when nothing is cached yet OR the model/provider identity changed
+  // since the last fetch (the only inputs that change /api/reasoning's answer).
+  // The user-pick and model-switch paths still update the cache directly.
+  const key=_reasoningEffortQuery();
+  // Short-circuit on the KEY alone: if a fetch for this exact model/provider has
+  // already been dispatched (in-flight) or completed, do not dispatch another —
+  // this is what stops the #4650 storm, including the COLD-cache window where
+  // _currentReasoningEffort is still null between the first dispatch and its
+  // response (10 syncs before the first GET resolves must produce ONE request,
+  // not ten). Apply the cached chip only once we actually have an effort value.
+  if(_lastReasoningFetchKey===key){
+    if(_currentReasoningEffort!==null) _applyReasoningChip(_currentReasoningEffort);
+    return;
+  }
   fetchReasoningChip();
 }
 
@@ -3516,16 +3684,48 @@ let _settleTimer=0;
 let _settleFinalTimer=0;
 const NON_MESSAGE_SCROLL_INTENT_SUPPRESS_MS=350;
 let _touchStartY=null;
+let _messageTouchScrollActive=false;
+let _lastMessageTouchScrollIntentMs=-Infinity;
+let _deferredOlderMessagesTimer=0;
+const MESSAGE_TOUCH_SCROLL_SUPPRESS_MS=1200;
 let _newMessageCueVisible=false;
 function _cancelBottomSettle(){ _bottomSettleToken++; if(_settleRO){ _settleRO.disconnect(); _settleRO=null; } clearTimeout(_settleTimer); clearTimeout(_settleFinalTimer); cancelAnimationFrame(_settleRAF); }
+function _markMessageTouchScrollIntent(active=true){
+  _messageTouchScrollActive=!!active;
+  _lastMessageTouchScrollIntentMs=performance.now();
+}
+function _recentMessageTouchScrollIntent(){
+  return _messageTouchScrollActive || performance.now()-_lastMessageTouchScrollIntentMs<MESSAGE_TOUCH_SCROLL_SUPPRESS_MS;
+}
+function _isMessageReaderUnpinned(){
+  return !!_messageUserUnpinned;
+}
+function _olderMessagesPrefetchReady(){
+  const el=document.getElementById('messages');
+  if(!el) return false;
+  const olderPrefetchPx=Math.max(600,el.clientHeight*1.5);
+  return _isSessionEndlessScrollEnabled()&&el.scrollTop<olderPrefetchPx && typeof _messagesTruncated!=='undefined' && _messagesTruncated && typeof _loadOlderMessages==='function';
+}
+function _scheduleDeferredOlderMessagesLoad(){
+  clearTimeout(_deferredOlderMessagesTimer);
+  _deferredOlderMessagesTimer=setTimeout(()=>{
+    _deferredOlderMessagesTimer=0;
+    if(_recentMessageTouchScrollIntent()){
+      _scheduleDeferredOlderMessagesLoad();
+      return;
+    }
+    if(_olderMessagesPrefetchReady()) _loadOlderMessages();
+  },MESSAGE_TOUCH_SCROLL_SUPPRESS_MS+50);
+}
 function _recordNonMessageScrollIntent(e){
   const el=document.getElementById('messages');
   const target=e&&e.target;
   if(!el||!target) return;
   if(!el.contains(target)) _lastNonMessageScrollIntentMs=performance.now();
-  else if(e.type==='touchmove'||(typeof e.deltaY==='number'&&e.deltaY<0)){
+  else if(e.type==='touchmove'||(typeof e.deltaY==='number'&&e.deltaY< -30)){
     _cancelBottomSettle();
-    if(typeof e.deltaY==='number'&&e.deltaY<0){
+    if(e.type==='touchmove') _markMessageTouchScrollIntent(true);
+    if(typeof e.deltaY==='number'&&e.deltaY< -30){
       _messageUserUnpinned=true;
       _nearBottomCount=0;
       _scrollPinned=false;
@@ -3591,10 +3791,12 @@ if(typeof document!=='undefined'){
   document.addEventListener('wheel',_recordNonMessageScrollIntent,{capture:true,passive:true});
   document.addEventListener('touchmove',_recordNonMessageScrollIntent,{capture:true,passive:true});
   document.addEventListener('touchstart',function(e){
+    const el=document.getElementById('messages');
     if(e.touches&&e.touches[0]) _touchStartY=e.touches[0].clientY;
+    if(el&&e.target&&el.contains(e.target)) _markMessageTouchScrollIntent(true);
   },{capture:true,passive:true});
-  document.addEventListener('touchend',function(){ _touchStartY=null; },{capture:true,passive:true});
-  document.addEventListener('touchcancel',function(){ _touchStartY=null; },{capture:true,passive:true});
+  document.addEventListener('touchend',function(){ _touchStartY=null; if(_messageTouchScrollActive) _markMessageTouchScrollIntent(false); },{capture:true,passive:true});
+  document.addEventListener('touchcancel',function(){ _touchStartY=null; if(_messageTouchScrollActive) _markMessageTouchScrollIntent(false); },{capture:true,passive:true});
 }
 // Reset hook for session-switch — called from sessions.js loadSession() to
 // prevent the new chat's first scroll comparing against the previous chat's
@@ -3606,6 +3808,10 @@ function _resetScrollDirectionTracker(){
   _scrollPinned=true;
   _nearBottomCount=0;
   _touchStartY=null;
+  _messageTouchScrollActive=false;
+  _lastMessageTouchScrollIntentMs=-Infinity;
+  clearTimeout(_deferredOlderMessagesTimer);
+  _deferredOlderMessagesTimer=0;
 }
 function _resetStreamScrollFollow(){
   _clearNewMessageScrollCue();
@@ -3699,7 +3905,8 @@ if(typeof window!=='undefined'){
     cancelAnimationFrame(_scrollRaf);
     _scrollRaf=requestAnimationFrame(()=>{
       const top=el.scrollTop;
-      const nearBottom=el.scrollHeight-top-el.clientHeight<250;
+      const bottomDistance=el.scrollHeight-top-el.clientHeight;
+      const nearBottom=bottomDistance<250;
       const movedUp=_lastScrollTop!==null&&top<_lastScrollTop-2;
       const movedDown=_lastScrollTop!==null&&top>_lastScrollTop+2;
       _lastScrollTop=top;
@@ -3711,13 +3918,16 @@ if(typeof window!=='undefined'){
       }else if(movedDown&&nearBottom){
         _nearBottomCount=_nearBottomCount+1;
         if(_nearBottomCount>=2){
-          _scrollPinned=true;
-          _messageUserUnpinned=false;
+          if(!_messageUserUnpinned||bottomDistance<=80){
+            _messageUserUnpinned=false;
+            _scrollPinned=true;
+          }
+          _nearBottomCount=0;
         }
       }else if(!_messageUserUnpinned){
         if(nearBottom){
           _nearBottomCount=_nearBottomCount+1;
-          if(_nearBottomCount>=2) _scrollPinned=true;
+          if(_nearBottomCount>=2){_scrollPinned=true;_nearBottomCount=0;}
         }else{
           _nearBottomCount=0;
           _scrollPinned=false;
@@ -3735,7 +3945,8 @@ if(typeof window!=='undefined'){
       // the user's continued upward wheel/touch movement.
       const olderPrefetchPx=Math.max(600,el.clientHeight*1.5);
       if(_isSessionEndlessScrollEnabled()&&el.scrollTop<olderPrefetchPx && typeof _messagesTruncated!=='undefined' && _messagesTruncated && typeof _loadOlderMessages==='function'){
-        _loadOlderMessages();
+        if(_recentMessageTouchScrollIntent()) _scheduleDeferredOlderMessagesLoad();
+        else _loadOlderMessages();
       }
     });
   });
@@ -4049,6 +4260,12 @@ function _syncCtxIndicator(usage){
   const wrap=$('ctxIndicatorWrap');
   const el=$('ctxIndicator');
   if(!el)return;
+  const ctxHidden=!!(window._composerControlVisibility&&window._composerControlVisibility.hide_composer_context);
+  if(ctxHidden){
+    if(wrap) wrap.style.display='none';
+    _syncMobileCtxDisplay({visible:false});
+    return;
+  }
   // #1436: Use last_prompt_tokens only — NEVER fall back to cumulative
   // input_tokens for the "context window % used" calculation.  input_tokens
   // is summed across all turns, so dividing it by the context window gives a
@@ -4069,7 +4286,12 @@ function _syncCtxIndicator(usage){
     _syncMobileCtxDisplay({visible:false});
     return;
   }
-  if(wrap) wrap.style.display='';
+  if(wrap){
+    // Defensive reset: keep dynamic context display from being stuck hidden.
+    wrap.classList.remove('composer-control-hidden');
+    wrap.removeAttribute('aria-hidden');
+    wrap.style.display='';
+  }
   const hasPromptTok=!!promptTok;
   const rawPct=hasPromptTok?Math.round((promptTok/ctxWindow)*100):0;
   const pct=Math.min(100,rawPct);
@@ -4306,6 +4528,10 @@ function _settleFinalScroll(token){
   if(token!==_bottomSettleToken) return;
   const el=document.getElementById('messages');
   if(!el){ _programmaticScroll=false; return; }
+  if(_messageUserUnpinned||!_scrollPinned||_recentNonMessageScrollIntent()||_recentMessageTouchScrollIntent()){
+    _programmaticScroll=false;
+    return;
+  }
   _programmaticScroll=true;
   el.scrollTop=el.scrollHeight;
   _lastScrollTop=el.scrollTop;
@@ -4336,6 +4562,7 @@ function scrollToBottom(){
   _settleMessageScrollToBottom(false, true);
   _syncScrollToBottomCue(false,{newMessage:false});
   if(typeof _updateSessionStartJumpButton==='function') _updateSessionStartJumpButton();
+  if(typeof _flushDeferredActiveSessionExternalRefresh==='function') _flushDeferredActiveSessionExternalRefresh();
 }
 
 function _fmtOllamaLabel(mid){
@@ -4630,6 +4857,7 @@ function renderMd(raw){
     } else {
       const h=lang?`<div class="pre-header">${esc(lang)}</div>`:'';
       const langAttr=lang?` class="language-${esc(lang)}"`:'';
+      const preClass=/^(md|markdown|mdx)$/.test(lang)?' class="md-source-block"':'';
       // For diff/patch blocks, wrap each line in a colored span
       if(lang==='diff'||lang==='patch'){
         const colored=esc(code.replace(/\n$/,'')).split('\n').map(line=>{
@@ -4655,10 +4883,10 @@ function renderMd(raw){
           const body=rows.slice(1).map(r=>'<tr>'+r.split(',').map(c=>`<td>${esc(c.trim())}</td>`).join('')+'</tr>').join('');
           _preBlock_stash.push(`${h}<div class="csv-table-wrap"><table class="csv-table"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`);
         } else {
-          _preBlock_stash.push(`${h}<pre><code${langAttr}>${esc(code.replace(/\n$/,''))}</code></pre>`);
+          _preBlock_stash.push(`${h}<pre${preClass}><code${langAttr}>${esc(code.replace(/\n$/,''))}</code></pre>`);
         }
       } else {
-        _preBlock_stash.push(`${h}<pre><code${langAttr}>${esc(code.replace(/\n$/,''))}</code></pre>`);
+        _preBlock_stash.push(`${h}<pre${preClass}><code${langAttr}>${esc(code.replace(/\n$/,''))}</code></pre>`);
       }
     }
     return lead+'\x00P'+(_preBlock_stash.length-1)+'\x00';
@@ -5223,11 +5451,20 @@ function setStatus(t){
 function setComposerStatus(t){
   const el=$('composerStatus');
   if(!el)return;
+  const statusHidden=!!(window._composerControlVisibility&&window._composerControlVisibility.hide_composer_status);
+  if(statusHidden){
+    el.style.display='none';
+    el.textContent='';
+    return;
+  }
   if(!t){
     el.style.display='none';
     el.textContent='';
     return;
   }
+  // Defensive reset: a stale hidden class should never block live status text.
+  el.classList.remove('composer-control-hidden');
+  el.removeAttribute('aria-hidden');
   el.textContent=t;
   el.style.display='';
 }
@@ -5273,7 +5510,7 @@ function unlockComposerForClarify(){
 
 function _composerHasContent(){
   const msg=$('msg');
-  return !!((msg&&msg.value.trim().length>0)||S.pendingFiles.length>0);
+  return !!((msg&&msg.value.trim().length>0)||S.pendingFiles.length>0||(typeof window._hasPendingSelections==='function'&&window._hasPendingSelections()));
 }
 
 function _getExplicitBusyCommandAction(text){
@@ -5500,8 +5737,7 @@ function _renderQueueChips(sid){
       if(!card.classList.contains('visible')) return;
       const h=card.getBoundingClientRect().height;
       if(h>0) _msgs.style.setProperty('--queue-card-height', h+'px');
-      if(S.activeStreamId&&typeof scrollIfPinned==='function') scrollIfPinned();
-      else if(!S.activeStreamId&&typeof scrollToBottom==='function') scrollToBottom();
+      if(typeof scrollIfPinned==='function') scrollIfPinned();
     }, 360);
   }
 
@@ -5691,8 +5927,7 @@ function _updateQueuePill(sid,count){
         }, 360);
       }
       if(pillOuter) pillOuter.classList.remove('show');
-      if(S.activeStreamId&&typeof scrollIfPinned==='function') scrollIfPinned();
-      else if(!S.activeStreamId&&typeof scrollToBottom==='function') scrollToBottom();
+      if(typeof scrollIfPinned==='function') scrollIfPinned();
     };
   } else {
     if(pillOuter) pillOuter.classList.remove('show');
@@ -5857,7 +6092,10 @@ function showConfirmDialog(opts={}){
   if(title) title.textContent=opts.title||t('dialog_confirm_title');
   if(desc) desc.textContent=opts.message||'';
   if(input){input.style.display='none';input.value='';}
-  if(cancelBtn) cancelBtn.textContent=opts.cancelLabel||t('cancel');
+  if(cancelBtn){
+    if(opts.hideCancel){cancelBtn.style.display='none';}
+    else{cancelBtn.style.display='';cancelBtn.textContent=opts.cancelLabel||t('cancel');}
+  }
   if(confirmBtn){
     confirmBtn.textContent=opts.confirmLabel||t('dialog_confirm_btn');
     confirmBtn.classList.toggle('danger',!!opts.danger);
@@ -5887,7 +6125,13 @@ function showPromptDialog(opts={}){
     input.value=prefill;input.placeholder=opts.placeholder||'';
     input.autocomplete='off';input.spellcheck=false;
   }
-  if(cancelBtn) cancelBtn.textContent=opts.cancelLabel||t('cancel');
+  if(cancelBtn){
+    // A prior showConfirmDialog({hideCancel:true}) (e.g. the outside-symlink info
+    // dialog, #4581) may have hidden the shared Cancel button; always restore it
+    // so a subsequent prompt keeps its Cancel affordance.
+    cancelBtn.style.display='';
+    cancelBtn.textContent=opts.cancelLabel||t('cancel');
+  }
   if(confirmBtn){
     confirmBtn.textContent=opts.confirmLabel||t('create');
     confirmBtn.classList.toggle('danger',!!opts.danger);
@@ -6067,6 +6311,8 @@ function _buildBrowserUtterance(text, btn){
 }
 
 function _playEdgeTtsChunked(text, btn){
+  _ttsSpeaking=true;
+  if(btn) btn.dataset.speaking='1';
   const chunks=_splitForTTS(text);
   const _playOne=function(idx){
     if(idx>=chunks.length){
@@ -6886,6 +7132,8 @@ async function refreshSession() {
     const data = await api(`/api/session?session_id=${encodeURIComponent(S.session.session_id)}`);
     S.session = data.session;
     S.messages = data.session.messages || [];
+    _messagesTruncated = !!data.session._messages_truncated;
+    _oldestIdx = data.session._messages_offset || 0;
     const pendingMsg=getPendingSessionMessage(data.session,S.messages);
     if(pendingMsg) S.messages.push(pendingMsg);
     S.activeStreamId=data.session.active_stream_id||null;
@@ -7515,6 +7763,8 @@ function syncTopbar(){
     // Update profile chip even when no session is active (e.g. right after profile switch)
     const _profileLabel=$('profileChipLabel');
     if(_profileLabel) _profileLabel.textContent=S.activeProfile||'default';
+    const _titleLabel=$('titlebarProfileLabel');
+    if(_titleLabel) _titleLabel.textContent=S.activeProfile||'default';
     return;
   }
   const sessionTitle=S.session.title||t('untitled');
@@ -7640,6 +7890,8 @@ function syncTopbar(){
   // unaffected by this line.
   const profileLabel=$('profileChipLabel');
   if(profileLabel) profileLabel.textContent=S.activeProfile||'default';
+  const titleLabel=$('titlebarProfileLabel');
+  if(titleLabel) titleLabel.textContent=S.activeProfile||'default';
 }
 
 function msgContent(m){
@@ -8072,6 +8324,31 @@ function _transparentToolStatus(tc, settled){
   if(tc&&tc.done===false) return settled?'Interrupted':'Running';
   return 'Completed';
 }
+// Quiet one-line summary for a collapsed transparent tool row (#4658).
+// The transparent view overrides the row name to the bare tool name
+// (_toolShortName, e.g. "read_file"/"terminal"), so — unlike the worklog view —
+// it has no action-label carrying the target, and buildToolCard's collapsed
+// preview is blanked for the common arg/shell case (the #4411 suppression that
+// assumes the name carries the target). That left transparent rows showing only
+// the bare tool name with no hint of what each call did. Rebuild a summary from
+// the call's TARGET (path/command/query/skill/...) — NOT the raw result JSON —
+// so it stays consistent with the "keep collapsed previews quiet" intent
+// (test_tool_card_preview_summary.py) while restoring "understand the call
+// without expanding it".
+function _transparentToolSummary(tc){
+  if(!tc||typeof tc!=='object') return '';
+  // Explicit progress text (e.g. subagent_progress) wins while still running.
+  const explicit=String(tc.preview||'').trim();
+  if(tc.done===false&&explicit) return _shortToolLabel(explicit,160);
+  // Target-based summary only (path/command/query/skill). Deliberately NO generic
+  // arg-preview fallback: a call with args but no real target (e.g. `terminal`
+  // with only {workdir} or an unknown tool with {mode:"dry-run"}) must yield an
+  // EMPTY collapsed preview rather than dumping a raw arg snippet — that keeps the
+  // collapsed row quiet and consistent with the no-args case (#4658 review).
+  const target=typeof _toolVisibleTargetLabel==='function'?_toolVisibleTargetLabel(tc,{limit:160}):'';
+  if(target) return target;
+  return '';
+}
 function _copyEventToClipboard(row){
   if(!row) return;
   const type=row.getAttribute('data-event-type');
@@ -8333,6 +8610,22 @@ function _decorateTransparentEventRow(row, opts){
       // also prefix the name with "Running:" — that's the same redundancy class
       // V6 removed from the detail body. (Trifecta r2 #4.)
       if(nameEl) nameEl.textContent=_toolShortName(name);
+      // #4658: restore the collapsed-row inline summary. buildToolCard emits a
+      // `.tool-card-preview` span but blanks its text for the common case, and
+      // the bare _toolShortName above drops the target the worklog view carries
+      // in its action-label name. Populate the preview from a quiet,
+      // target-based summary so each collapsed row says what it did without
+      // expanding. Idempotent across re-decoration (status updates re-run this).
+      const previewEl=header.querySelector('.tool-card-preview');
+      if(previewEl){
+        const summary=_transparentToolSummary(tc);
+        if(summary){
+          previewEl.textContent=summary;
+          previewEl.removeAttribute('hidden');
+        }else{
+          previewEl.textContent='';
+        }
+      }
       let statusEl=header.querySelector('.transparent-event-status');
       if(!statusEl){
         statusEl=document.createElement('span');
@@ -9071,6 +9364,83 @@ function _anchorSceneNodeForRow(row, opts){
   node.setAttribute('data-anchor-source-event-type',String(row.source_event_type||''));
   return node;
 }
+function _anchorSceneTransparentNodeForRow(row, opts){
+  const settled=!!(opts&&opts.settled);
+  if(!row) return null;
+  let node=null;
+  const meta={
+    segmentSeq:row.segment_seq||row.segmentSeq||'',
+    burstId:row.activity_burst_id||row.burst_id||row.burstId||'',
+  };
+  if(row.role==='prose'){
+    // The settled assistant segment already owns the FINAL answer prose, so a
+    // prose row whose text matches the final answer must be suppressed here to
+    // avoid duplicating the answer. But INTERMEDIATE progress prose (the
+    // between-tool narration from earlier rounds) is NOT the final answer and
+    // belongs in the chronological transparent history — dropping it loses the
+    // interleaving the user saw live (#4568: tools were restored but mid-turn
+    // prose still vanished on reload). Render intermediate prose as an inline
+    // assistant-segment (same shape _anchorSceneNodeForRow builds), skip only
+    // the final-answer duplicate.
+    const text=String(row.text||'').trim();
+    if(!text) return null;
+    const finalAnswer=String((opts&&opts.finalAnswer)||'').trim();
+    if(finalAnswer&&_anchorSceneProseMatchesFinalAnswer(text,finalAnswer)) return null;
+    node=_anchorSceneNodeForRow(row,{settled});
+    if(!node) return null;
+    node=_decorateTransparentEventRow(node,{type:'prose',text,preview:text,...meta});
+  }else if(row.role==='thinking'){
+    if(window._showThinking===false) return null;
+    const text=String(row.text||row.thinking&&row.thinking.text||'').trim();
+    if(!text) return null;
+    node=_decorateTransparentEventRow(_thinkingActivityNode(text,false,row.row_id||row.local_id||'anchor-thinking'),{
+      type:'thinking',
+      text,
+      preview:text,
+      ...meta,
+    });
+  }else if(row.role==='tool'){
+    const toolCall=_anchorSceneToolCallFromRow(row,{settled});
+    node=_decorateTransparentEventRow(buildToolCard(toolCall),{
+      type:'tool',
+      name:toolCall&&toolCall.name,
+      status:_transparentToolStatus(toolCall,true),
+      toolCall,
+      ...meta,
+    });
+  }else{
+    node=_anchorSceneNodeForRow(row,{settled});
+    node=_decorateTransparentEventRow(node,{
+      type:String(row.role||'activity'),
+      ...meta,
+    });
+  }
+  if(!node) return null;
+  node.setAttribute('data-anchor-scene-row','1');
+  node.setAttribute('data-anchor-settled-scene-row','1');
+  node.setAttribute('data-anchor-row-id',String(row.row_id||row.local_id||''));
+  node.setAttribute('data-anchor-row-role',String(row.role||'activity'));
+  node.setAttribute('data-anchor-source-event-type',String(row.source_event_type||''));
+  return node;
+}
+// Whitespace-insensitive compare so a scene prose row that IS the final answer
+// (possibly re-wrapped) is recognized and not duplicated against the segment.
+// Codex #4568: the prefix tolerance must NOT be able to suppress a DISTINCT
+// intermediate progress row that merely happens to be a prefix of the final
+// answer (e.g. "I found the issue and I'm applying the fix now." when the final
+// answer starts with that sentence). So require exact normalized equality, with
+// a prefix tolerance allowed ONLY when the two strings are near-equal length
+// (>=0.9 ratio, shorter >=80 chars) — i.e. genuine re-wrap/truncation of the
+// SAME text, never a short intermediate sentence that prefixes a long answer.
+function _anchorSceneProseMatchesFinalAnswer(proseText, finalAnswer){
+  const norm=(s)=>String(s||'').replace(/\s+/g,' ').trim();
+  const a=norm(proseText), b=norm(finalAnswer);
+  if(!a||!b) return false;
+  if(a===b) return true;
+  if(!(a.startsWith(b)||b.startsWith(a))) return false;
+  const shorter=Math.min(a.length,b.length), longer=Math.max(a.length,b.length);
+  return shorter>=80 && (shorter/longer)>=0.9;
+}
 function _anchorSceneWorklogGroup(blocks, opts){
   if(!blocks) return null;
   const live=!!(opts&&opts.live);
@@ -9208,7 +9578,7 @@ function renderLiveAnchorActivityScene(streamId, scene, opts){
     ? _captureWorklogDetailDisclosureState(blocks)
     : null;
   blocks.querySelectorAll('[data-anchor-scene-owner="1"],[data-anchor-scene-row="1"]').forEach(el=>el.remove());
-  blocks.querySelectorAll('.live-worklog[data-live-worklog-shell="1"],.tool-worklog-group[data-live-tool-call-group="1"],.tool-call-group[data-live-tool-call-group="1"],.tool-card-row[data-live-tid]:not(.transparent-event-row),.agent-activity-thinking[data-live-thinking="1"]').forEach(el=>el.remove());
+  blocks.querySelectorAll('.live-worklog[data-live-worklog-shell="1"],.tool-worklog-group[data-live-tool-call-group="1"],.tool-call-group[data-live-tool-call-group="1"],.tool-card-row[data-live-tid]:not(.transparent-event-row),.agent-activity-thinking[data-live-thinking="1"],.interim-collapse-toggle').forEach(el=>el.remove());
   blocks.querySelectorAll('[data-live-assistant="1"]').forEach(el=>{
     el.classList.add('assistant-segment-worklog-source');
     el.setAttribute('aria-hidden','true');
@@ -9254,8 +9624,48 @@ if(typeof window!=='undefined'){
   window._projectLiveAnchorActivitySceneForStream=_projectLiveAnchorActivitySceneForStream;
   window.isLiveAnchorActivitySceneOwner=isLiveAnchorActivitySceneOwner;
 }
+function _renderSettledAnchorSceneTransparentForMessage(message, segment, rawIdx){
+  if(!message||!message._anchor_activity_scene||!segment) return false;
+  const blocks=_assistantTurnBlocks(segment.closest('.assistant-turn'));
+  if(!blocks) return false;
+  const scene=message._anchor_activity_scene;
+  const rows=_anchorSceneRowsForRendering(scene,{settled:true});
+  if(!rows.length) return false;
+  // The assistant segment owns the final answer; pass it so intermediate prose
+  // rows render but the final-answer-duplicate prose row is suppressed.
+  const finalAnswer=String(
+    (scene&&typeof scene.final_answer==='string'&&scene.final_answer)
+    || _assistantAnchorSceneFinalAnswerText(message)
+    || (typeof msgContent==='function'?msgContent(message):'')
+    || ''
+  );
+  blocks.querySelectorAll('[data-anchor-settled-scene-row="1"],.transparent-event-row[data-anchor-scene-row="1"]').forEach(el=>el.remove());
+  blocks.querySelectorAll('.assistant-segment[data-msg-idx]').forEach(node=>{
+    const idx=Number(node.getAttribute('data-msg-idx'));
+    if(Number.isFinite(idx)&&idx<rawIdx){
+      node.classList.add('assistant-segment-worklog-source');
+      node.setAttribute('aria-hidden','true');
+    }
+  });
+  let wrote=false;
+  for(const row of rows){
+    const node=_anchorSceneTransparentNodeForRow(row,{settled:true,finalAnswer});
+    if(!node) continue;
+    if(segment.parentElement===blocks) blocks.insertBefore(node,segment);
+    else blocks.appendChild(node);
+    wrote=true;
+  }
+  if(wrote){
+    const turn=segment.closest('.assistant-turn');
+    if(turn) _syncTransparentEventControls(turn);
+  }
+  return wrote;
+}
 function _renderSettledAnchorSceneForMessage(message, segment, rawIdx){
   if(!message||!message._anchor_activity_scene||!segment) return false;
+  if(typeof isTransparentStream==='function'&&isTransparentStream()){
+    return _renderSettledAnchorSceneTransparentForMessage(message,segment,rawIdx);
+  }
   if(typeof isCompactWorklogMode==='function'&&!isCompactWorklogMode()) return false;
   const blocks=_assistantTurnBlocks(segment.closest('.assistant-turn'));
   if(!blocks) return false;
@@ -10423,24 +10833,39 @@ function _restoreMessageScrollSnapshot(snapshot){
   const el=$('messages');
   if(!el||!snapshot) return;
   const maxTop=Math.max(0,el.scrollHeight-el.clientHeight);
-  const restoredViaAnchor=(snapshot.anchor&&typeof _restoreMessageViewportAnchor==='function')
+  let restoredViaAnchor=(snapshot.anchor&&typeof _restoreMessageViewportAnchor==='function')
     ? _restoreMessageViewportAnchor(snapshot.anchor,0)
     : false;
+  if(!restoredViaAnchor&&typeof _remountMessageViewportAnchor==='function'&&_remountMessageViewportAnchor(snapshot.anchor)){
+    restoredViaAnchor=(typeof _restoreMessageViewportAnchor==='function')
+      ? _restoreMessageViewportAnchor(snapshot.anchor,0)
+      : false;
+  }
   if(!restoredViaAnchor){
     _programmaticScroll=true;
     el.scrollTop=Math.max(0,Math.min(Number(snapshot.top)||0,maxTop));
   }
   // Sync _lastScrollTop after programmatic restore so sticky-unpin does not false-trigger (#1731).
   _lastScrollTop=el.scrollTop;
-  const bottomDistance=el.scrollHeight-el.scrollTop-el.clientHeight;
-  if(bottomDistance>250){
+  if(snapshot.userUnpinned===true){
     _messageUserUnpinned=true;
     _scrollPinned=false;
     _nearBottomCount=0;
-  }else if(bottomDistance<=120){
+  }else if(snapshot.pinned===true){
     _messageUserUnpinned=false;
     _scrollPinned=true;
     _nearBottomCount=2;
+  }else{
+    const bottomDistance=el.scrollHeight-el.scrollTop-el.clientHeight;
+    if(bottomDistance>250){
+      _messageUserUnpinned=true;
+      _scrollPinned=false;
+      _nearBottomCount=0;
+    }else if(bottomDistance<=120){
+      _messageUserUnpinned=false;
+      _scrollPinned=true;
+      _nearBottomCount=2;
+    }
   }
   if(!restoredViaAnchor){
     requestAnimationFrame(()=>{ setTimeout(()=>{_programmaticScroll=false;},0); });
@@ -10452,22 +10877,10 @@ function _restoreMessageScrollSnapshotSameFrame(snapshot){
   let restoredViaAnchor=(snapshot.anchor&&typeof _restoreMessageViewportAnchor==='function')
     ? _restoreMessageViewportAnchor(snapshot.anchor,0)
     : false;
-  if(!restoredViaAnchor&&snapshot.anchor&&snapshot.anchor.rawIdx!=null&&
-     !el.querySelector(`[data-msg-idx="${snapshot.anchor.rawIdx}"]`)&&
-     typeof _getVisibleMessagesWithIdx==='function'&&
-     typeof _messageVisibleIndexForRawIdx==='function'&&
-     typeof _messageVirtualScrollTopForVisibleIdx==='function'){
-    const visWithIdx=_getVisibleMessagesWithIdx();
-    const visIdx=_messageVisibleIndexForRawIdx(snapshot.anchor.rawIdx,visWithIdx);
-    if(visIdx>=0){
-      _programmaticScroll=true;
-      el.scrollTop=_messageVirtualScrollTopForVisibleIdx(visWithIdx,visIdx,el);
-      _messageVirtualWindowKey='';
-      renderMessages({preserveScroll:true});
-      restoredViaAnchor=(typeof _restoreMessageViewportAnchor==='function')
-        ? _restoreMessageViewportAnchor(snapshot.anchor,0)
-        : false;
-    }
+  if(!restoredViaAnchor&&typeof _remountMessageViewportAnchor==='function'&&_remountMessageViewportAnchor(snapshot.anchor)){
+    restoredViaAnchor=(typeof _restoreMessageViewportAnchor==='function')
+      ? _restoreMessageViewportAnchor(snapshot.anchor,0)
+      : false;
   }
   if(!restoredViaAnchor){
     const maxTop=Math.max(0,el.scrollHeight-el.clientHeight);
@@ -10547,15 +10960,15 @@ function _scrollAfterMessageRender(preserveScroll, scrollSnapshot){
     scrollIfPinned();
     return;
   }
-  // Auto-follow OFF + the user has scrolled up: don't yank them to the bottom on
-  // an automatic (non-preserve) re-render. This also covers the send() race where
-  // renderMessages() runs before S.activeStreamId is set, so a stream-start
-  // wouldn't otherwise be caught by the scrollIfPinned() branch above. A fresh
-  // session load (not unpinned) still lands at the bottom as expected. (Codex #4006.)
+  // Manual unpin is sticky: once the reader scrolls away, automatic idle/non-
+  // preserve re-renders must restore their viewport rather than clearing the
+  // unpin state with scrollToBottom(). A fresh session load (not unpinned) still
+  // lands at the bottom as expected. (Codex #4006 follow-up.)
   // renderMessages() captures the pre-wipe snapshot for this case too (see its
   // scrollSnapshot init), so restoring here lands the reader where they were.
-  if(!_autoScrollFollow && _messageUserUnpinned){
+  if(_messageUserUnpinned){
     _restoreMessageScrollSnapshot(scrollSnapshot);
+    _maybeShowNewMessageScrollCue(scrollSnapshot);
     return;
   }
   scrollToBottom();
@@ -10575,10 +10988,10 @@ function _maybeRecoverVirtualizedBlankViewport(options, preserveScroll, virtualW
 function renderMessages(options){
   const preserveScroll=!!(options&&options.preserveScroll);
   const virtualFallback=!!(options&&options._virtualFallback);
-  // Capture the pre-wipe scroll position when preserving OR when Auto-follow is
-  // off and the user has scrolled up — both need to restore the reader's position
-  // after the DOM rebuild rather than snap to the bottom. (Codex #4006 r3.)
-  const scrollSnapshot=(preserveScroll||(!_autoScrollFollow&&_messageUserUnpinned))?_captureMessageScrollSnapshot():null;
+  // Capture the pre-wipe scroll position when preserving OR when the reader has
+  // manually unpinned; both need to restore the reader's position after the DOM
+  // rebuild rather than snap to the bottom. (Codex #4006 r3 follow-up.)
+  const scrollSnapshot=(preserveScroll||_messageUserUnpinned)?_captureMessageScrollSnapshot():null;
   const inner=$('msgInner');
   const sid=S.session?S.session.session_id:null;
   const msgCount=S.messages.length;
@@ -10953,6 +11366,8 @@ function renderMessages(options){
       row.className='msg-row';
       row.id=_userMessageDomId(rawIdx);
       row.dataset.msgIdx=rawIdx;
+      row.dataset.sessionMsgIdx=_messageSessionIndexForRawIdx(rawIdx);
+      row.dataset.messageAnchorKey=_messageViewportAnchorKeyForMessage(m);
       row.dataset.role='user';
       row.dataset.rawText=String(displayContent).trim();
       row.innerHTML=`${filesHtml}<div class="msg-body">${bodyHtml}</div>${footHtml}`;
@@ -10968,6 +11383,8 @@ function renderMessages(options){
     const seg=document.createElement('div');
     seg.className='assistant-segment';
     seg.dataset.msgIdx=rawIdx;
+    seg.dataset.sessionMsgIdx=_messageSessionIndexForRawIdx(rawIdx);
+    seg.dataset.messageAnchorKey=_messageViewportAnchorKeyForMessage(m);
     seg.dataset.rawText=String(content).trim();
     if(m._activityBurstId!==undefined&&m._activityBurstId!==null) seg.setAttribute('data-activity-burst-id',String(m._activityBurstId));
     if(Number.isFinite(Number(m._liveSegmentSeq))) seg.setAttribute('data-live-segment-seq',String(Number(m._liveSegmentSeq)));
@@ -14200,9 +14617,13 @@ function _renderTreeItems(container, entries, depth){
     el.ondragend=()=>{el.classList.remove('dragging');_clearWorkspaceMoveDragOver();};
 
     const isLk = item.type === 'symlink';
-    const isDirLike = item.type === 'dir' || (isLk && item.is_dir);
-    const isFileLike = !isDirLike;
+    const isExternalLink = isLk && item.target_outside_workspace;
+    // External symlinks are display-only: not expandable, not openable.
+    // The read gate (safe_resolve_ws) still blocks navigation through them.
+    const isDirLike = !isExternalLink && (item.type === 'dir' || (isLk && item.is_dir));
+    const isFileLike = !isExternalLink && !isDirLike;
     el.dataset.wsIsDir = String(isDirLike);
+    if(isExternalLink){el.removeAttribute('draggable');el.ondragstart=null;}
 
     if(isDirLike){
       // Toggle arrow for directories
@@ -14223,9 +14644,11 @@ function _renderTreeItems(container, entries, depth){
     // Icon
     const iconEl=document.createElement('span');
     iconEl.className='file-icon';
-    iconEl.innerHTML = isDirLike
-      ? (isLk ? li('link', 14) : li('folder', 14))
-      : (isLk ? li('link', 14) : fileIcon(item.name, item.type));
+    iconEl.innerHTML = isExternalLink
+      ? li('external-link', 14)
+      : isDirLike
+        ? (isLk ? li('link', 14) : li('folder', 14))
+        : (isLk ? li('link', 14) : fileIcon(item.name, item.type));
     el.appendChild(iconEl);
 
     // Name
@@ -14257,6 +14680,8 @@ function _renderTreeItems(container, entries, depth){
       if(_nameClickTimer){clearTimeout(_nameClickTimer);_nameClickTimer=null;}
       // For directories, double-click navigates (breadcrumb view)
       if(isDirLike){loadDir(item.path);return;}
+      // External symlinks: show informational dialog, not rename
+      if(isExternalLink){if(typeof el.onclick==='function')el.onclick(e);return;}
       const inp=document.createElement('input');
       inp.className='file-rename-input';inp.value=item.name;
       inp.onclick=(e2)=>e2.stopPropagation();
@@ -14344,6 +14769,21 @@ function _renderTreeItems(container, entries, depth){
           }
           renderFileTree();
         }
+      };
+    }else if(isExternalLink){
+      // Display-only: the link points outside the workspace. We do NOT disclose
+      // the resolved outside path (#4581 hardening) and do NOT call openFile —
+      // the read gate (safe_resolve_ws) blocks navigation through the link.
+      el.onclick=async(e)=>{
+        e.stopPropagation();
+        await showConfirmDialog({
+          title:item.name,
+          message:t('external_link_open_confirm'),
+          confirmLabel:t('dialog_confirm_btn'),
+          danger:false,
+          hideCancel:true,
+          focusCancel:false,
+        });
       };
     }else{
       el.onclick=async()=>openFile(item.path);

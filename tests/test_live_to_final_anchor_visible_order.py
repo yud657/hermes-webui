@@ -346,6 +346,21 @@ def test_scene_renderer_coalesces_row_updates_and_renders_in_scene_order():
     assert "assistant-segment-worklog-source" in live
 
 
+def test_live_anchor_scene_removes_legacy_interim_collapse_toggle():
+    live = _function_body(UI_JS, "renderLiveAnchorActivityScene")
+    interim = _event_listener_body(MESSAGES_JS, "interim_assistant")
+
+    cleanup_idx = live.index(".interim-collapse-toggle")
+    hide_idx = live.index("blocks.querySelectorAll('[data-live-assistant=\"1\"]')")
+    group_idx = live.index("const group=_anchorSceneWorklogGroup")
+    assert cleanup_idx < hide_idx < group_idx
+
+    guard_idx = interim.index("data-anchor-scene-live-owner")
+    remove_idx = interim.index("blocks.querySelectorAll('.interim-collapse-toggle').forEach(el=>el.remove())")
+    legacy_create_idx = interim.index("let toggle=blocks.querySelector('.interim-collapse-toggle')")
+    assert guard_idx < remove_idx < legacy_create_idx
+
+
 def test_tool_scene_rows_coalesce_by_logical_tool_call_identity():
     rows = _function_body(UI_JS, "_anchorSceneRowsForRendering")
     key = _function_body(UI_JS, "_anchorSceneToolRowLogicalKey")
@@ -671,6 +686,58 @@ def test_anchor_owned_settled_turn_skips_legacy_worklog_rebuild():
     assert "if(anchorOwnedAssistantRawIdxs.has(aIdx)) continue;" in render
     assert "if(anchorOwnedAssistantRawIdxs.has(rawIdx)) return;" in render
     assert "!anchorOwnedAssistantRawIdxs.has(S.messages.indexOf(m))" in render
+
+
+def test_transparent_stream_renders_persisted_anchor_scene_after_reload():
+    settled = _function_body(UI_JS, "_renderSettledAnchorSceneForMessage")
+    transparent = _function_body(UI_JS, "_renderSettledAnchorSceneTransparentForMessage")
+    row = _function_body(UI_JS, "_anchorSceneTransparentNodeForRow")
+    render = _function_body(UI_JS, "renderMessages")
+
+    assert "if(typeof isTransparentStream==='function'&&isTransparentStream())" in settled
+    assert "return _renderSettledAnchorSceneTransparentForMessage(message,segment,rawIdx);" in settled
+    assert "_anchorSceneRowsForRendering(scene,{settled:true})" in transparent
+    assert 'blocks.querySelectorAll(\'[data-anchor-settled-scene-row="1"],.transparent-event-row[data-anchor-scene-row="1"]\')' in transparent
+    # combined fix: the final answer text is computed and threaded into the row
+    # renderer so intermediate prose survives while the final-answer duplicate is dropped.
+    assert "_anchorSceneTransparentNodeForRow(row,{settled:true,finalAnswer})" in transparent
+    assert "finalAnswer" in transparent
+    assert "blocks.insertBefore(node,segment)" in transparent
+    assert "_syncTransparentEventControls(turn)" in transparent
+    # tool + thinking rows are rendered as transparent event rows
+    assert "_decorateTransparentEventRow(_thinkingActivityNode" in row
+    assert "_decorateTransparentEventRow(buildToolCard(toolCall)" in row
+    assert "_transparentToolStatus(toolCall,true)" in row
+    assert 'data-anchor-settled-scene-row' in row
+    assert "if(anchorOwnedAssistantRawIdxs.has(aIdx)) continue;" in render
+
+
+def test_transparent_anchor_intermediate_prose_preserved_only_final_answer_suppressed():
+    """#4568 combined fix: intermediate between-tool progress prose must render in
+    Transparent Stream reload (not be blanket-dropped like the first pass did);
+    ONLY the prose row that duplicates the final answer is suppressed."""
+    row = _function_body(UI_JS, "_anchorSceneTransparentNodeForRow")
+    match = _function_body(UI_JS, "_anchorSceneProseMatchesFinalAnswer")
+    # the prose branch must RENDER intermediate prose via the shared node builder,
+    # gated only on the final-answer match — NOT an unconditional `return null`.
+    assert "row.role==='prose'" in row
+    assert "_anchorSceneProseMatchesFinalAnswer(text,finalAnswer)" in row
+    assert "_anchorSceneNodeForRow(row,{settled})" in row, (
+        "intermediate prose must be rendered as an inline assistant-segment node, "
+        "not dropped"
+    )
+    assert "type:'prose'" in row
+    # the matcher exists and compares whitespace-insensitively; the prefix
+    # tolerance is length-ratio-guarded so a short intermediate sentence that
+    # merely prefixes a long final answer is NOT suppressed (Codex #4568).
+    assert "replace(/\\s+/g,' ')" in match
+    assert "startsWith" in match
+    assert "0.9" in match and ">=80" in match.replace(" ", ""), (
+        "prefix tolerance must be guarded by a near-equal length ratio, not a bare >=40 floor"
+    )
+    # guard against the regression where ALL prose rows were dropped:
+    assert "// avoid duplicating the answer" in row or "duplicates the final answer" in row
+
 
 
 def test_settled_anchor_scene_final_answer_does_not_fold_into_worklog_source():

@@ -3,6 +3,36 @@
 
 ## [Unreleased]
 
+## [v0.51.596] — 2026-06-23 — Release VC (throttle reasoning SSE to stop tab freeze)
+
+### Fixed
+
+- **Reasoning SSE events no longer flood the frontend renderer.** During the reasoning/thinking phase of models like DeepSeek, the server emitted one SSE `reasoning` event per token — tens of thousands per turn — each triggering a full-text scan in the frontend renderer, locking the JS main thread (browser tab freeze). Reasoning SSE events are now throttled to ~10 Hz via a coalescing buffer: delta text is accumulated server-side and flushed in batches, so every reasoning token reaches the browser's live Thinking view while capping SSE events to ~10 Hz. The accumulated reasoning text remains complete for persistence. Thanks @wlknight.
+
+## [v0.51.595] — 2026-06-23 — Release VB (TLS handshake no longer stalls the accept loop)
+
+### Fixed
+
+- **A stalled or malformed TLS handshake can no longer freeze the whole server.** When HTTPS was enabled, the listening socket itself was TLS-wrapped, so the TLS handshake ran inside the single accept loop — one client that connected but never completed the handshake (a hung client, a port scanner, a half-open probe) blocked every other request, leaving the server alive but unable to serve anyone. The handshake now runs lazily in the per-request worker thread instead (the listening socket stays plain; each accepted connection is wrapped with `do_handshake_on_connect=False`), so a stalled handshake only ties up its own worker and is bounded by the existing 30s request timeout. Plain-HTTP serving is unchanged. Thanks @jcarvine. (#4727)
+
+## [v0.51.594] — 2026-06-22 — Release VA (profile-switch loading skeletons)
+
+### Added
+
+- **Polished loading states when switching profiles.** Switching profiles used to leave the previous profile's conversation list and workspace file tree on screen until their data finished loading (~1s), with no feedback beyond a spinner on the profile chip. Both now show a clean, theme-aware loading skeleton the instant the switch begins — so you never see the wrong profile's content, and you get consistent loading feedback across the whole window. The skeleton mirrors the real layout (grouped single-line conversation rows; file-tree rows) and shimmers gently; it respects `prefers-reduced-motion` (static bars, no animation) and adapts to light/dark themes. The skeleton is a fixed representative shape (it isn't sized to the target profile's conversation count, which isn't known until the switch resolves). The switch path also hardens against the previous profile's content racing back over the skeleton (a render that was in flight before, started during, or failed mid-switch can no longer repaint stale rows or the wrong workspace tree), and the skeleton can't strand on a failed or superseded switch. Also fixed three issues found in review (@rodboev): a superseded or transient-but-successful switch no longer pops a spurious "Request timed out" error toast (the switch POST suppresses the generic timeout toast; failures surface only through the generation-guarded handler); skeleton group labels now settle at their intended 50% opacity instead of being forced to full brightness by the shared fade-in keyframe; and the in-progress-session switch branch re-checks the switch generation after its awaited list render, so a rapid second switch can't have its workspace skeleton cleared by a slower earlier one. Part of a phased effort to make profile switching faster and smoother (#4662, phase 1).
+
+## [v0.51.593] — 2026-06-22 — Release UZ (gateway-poll visibility-listener cleanup)
+
+### Fixed
+
+- **The gateway-poll fallback's tab-refocus catch-up listener is now removed when polling stops and correctly re-attaches when it restarts.** Follow-up to #4730: the `visibilitychange` catch-up listener was added once via a sticky flag but never removed in `stopGatewayPollFallback()` — so after the poll stopped (e.g. when live SSE reconnects) the listener lingered, and on a later poll restart the sticky flag prevented re-attaching it, leaving the refocus catch-up silently disabled. The handler is now tracked in a module variable, removed on stop, and re-added on the next start. Thanks @akrhin. (#4730)
+
+## [v0.51.592] — 2026-06-22 — Release UY (skip gateway poll when hidden/streaming + smd re-init)
+
+### Fixed
+
+- **The sidebar's gateway-poll fallback no longer burns CPU re-rendering while you're streaming or the tab is hidden, and long streamed responses render more efficiently.** The 5s gateway-poll fallback now skips its `renderSessionList` pass when the tab is hidden or a turn is actively streaming (it catches up immediately on tab refocus via a one-time `visibilitychange` listener, so no gateway updates are dropped). Separately, when the streaming markdown parser was torn down by a prior segment but `window.smd` is still available, the live renderer now recreates the parser on the cleared element instead of falling back to repeated full-`innerHTML` rebuilds — avoiding O(n²) DOM churn on long responses. Thanks @akrhin. (#4730)
+
 ## [v0.51.591] — 2026-06-22 — Release UX (stop transcript jumping to first message on completion)
 
 ### Fixed
@@ -99,7 +129,6 @@
 
 - **The transcript no longer yanks you back to the bottom while you're reading mid-stream.** Scroll re-pinning now requires a deliberate move toward the bottom (and ignores tiny scroll jitter), so reading earlier messages during an active stream stays put instead of getting hijacked back to the latest token. Thanks @rodboev. (#4584, fixes #4295)
 - **No more accidental horizontal panning of the mobile transcript.** Wide content (long code lines, URLs) could let the message area pan sideways on phones; the transcript now clips horizontal overflow and wraps long words. Thanks @rodboev. (#4583, fixes #4553)
->>>>>>> baa5869e4 (stage #4577 (dso2ng): keep failed steer from cancelling active runs)
 
 ## [v0.51.575] — 2026-06-22 — Release UH (session-list perf for long histories)
 

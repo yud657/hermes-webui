@@ -3488,9 +3488,102 @@ let _sessionListRefreshAnimationPending = false;
 let _sessionListFirstRenderAnimated = false;
 let _sessionListEnterAllAnimationPending = false;
 
+// #4671: invalidate any session-list render that is in flight or queued. Called at
+// profile-switch start (with showSessionListSkeleton) so a pre-switch /api/sessions
+// response — which carries the OLD profile's rows but was issued before the switch
+// bumped the generation, so it would otherwise pass the _renderSessionListGen guard,
+// clear the skeleton flag, and paint stale rows over the skeleton — is discarded.
+// Bumping the generation makes every outstanding response stale; clearing the
+// pending/queued payloads drops a deferred apply that would do the same.
+function _invalidateSessionListRenders(){
+  _renderSessionListGen++;
+  _pendingSessionListPayload = null;
+  _renderSessionListQueuedRequest = null;
+}
+if(typeof window!=='undefined') window._invalidateSessionListRenders = _invalidateSessionListRenders;
+
+// #4671: profile-switch session-list EMBARGO. Point-in-time invalidation isn't enough —
+// a renderSessionList() can START after the skeleton is shown but BEFORE /api/profile/switch
+// returns (the profile cookie is only set by the switch response), so that GET fetches the
+// OLD profile's rows, passes the generation guard, and clobbers the skeleton. While the
+// embargo is on, _runRenderSessionListRefresh drops ALL payloads (none may paint), so only
+// the switch-owned render — which runs after the switch clears the embargo — replaces the
+// skeleton. The switch sets it before showSessionListSkeleton() and clears it immediately
+// before its own renderSessionList() (and in the failure-restore path).
+let _profileSwitchListEmbargo = false;
+function _setProfileSwitchListEmbargo(on){ _profileSwitchListEmbargo = !!on; }
+if(typeof window!=='undefined') window._setProfileSwitchListEmbargo = _setProfileSwitchListEmbargo;
+
 function animateNextSessionListRefresh(options={}){
   _sessionListRefreshAnimationPending = true;
   if(options&&options.enterAll) _sessionListEnterAllAnimationPending = true;
+}
+
+// ── Loading skeletons (#4662 Phase 1) ───────────────────────────────────────
+// Tracks whether the session list is currently showing a skeleton so a
+// resolving render knows to replace it (and so we don't stack skeletons).
+let _sessionListSkeletonActive = false;
+
+// Skeleton structure mirrors a real sidebar: a couple of group headers
+// (Pinned / Today / Last week) with single-line rows under each. Title widths
+// vary so it reads as real conversations. `stamp:false` omits the timestamp bar
+// on the occasional row (a real list mixes rows with/without a visible time).
+const _SESSION_SKELETON_GROUPS = [
+  {rows: [{title: 70}]},
+  {rows: [{title: 84}, {title: 58}, {title: 76}]},
+  {rows: [{title: 64}, {title: 90}, {title: 52}, {title: 72}]},
+];
+
+// Render a skeleton placeholder into #sessionList that mirrors the real row
+// anatomy (group labels + single-line title bars with a short timestamp bar).
+// Called the instant a profile switch begins so the user never sees the
+// previous profile's conversations.
+function showSessionListSkeleton(){
+  const list = $('sessionList');
+  if(!list) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'skeleton-list';
+  wrap.setAttribute('aria-hidden', 'true');
+  let rowIndex = 0;
+  for(const group of _SESSION_SKELETON_GROUPS){
+    const label = document.createElement('div');
+    label.className = 'skeleton-group-label';
+    wrap.appendChild(label);
+    for(const spec of group.rows){
+      const row = document.createElement('div');
+      row.className = 'skeleton-row';
+      // Stagger the fade-in per row. Set inline (not via CSS :nth-child) because
+      // group-label siblings are interleaved with rows, so a :nth-child stagger
+      // would skip most rows. Cap so the longest list doesn't feel laggy.
+      row.style.animationDelay = Math.min(rowIndex * 0.025, 0.2) + 's';
+      rowIndex++;
+      const title = document.createElement('div');
+      title.className = 'skeleton-bar skeleton-title';
+      title.style.width = spec.title + '%';
+      const stamp = document.createElement('div');
+      stamp.className = 'skeleton-bar skeleton-stamp';
+      row.appendChild(title);
+      row.appendChild(stamp);
+      wrap.appendChild(row);
+    }
+  }
+  list.innerHTML = '';
+  list.appendChild(wrap);
+  list.scrollTop = 0;
+  // Tear down any active virtual-scroll state so a pending scroll-driven render
+  // can't repaint the previous profile's cached rows over this skeleton (#4662
+  // Codex gate). Cancel the queued RAF and drop the data-session-virtual-*
+  // window markers; the real render rebuilds them from the new payload.
+  if(typeof _sessionVirtualScrollRaf!=='undefined'&&_sessionVirtualScrollRaf){
+    cancelAnimationFrame(_sessionVirtualScrollRaf);
+    _sessionVirtualScrollRaf=0;
+  }
+  delete list.dataset.sessionVirtualTotal;
+  delete list.dataset.sessionVirtualStart;
+  delete list.dataset.sessionVirtualEnd;
+  delete list.dataset.sessionVirtualFilter;
+  delete list.dataset.sessionVirtualActiveAnchor;
+  _sessionListSkeletonActive = true;
 }
 
 function _isOptimisticFirstTurnSessionRow(s){
@@ -3688,6 +3781,12 @@ function _applySessionListPayload(sessData, projData){
     _sessionListFirstRenderAnimated=true;
   }
   ensureSessionEventsSSE();
+  // #4671: this payload is the freshly-resolved /api/sessions response (and a superseded
+  // response was already discarded by the generation guard upstream), so _allSessions now
+  // holds the CURRENT profile's rows. Clear the skeleton flag right before painting so this
+  // authoritative render replaces the profile-switch skeleton — while unrelated renders that
+  // fire before this point stay blocked by the guard in renderSessionListFromCache().
+  _sessionListSkeletonActive = false;
   renderSessionListFromCache();  // no-ops if rename is in progress
 }
 
@@ -3741,6 +3840,12 @@ async function _runRenderSessionListRefresh(opts, _gen){
     }
     // Discard stale response — a newer renderSessionList() call superseded us.
     if (_gen !== _renderSessionListGen) return;
+    // #4671: while a profile switch is mid-flight, drop ANY payload — even one whose
+    // generation still matches — because a render that STARTED after the skeleton showed
+    // but before the switch response set the new-profile cookie fetched the OLD profile's
+    // rows. The switch clears the embargo immediately before its own (authoritative)
+    // renderSessionList(), so that render's payload is the first allowed to paint.
+    if (_profileSwitchListEmbargo) return;
     if(deferWhileInteracting&&_isSessionListUserInteracting()){
       _pendingSessionListPayload={gen:_gen,sessData,projData};
       _schedulePendingSessionListApply();
@@ -3749,6 +3854,11 @@ async function _runRenderSessionListRefresh(opts, _gen){
     _applySessionListPayload(sessData,projData);
   }catch(e){
     if (_gen !== _renderSessionListGen) return;
+    // #4671: same embargo guard as the success path — a mid-switch /api/sessions that
+    // FAILS must not clear the skeleton flag or render the old-profile cache either. The
+    // switch-owned render (after the embargo lifts) is the only one allowed to resolve the
+    // skeleton; if the switch itself fails, its catch clears the skeleton + embargo.
+    if (_profileSwitchListEmbargo) return;
     _showSessionListLoadError(e);
     // Only fall back to the cached rows if they were loaded under the SAME
     // scope we're requesting now. After a profile switch the cache holds the
@@ -3762,6 +3872,10 @@ async function _runRenderSessionListRefresh(opts, _gen){
     const _scopeMatches = _allSessionsScope
       && _allSessionsScope.profile === _curScope.profile
       && _allSessionsScope.allProfiles === _curScope.allProfiles;
+    // #4671: the /api/sessions fetch failed — clear the skeleton flag so this error
+    // render (matched cache, or empty rows for a mismatched scope) replaces the
+    // up-front profile-switch skeleton instead of stranding it.
+    _sessionListSkeletonActive = false;
     if (_scopeMatches) {
       renderSessionListFromCache();
     } else {
@@ -4098,16 +4212,39 @@ function ensureSessionEventsSSE(){
 
 if(typeof window!=='undefined') window.refreshSessionList = refreshSessionList;
 
+let _gatewayPollVisibilityHandler = null; // saved so stopGatewayPollFallback can remove it
+
 function startGatewayPollFallback(ms){
   const intervalMs = Math.max(5000, Number(ms) || _gatewayFallbackPollMs);
   if(_gatewayPollTimer) clearInterval(_gatewayPollTimer);
-  _gatewayPollTimer = setInterval(() => { renderSessionList({deferWhileInteracting:true}); }, intervalMs);
+  _gatewayPollTimer = setInterval(() => {
+    // Skip poll when tab is hidden or a stream is active — saves CPU
+    // and avoids redundant DOM renders during active streaming (#4704).
+    if(typeof document !== 'undefined' && document.hidden) return;
+    if(typeof S !== 'undefined' && (S.busy || S.activeStreamId)) return;
+    renderSessionList({deferWhileInteracting:true});
+  }, intervalMs);
+  // Visibility catch-up: refresh immediately when tab re-gains focus,
+  // so no gateway updates are dropped during hidden-skip periods.
+  // Save the handler so stopGatewayPollFallback can removeEventListener it (#4730 review).
+  if(typeof document !== 'undefined' && !_gatewayPollVisibilityHandler){
+    _gatewayPollVisibilityHandler = () => {
+      if(!document.hidden && typeof renderSessionList === 'function'){
+        void renderSessionList({deferWhileInteracting:false});
+      }
+    };
+    document.addEventListener('visibilitychange', _gatewayPollVisibilityHandler);
+  }
 }
 
 function stopGatewayPollFallback(){
   if(_gatewayPollTimer){
     clearInterval(_gatewayPollTimer);
     _gatewayPollTimer = null;
+  }
+  if(_gatewayPollVisibilityHandler && typeof document !== 'undefined'){
+    document.removeEventListener('visibilitychange', _gatewayPollVisibilityHandler);
+    _gatewayPollVisibilityHandler = null;
   }
 }
 
@@ -5168,6 +5305,11 @@ function _sessionVirtualSpacer(height, where){
 
 function _scheduleSessionVirtualizedRender(){
   _sessionListLastScrollAt=Date.now();
+  // While a profile-switch skeleton is up, ignore virtual-scroll events: the
+  // cached rows are the PREVIOUS profile's, and repainting them here would
+  // clobber the skeleton before the new /api/sessions response lands (#4662
+  // Codex gate). The real render clears _sessionListSkeletonActive.
+  if(_sessionListSkeletonActive) return;
   if(_renamingSid||_sessionVirtualScrollRaf) return;
   const list=_sessionVirtualScrollList;
   const total=Number(list&&list.dataset&&list.dataset.sessionVirtualTotal||0);
@@ -5334,6 +5476,14 @@ function _renderSidebarRowsFromRawSessions(sessionsRaw, referenceSessionsRaw){
 
 
 function renderSessionListFromCache(){
+  // #4671: while a profile-switch skeleton is up, bail — _allSessions still holds the
+  // PREVIOUS profile's rows until /api/sessions resolves, so any unrelated caller
+  // (sidebar SSE syncs, stream/unread updates, gateway-poll timers, panel-resync
+  // repairs) hitting this mid-switch would repaint the wrong profile's rows over the
+  // skeleton. The authoritative switch render clears the flag from inside
+  // _applySessionListPayload — once _allSessions is fresh — so only a render backed by
+  // up-to-date data replaces the skeleton. The failure-restore path clears it too.
+  if(_sessionListSkeletonActive) return;
   // Don't re-render while user is actively renaming a session (would destroy the input)
   if(_renamingSid) return;
   // Keep the per-conversation actions menu stable while the user is trying to
@@ -5384,6 +5534,13 @@ function renderSessionListFromCache(){
   const committedSwipeReflowDelay=Math.max(0,committedSwipeDuration-SESSION_SWIPE_REFLOW_LEAD_MS);
   const listScrollTopBeforeRender=list.scrollTop||0;
   list.innerHTML='';
+  // #4671: belt-and-suspenders. The authoritative skeleton-clear happens in
+  // _applySessionListPayload (once fresh data is in hand) BEFORE this function is
+  // reached, and the guard at the top of renderSessionListFromCache bails while the
+  // flag is still true — so by the time we paint here the flag is already false. Keep
+  // this assignment as a defensive backstop for any future non-switch caller that
+  // reaches a real paint with the flag somehow still set.
+  _sessionListSkeletonActive=false;
   // Batch select bar (when in select mode)
   if(_sessionSelectMode){
     const selectBar=document.createElement('div');selectBar.className='session-select-bar';

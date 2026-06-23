@@ -3,6 +3,8 @@
 import io
 import json
 from pathlib import Path
+import shutil
+import subprocess
 from urllib.parse import urlparse
 
 import api.profiles as profiles
@@ -12,6 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS = ROOT / "static" / "sessions.js"
+NODE = shutil.which("node")
 
 
 class _FakeHandler:
@@ -80,6 +83,22 @@ def _handle_sessions(url):
     handler = _FakeHandler()
     routes.handle_get(handler, urlparse(url))
     return handler
+
+
+def _extract_function(source_text, function_name):
+    marker = f"function {function_name}("
+    start = source_text.index(marker)
+    brace_start = source_text.index("{", start)
+    depth = 0
+    for index in range(brace_start, len(source_text)):
+        char = source_text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source_text[start : index + 1]
+    raise AssertionError(f"Could not extract {function_name}")
 
 
 @pytest.fixture(autouse=True)
@@ -227,6 +246,71 @@ def test_frontend_avoids_cli_bucket_request_when_cli_hidden():
     src = SESSIONS_JS.read_text(encoding="utf-8")
 
     assert "window._showCliSessions ? _sessionSourceFilter : 'webui'" in src
+
+
+@pytest.mark.skipif(NODE is None, reason="node not on PATH")
+def test_session_source_switch_fetches_selected_bucket():
+    src = SESSIONS_JS.read_text(encoding="utf-8")
+    fn_source = _extract_function(src, "_setSessionSourceFilter")
+    script = f"""
+const renderCalls = [];
+global._sessionSourceFilter = 'webui';
+global._activeProject = 'demo-project';
+global._selectedSessions = new Set(['first', 'second']);
+global._sessionSelectMode = true;
+global.localStorage = {{
+  writes: [],
+  setItem(key, value) {{
+    this.writes.push([key, value]);
+  }},
+}};
+global.renderSessionList = (opts) => {{
+  renderCalls.push(opts);
+  return Promise.resolve();
+}};
+{fn_source}
+_setSessionSourceFilter('cli');
+console.log(JSON.stringify({{
+  sourceFilter: global._sessionSourceFilter,
+  activeProject: global._activeProject,
+  selectedSize: global._selectedSessions.size,
+  sessionSelectMode: global._sessionSelectMode,
+  storageWrites: global.localStorage.writes,
+  renderCalls,
+}}));
+"""
+    proc = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    body = json.loads(proc.stdout)
+
+    assert body["sourceFilter"] == "cli"
+    assert body["activeProject"] is None
+    assert body["selectedSize"] == 0
+    assert body["sessionSelectMode"] is False
+    assert body["storageWrites"] == [["hermes-session-source-filter", "cli"]]
+    assert body["renderCalls"] == [{"deferWhileInteracting": False}]
+
+
+def test_session_list_response_omits_bucket_counts_when_missing(monkeypatch):
+    monkeypatch.setattr(routes, "_session_list_cache_overlay_runtime_rows", lambda rows: rows)
+    monkeypatch.setattr(routes, "_sidebar_session_response_item", lambda row: row)
+
+    body = routes._session_list_payload_to_response(
+        {
+            "sessions": [{"session_id": "webui-1", "title": "WebUI Session"}],
+            "cli_count": 0,
+            "archived_count": 0,
+            "archived_webui_count": 0,
+            "archived_cli_count": 0,
+            "include_archived": False,
+            "all_profiles": False,
+            "active_profile": "default",
+            "other_profile_count": 0,
+        }
+    )
+
+    assert "webui_session_count" not in body
+    assert "cli_session_count" not in body
+    assert body["sessions"][0]["session_id"] == "webui-1"
 
 
 def test_payload_row_count_regression(monkeypatch):

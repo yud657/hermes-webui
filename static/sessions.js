@@ -1569,7 +1569,7 @@ function _setSessionSourceFilter(filter) {
   _selectedSessions.clear();
   _sessionSelectMode = false;
   try { localStorage.setItem('hermes-session-source-filter', next); } catch (_e) {}
-  renderSessionListFromCache();
+  void renderSessionList({deferWhileInteracting:false});
 }
 
 function _restoreSessionSourceFilter() {

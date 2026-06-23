@@ -2145,14 +2145,12 @@ def _session_list_payload_to_response(payload: dict) -> dict:
     for s in runtime_rows:
         item = _sidebar_session_response_item(s) if isinstance(s, dict) else {}
         safe_merged.append(item)
-    return {
+    response = {
         "sessions": safe_merged,
         "cli_count": int(payload.get("cli_count", 0)),
         "archived_count": int(payload.get("archived_count", 0)),
         "archived_webui_count": int(payload.get("archived_webui_count", 0)),
         "archived_cli_count": int(payload.get("archived_cli_count", 0)),
-        "webui_session_count": int(payload.get("webui_session_count", 0)),
-        "cli_session_count": int(payload.get("cli_session_count", 0)),
         "include_archived": bool(payload.get("include_archived", False)),
         "all_profiles": bool(payload.get("all_profiles", False)),
         "active_profile": payload.get("active_profile"),
@@ -2160,6 +2158,11 @@ def _session_list_payload_to_response(payload: dict) -> dict:
         "server_time": time.time(),
         "server_tz": time.strftime("%z"),
     }
+    if "webui_session_count" in payload:
+        response["webui_session_count"] = int(payload.get("webui_session_count", 0))
+    if "cli_session_count" in payload:
+        response["cli_session_count"] = int(payload.get("cli_session_count", 0))
+    return response
 
 
 def _get_cached_session_list_payload(

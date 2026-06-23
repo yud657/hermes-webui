@@ -11140,9 +11140,10 @@ function renderMessages(options){
   _recycleStash.clear();
   if(_msgNodeRecycleEnabled){
     for(const child of Array.from(inner.children)){
-      if(!child.dataset||!child.dataset.msgIdx) continue;
+      const key=child.dataset&&(child.dataset.recycleKey||child.dataset.msgIdx);
+      if(!key) continue;
       if(child.id==='liveAssistantTurn'||child.querySelector&&child.querySelector('#liveAssistantTurn')) continue;
-      _recycleStash.set(Number(child.dataset.msgIdx), child);
+      _recycleStash.set(Number(key), child);
     }
   }
   inner.innerHTML='';
@@ -11414,6 +11415,7 @@ function renderMessages(options){
       currentAssistantTurn=null;
       let row=_msgNodeRecycleEnabled?_recycleStash.get(rawIdx):null;
       const newRawText=String(displayContent).trim();
+      if(row&&!row.classList.contains('msg-row')) row=null;
       if(row){
         row.id=_userMessageDomId(rawIdx);
         row.dataset.msgIdx=rawIdx;
@@ -11441,7 +11443,8 @@ function renderMessages(options){
     }
 
     if(!currentAssistantTurn){
-      const recycled=_msgNodeRecycleEnabled?_recycleStash.get(rawIdx):null;
+      let recycled=_msgNodeRecycleEnabled?_recycleStash.get(rawIdx):null;
+      if(recycled&&!recycled.classList.contains('assistant-turn')) recycled=null;
       if(recycled){
         const blocks=_assistantTurnBlocks(recycled);
         if(blocks) blocks.innerHTML='';
@@ -11449,7 +11452,7 @@ function renderMessages(options){
       }else{
         currentAssistantTurn=_createAssistantTurn(tsTitle, isTpsDisplayEnabled()?_formatTurnTps(m._turnTps):'');
       }
-      currentAssistantTurn.dataset.msgIdx=rawIdx;
+      currentAssistantTurn.dataset.recycleKey=rawIdx;
       inner.appendChild(currentAssistantTurn);
     }
     const seg=document.createElement('div');

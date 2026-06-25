@@ -3,6 +3,12 @@
 
 ## [Unreleased]
 
+## [v0.51.658] — 2026-06-25 — Release XN (tool cards keep long commands and reconstruct diffs)
+
+### Fixed
+
+- **Long tool-call commands, paths, and reconstructed diffs are no longer cut to 120 characters in tool cards.** Tool-call arguments were truncated to 120 chars when persisted and when rebuilt for rendering, which clipped long single-line commands and file paths and — most damagingly — broke the diff shown for recovery-rebuilt sessions (whose diffs are reconstructed from the `old_string`/`new_string`/`patch` args). Content/diff-bearing arg keys (`command`, `cmd`, `script`, `code`, `patch`, `diff`, `old_string`, `new_string`, `content`, `path`, `file_path`) now keep their full value (bounded at a much larger storage-safe cap); incidental args still use the short cap. Secret-bearing values newly visible in the full command are masked at every render and clipboard-copy path. (#4928, part of #4925)
+
 ## [v0.51.657] — 2026-06-25 — Release XM (expanded shell tool cards show the full command)
 
 ### Fixed

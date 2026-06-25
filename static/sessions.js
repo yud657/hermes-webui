@@ -170,6 +170,15 @@ function _clearComposerDraft(sid) {
 const SESSION_VIEWED_COUNTS_KEY = 'hermes-session-viewed-counts';
 const SESSION_COMPLETION_UNREAD_KEY = 'hermes-session-completion-unread';
 const SESSION_OBSERVED_STREAMING_KEY = 'hermes-session-observed-streaming';
+// Per-profile session-count cache (issue #4717 / #4662 Phase 1.5). Records how
+// many sessions each profile rendered last time, keyed by profile name, so a
+// profile switch can pick an honest loading skeleton BEFORE the new /api/sessions
+// fetch resolves: a profile we last saw with zero sessions shows an empty-state
+// placeholder instead of a content skeleton that implies data which never arrives.
+// A profile we've never recorded falls back to the normal content skeleton (safe
+// default — never hide a skeleton for a profile that may well have conversations).
+const SESSION_PROFILE_COUNTS_KEY = 'hermes-session-profile-counts';
+let _sessionProfileCounts = null;
 let _sessionViewedCounts = null;
 let _sessionCompletionUnread = null;
 let _sessionObservedStreaming = null;
@@ -211,6 +220,45 @@ function _getSessionViewedCounts() {
     _sessionViewedCounts = {};
   }
   return _sessionViewedCounts;
+}
+
+// ── Per-profile session-count cache (#4717) ──────────────────────────────────
+function _getSessionProfileCounts() {
+  if (_sessionProfileCounts !== null) return _sessionProfileCounts;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SESSION_PROFILE_COUNTS_KEY) || '{}');
+    _sessionProfileCounts = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_){
+    _sessionProfileCounts = {};
+  }
+  return _sessionProfileCounts;
+}
+
+// Record how many sessions a profile currently shows, so the NEXT switch into
+// it can pick an honest skeleton. Called after a real list render resolves.
+function _recordSessionProfileCount(profile, count) {
+  const name = (profile || '').trim();
+  if (!name) return;
+  const n = Number(count);
+  if (!Number.isFinite(n) || n < 0) return;
+  const counts = _getSessionProfileCounts();
+  if (counts[name] === n) return;  // no-op write avoidance
+  counts[name] = n;
+  try {
+    localStorage.setItem(SESSION_PROFILE_COUNTS_KEY, JSON.stringify(counts));
+  } catch (_){
+    // Ignore localStorage write failures (private mode / quota).
+  }
+}
+
+// Return the last-known session count for a profile, or null if we've never
+// recorded one (caller must treat null as "unknown" → keep the content skeleton).
+function _knownSessionProfileCount(profile) {
+  const name = (profile || '').trim();
+  if (!name) return null;
+  const counts = _getSessionProfileCounts();
+  const v = counts[name];
+  return (typeof v === 'number' && Number.isFinite(v)) ? v : null;
 }
 
 function _saveSessionViewedCounts() {
@@ -754,6 +802,32 @@ function _markPollingCompletionUnreadTransitions(sessions) {
 
 let _newSessionInFlight=null;
 const _newSessionPendingText=()=>t('new_session_creating')||'Creating new conversation…';
+const _emptyComposerModelOverrideHost=typeof window!=='undefined'?window:globalThis;
+
+function _rememberEmptyComposerModelOverride(model, modelProvider){
+  const resolvedModel=String(model||'').trim();
+  if(!resolvedModel) return;
+  _emptyComposerModelOverrideHost._emptyComposerModelOverride={
+    model:resolvedModel,
+    model_provider:modelProvider||null,
+    saved_at:Date.now(),
+  };
+}
+
+function _readEmptyComposerModelOverride(){
+  const state=_emptyComposerModelOverrideHost._emptyComposerModelOverride;
+  if(!state||!state.model) return null;
+  return {
+    model:String(state.model||''),
+    model_provider:state.model_provider||null,
+    saved_at:Number(state.saved_at||0)||0,
+  };
+}
+
+function _clearEmptyComposerModelOverride(){
+  _emptyComposerModelOverrideHost._emptyComposerModelOverride=null;
+}
+
 function _setNewSessionPending(pending){
   const ids=['btnNewChat','btnTitlebarNewChat'];
   for (let i=0;i<ids.length;i++){
@@ -788,13 +862,10 @@ async function newSession(flash, options={}){
     _messagesTruncated=false;
     _oldestIdx=0;
     clearLiveToolCards();
-    // One-shot profile-switch workspace: applied to the first new session after a profile
-    // switch, then cleared.  Use a dedicated flag so S._profileDefaultWorkspace (the
-    // persistent boot/settings default) is not consumed and remains available for the
-    // blank-page display on all subsequent returns to the empty state (#823).
+    // One-shot profile-switch workspace wins first; otherwise prefer the profile default.
     const switchWs=S._profileSwitchWorkspace;
     S._profileSwitchWorkspace=null;
-    const inheritWs=switchWs||(S.session?S.session.workspace:null)||(S._profileDefaultWorkspace||null);
+    const inheritWs=switchWs||(S._profileDefaultWorkspace||null)||(S.session?S.session.workspace:null);
     const reqBody={
       workspace:inheritWs,
       profile:S.activeProfile||'default',
@@ -804,12 +875,23 @@ async function newSession(flash, options={}){
     if(_activeProject&&_activeProject!==NO_PROJECT_FILTER) reqBody.project_id=_activeProject;
     // Forward a pre-session toolset override only from the empty composer (#4490).
     if(!S.session && Array.isArray(S._pendingSessionToolsets)) reqBody.enabled_toolsets=S._pendingSessionToolsets;
-    // Carry the visible picker selection into the new session. Without this,
-    // /api/session/new falls back to config.yaml defaults (e.g. gpt-5.5) even
-    // when the user already chose cursor/composer-2.5 in the composer chip.
     const modelSelForNew=$('modelSelect');
+    const explicitModelOverride=(typeof _readEmptyComposerModelOverride==='function')
+      ? _readEmptyComposerModelOverride()
+      : null;
+    const hasLoadedSession=!!(S.session&&S.session.session_id);
     let newModelState=null;
-    if(modelSelForNew&&modelSelForNew.value&&typeof _modelStateForSelect==='function'){
+    let consumedExplicitModelOverride=false;
+    let usingConfiguredDefault=false;
+    if(!hasLoadedSession&&explicitModelOverride&&explicitModelOverride.model){
+      newModelState=explicitModelOverride;
+      consumedExplicitModelOverride=true;
+    }else if(window._defaultModel){
+      // Configured default wins over stale picker/persisted state even with no
+      // loaded session (deleting the last session left S.session null + stale picker) (#4728).
+      newModelState={model:window._defaultModel,model_provider:null};
+      usingConfiguredDefault=true;
+    }else if(modelSelForNew&&modelSelForNew.value&&typeof _modelStateForSelect==='function'){
       newModelState=_modelStateForSelect(modelSelForNew,modelSelForNew.value);
     }else if(typeof _readPersistedModelState==='function'){
       newModelState=_readPersistedModelState();
@@ -844,7 +926,9 @@ async function newSession(flash, options={}){
       // server fast path passes the pair through verbatim (no validation) and
       // silently routes to the wrong backend — so leave model_provider=null and
       // let the slow-path family repair run (mirrors routes.py _normalize_provider_id).
-      const _fallbackProvider=_bareModel?(window._activeProvider||(S.session&&S.session.model_provider)||''):'';
+      const _fallbackProvider=_bareModel
+        ? ((usingConfiguredDefault?window._activeProvider:(window._activeProvider||(S.session&&S.session.model_provider)))||'')
+        : '';
       const _familyProvider=(m=>{const s=String(m||'').toLowerCase();
         if(s.startsWith('gpt'))return 'openai';if(s.startsWith('claude'))return 'anthropic';
         if(s.startsWith('gemini'))return 'google';return '';})(newModelState.model);
@@ -858,6 +942,9 @@ async function newSession(flash, options={}){
         ||null;
     }
     const data=await api('/api/session/new',{method:'POST',body:JSON.stringify(reqBody)});
+    if(consumedExplicitModelOverride&&typeof _clearEmptyComposerModelOverride==='function'){
+      _clearEmptyComposerModelOverride();
+    }
     S.session=data.session;S.messages=data.session.messages||[];
     S._pendingSessionToolsets=null;
     if(_sessionSourceFilter==='cli') _sessionSourceFilter='webui';
@@ -1002,6 +1089,13 @@ async function loadSession(sid){
   // Mark this session as the in-flight load. Subsequent loadSession() calls
   // will overwrite this; stale awaits use the mismatch to bail out (#1060).
   _loadingSessionId = sid;
+  // Reset scroll state for fresh session navigation — the reader expects to
+  // land at the bottom of the new transcript, not wherever a stale unpin flag
+  // from a prior session or a stray touch event during loading would place them.
+  if (currentSid !== sid && typeof _messageUserUnpinned !== 'undefined') {
+    _messageUserUnpinned = false;
+    _scrollPinned = true;
+  }
   stopApprovalPolling();hideApprovalCard(forceReload);
   if(typeof stopSessionStream==='function') stopSessionStream();
   _yoloEnabled=false;_updateYoloPill();
@@ -1192,10 +1286,18 @@ async function loadSession(sid){
     return loadSession(continuationSid,{...opts,skipLineageResolve:true,skipContinuationResolve:true,force:true});
   }
   S.session=data.session;
+  if(typeof _clearEmptyComposerModelOverride==='function') _clearEmptyComposerModelOverride();
   // Loading a real existing session abandons any pre-session toolset override
-  // staged on the empty composer — clear it so it can't leak into a later New
-  // Chat started from this session (#4490 follow-up).
+  // staged on the empty composer before any deferred refresh work runs.
   S._pendingSessionToolsets=null;
+  if(typeof populateModelDropdown==='function'){
+    const modelRefreshSid=sid;
+    const modelRefreshPromise=Promise.resolve().then(()=>{
+      if(_loadingSessionId!==modelRefreshSid) return;
+      return populateModelDropdown({freshness:'session_visit'});
+    }).catch(()=>{});
+    if(typeof window!=='undefined') window._modelDropdownReady=modelRefreshPromise;
+  }
   if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
   S.session._modelResolutionDeferred=true;
   S.lastUsage={...(data.session.last_usage||{})};
@@ -1637,9 +1739,14 @@ function _requestedSessionSidebarSource() {
   return window._showCliSessions ? _sessionSourceFilter : 'webui';
 }
 
+function _sessionListExcludeHiddenEnabled() {
+  return _activeProject===null || _activeProject===NO_PROJECT_FILTER;
+}
+
 function _sessionListQueryString() {
   const qs = new URLSearchParams();
   qs.set('sidebar_source', _requestedSessionSidebarSource());
+  if(_sessionListExcludeHiddenEnabled()) qs.set('exclude_hidden','1');
   if(_showAllProfiles) qs.set('all_profiles','1');
   if(_showArchived) qs.set('include_archived','1');
   return `?${qs.toString()}`;
@@ -1649,6 +1756,14 @@ function _sessionSourceTabCount(filter, renderedWebuiSessionCount, renderedCliSe
   const serverCount = filter === 'cli' ? _serverCliSessionCount : _serverWebuiSessionCount;
   if (Number.isFinite(serverCount)) return serverCount;
   return filter === 'cli' ? renderedCliSessionCount : renderedWebuiSessionCount;
+}
+
+function _setActiveProjectFilter(projectId) {
+  const next = projectId === NO_PROJECT_FILTER ? NO_PROJECT_FILTER : (projectId || null);
+  if (_activeProject === next) return;
+  _activeProject = next;
+  renderSessionListFromCache();
+  void renderSessionList({deferWhileInteracting:false});
 }
 
 function _setSessionSourceFilter(filter) {
@@ -2085,6 +2200,13 @@ function _syncToolCallsForLoadedMessages(messages, sessionToolCalls){
   // During active streaming, skip — clearing S.toolCalls would lose Activity
   // and the renderMessages fallback is blocked by S.busy=true.
   if(S.busy||S.activeStreamId) return;
+  // Persist the loaded compact tool summary onto S.session so the renderMessages
+  // derived rebuild can use it as a durable per-tid snippet fallback on cold
+  // load (#4927). loadSession keeps the messages=0 session object (tool_calls
+  // []), and the messages=1 summary arrives only as this argument — without
+  // copying it across, the fallback source is empty exactly on the cold-load
+  // path it's meant to repair.
+  if(S.session&&Array.isArray(sessionToolCalls)) S.session.tool_calls=sessionToolCalls.map(tc=>({...tc}));
   const hasMessageToolMetadata=msgs.some(m=>{
     if(!m) return false;
     const hasTc=Array.isArray(m.tool_calls)&&m.tool_calls.length>0;
@@ -3073,7 +3195,7 @@ function _renderBatchActionBar(){
       if(S.session&&ids.includes(S.session.session_id)){
         S.session=null;S.messages=[];S.entries=[];localStorage.removeItem('hermes-webui-session');
         if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(null);
-        const remaining=await api('/api/sessions');
+        const remaining=await api('/api/sessions'+_sessionListQueryString());
         if(remaining.sessions&&remaining.sessions.length){await loadSession(remaining.sessions[0].session_id);}
         else{$('msgInner').innerHTML='';$('emptyState').style.display='';}
       }
@@ -3640,42 +3762,14 @@ const _SESSION_SKELETON_GROUPS = [
 // anatomy (group labels + single-line title bars with a short timestamp bar).
 // Called the instant a profile switch begins so the user never sees the
 // previous profile's conversations.
-function showSessionListSkeleton(){
+function showSessionListSkeleton(targetProfile){
   const list = $('sessionList');
   if(!list) return;
-  const wrap = document.createElement('div');
-  wrap.className = 'skeleton-list';
-  wrap.setAttribute('aria-hidden', 'true');
-  let rowIndex = 0;
-  for(const group of _SESSION_SKELETON_GROUPS){
-    const label = document.createElement('div');
-    label.className = 'skeleton-group-label';
-    wrap.appendChild(label);
-    for(const spec of group.rows){
-      const row = document.createElement('div');
-      row.className = 'skeleton-row';
-      // Stagger the fade-in per row. Set inline (not via CSS :nth-child) because
-      // group-label siblings are interleaved with rows, so a :nth-child stagger
-      // would skip most rows. Cap so the longest list doesn't feel laggy.
-      row.style.animationDelay = Math.min(rowIndex * 0.025, 0.2) + 's';
-      rowIndex++;
-      const title = document.createElement('div');
-      title.className = 'skeleton-bar skeleton-title';
-      title.style.width = spec.title + '%';
-      const stamp = document.createElement('div');
-      stamp.className = 'skeleton-bar skeleton-stamp';
-      row.appendChild(title);
-      row.appendChild(stamp);
-      wrap.appendChild(row);
-    }
-  }
-  list.innerHTML = '';
-  list.appendChild(wrap);
-  list.scrollTop = 0;
-  // Tear down any active virtual-scroll state so a pending scroll-driven render
-  // can't repaint the previous profile's cached rows over this skeleton (#4662
-  // Codex gate). Cancel the queued RAF and drop the data-session-virtual-*
-  // window markers; the real render rebuilds them from the new payload.
+  // Tear down any active virtual-scroll state up front so a pending scroll-driven
+  // render can't repaint the previous profile's cached rows over the skeleton
+  // (#4662 Codex gate). Cancel the queued RAF and drop the data-session-virtual-*
+  // window markers; the real render rebuilds them from the new payload. Done once
+  // here so it applies to BOTH the content and empty-state skeleton branches.
   if(typeof _sessionVirtualScrollRaf!=='undefined'&&_sessionVirtualScrollRaf){
     cancelAnimationFrame(_sessionVirtualScrollRaf);
     _sessionVirtualScrollRaf=0;
@@ -3685,6 +3779,61 @@ function showSessionListSkeleton(){
   delete list.dataset.sessionVirtualEnd;
   delete list.dataset.sessionVirtualFilter;
   delete list.dataset.sessionVirtualActiveAnchor;
+  // #4717: if we already know (from a prior render) the profile we're switching
+  // INTO has zero conversations, a full content skeleton (group labels + 8 rows)
+  // is misleading — it implies data that will never arrive, then resolves to an
+  // empty list. Render a quiet empty-state placeholder instead. Only when the
+  // count is KNOWN to be 0; an unknown profile (null) keeps the content skeleton
+  // (safe default — never hide a skeleton for a profile that may have sessions).
+  // Skip the empty branch while a project/source filter is active, since the
+  // per-profile count is an unfiltered total and could be non-zero overall yet
+  // empty under the filter (or vice-versa) — the content skeleton is the safe
+  // choice there. typeof guards keep this safe if the helper isn't in scope.
+  const knownCount = (typeof targetProfile === 'string' && targetProfile
+      && typeof _knownSessionProfileCount === 'function')
+    ? _knownSessionProfileCount(targetProfile) : null;
+  const filterActive = (typeof _activeProject !== 'undefined' && _activeProject)
+    || (typeof _sessionSourceFilter !== 'undefined' && _sessionSourceFilter === 'cli');
+  const wrap = document.createElement('div');
+  wrap.setAttribute('aria-hidden', 'true');
+  if(knownCount === 0 && !filterActive){
+    // A single faint placeholder bar rather than a "no conversations" text — the
+    // real empty-state note paints the instant the (fast, empty) fetch resolves,
+    // so we just hold a calm, content-free space in the meantime (no flash of a
+    // fake list, no premature wording).
+    wrap.className = 'skeleton-list skeleton-list-empty';
+    const bar = document.createElement('div');
+    bar.className = 'skeleton-empty-hint';
+    wrap.appendChild(bar);
+  } else {
+    wrap.className = 'skeleton-list';
+    let rowIndex = 0;
+    for(const group of _SESSION_SKELETON_GROUPS){
+      const label = document.createElement('div');
+      label.className = 'skeleton-group-label';
+      wrap.appendChild(label);
+      for(const spec of group.rows){
+        const row = document.createElement('div');
+        row.className = 'skeleton-row';
+        // Stagger the fade-in per row. Set inline (not via CSS :nth-child) because
+        // group-label siblings are interleaved with rows, so a :nth-child stagger
+        // would skip most rows. Cap so the longest list doesn't feel laggy.
+        row.style.animationDelay = Math.min(rowIndex * 0.025, 0.2) + 's';
+        rowIndex++;
+        const title = document.createElement('div');
+        title.className = 'skeleton-bar skeleton-title';
+        title.style.width = spec.title + '%';
+        const stamp = document.createElement('div');
+        stamp.className = 'skeleton-bar skeleton-stamp';
+        row.appendChild(title);
+        row.appendChild(stamp);
+        wrap.appendChild(row);
+      }
+    }
+  }
+  list.innerHTML = '';
+  list.appendChild(wrap);
+  list.scrollTop = 0;
   _sessionListSkeletonActive = true;
 }
 
@@ -3873,7 +4022,20 @@ function _applySessionListPayload(sessData, projData){
       : (S.activeProfile || 'default'),
     allProfiles: !!_showAllProfiles,
     sidebarSource: _requestedSessionSidebarSource(),
+    excludeHidden: _sessionListExcludeHiddenEnabled(),
   };
+  // Record this profile's session count so the NEXT switch into it can pick an
+  // honest skeleton (empty-state vs content) before its fetch resolves (#4717).
+  // Only record an UNFILTERED total: skip all-profiles (conflates profiles), and
+  // skip while a project or CLI-source filter is active (those record a filtered
+  // subset that could cache a misleading 0 for a profile that has sessions under
+  // a different filter). This mirrors the read-side `filterActive` gate in
+  // showSessionListSkeleton so the write and read agree on what the count means.
+  const _recordFilterActive = (typeof _activeProject !== 'undefined' && _activeProject)
+    || (typeof _sessionSourceFilter !== 'undefined' && _sessionSourceFilter === 'cli');
+  if (!_showAllProfiles && !_recordFilterActive) {
+    _recordSessionProfileCount(_allSessionsScope.profile, _allSessions.length);
+  }
   _syncSessionAttentionSoundState(_allSessions);
   _pruneLineageReportCacheToVisibleSessions(_allSessions);
   _allProjects = projData.projects||[];
@@ -3978,11 +4140,13 @@ async function _runRenderSessionListRefresh(opts, _gen){
       profile: S.activeProfile || 'default',
       allProfiles: !!_showAllProfiles,
       sidebarSource: _requestedSessionSidebarSource(),
+      excludeHidden: _sessionListExcludeHiddenEnabled(),
     };
     const _scopeMatches = _allSessionsScope
       && _allSessionsScope.profile === _curScope.profile
       && _allSessionsScope.allProfiles === _curScope.allProfiles
-      && _allSessionsScope.sidebarSource === _curScope.sidebarSource;
+      && _allSessionsScope.sidebarSource === _curScope.sidebarSource
+      && _allSessionsScope.excludeHidden === _curScope.excludeHidden;
     // #4671: the /api/sessions fetch failed — clear the skeleton flag so this error
     // render (matched cache, or empty rows for a mismatched scope) replaces the
     // up-front profile-switch skeleton instead of stranding it.
@@ -5739,7 +5903,7 @@ function renderSessionListFromCache(){
     const allChip=document.createElement('span');
     allChip.className='project-chip'+(!_activeProject?' active':'');
     allChip.textContent='All';
-    allChip.onclick=()=>{_activeProject=null;renderSessionListFromCache();};
+    allChip.onclick=()=>{_setActiveProjectFilter(null);};
     bar.appendChild(allChip);
     // "Unassigned" chip — only when there are sessions with no project to
     // filter to. Hidden in the common case where every session is already
@@ -5749,7 +5913,7 @@ function renderSessionListFromCache(){
       noneChip.className='project-chip no-project'+(_activeProject===NO_PROJECT_FILTER?' active':'');
       noneChip.textContent='Unassigned';
       noneChip.title='Show conversations not yet assigned to a project';
-      noneChip.onclick=()=>{_activeProject=NO_PROJECT_FILTER;renderSessionListFromCache();};
+      noneChip.onclick=()=>{_setActiveProjectFilter(NO_PROJECT_FILTER);};
       bar.appendChild(noneChip);
     }
     // Project chips
@@ -5768,7 +5932,7 @@ function renderSessionListFromCache(){
       let _pClickTimer=null;
       chip.onclick=(e)=>{
         clearTimeout(_pClickTimer);
-        _pClickTimer=setTimeout(()=>{_pClickTimer=null;_activeProject=p.project_id;renderSessionListFromCache();},220);
+        _pClickTimer=setTimeout(()=>{_pClickTimer=null;_setActiveProjectFilter(p.project_id);},220);
       };
       chip.ondblclick=(e)=>{e.stopPropagation();clearTimeout(_pClickTimer);_pClickTimer=null;_startProjectRename(p,chip);};
       chip.oncontextmenu=(e)=>{e.preventDefault();_showProjectContextMenu(e,p,chip);};
@@ -7098,7 +7262,7 @@ async function deleteSession(sid, beforeDelete=null){
     if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(null);
     localStorage.removeItem('hermes-webui-session');
     // load the most recent remaining session, or show blank if none left
-    const remaining=await api('/api/sessions');
+    const remaining=await api('/api/sessions'+_sessionListQueryString());
     if(remaining.sessions&&remaining.sessions.length){
       await loadSession(remaining.sessions[0].session_id);
     }else{

@@ -1294,11 +1294,18 @@ async function loadSession(sid){
   S._pendingSessionToolsets=null;
   if(typeof populateModelDropdown==='function'){
     const modelRefreshSid=sid;
-    const modelRefreshPromise=Promise.resolve().then(()=>{
-      if(_loadingSessionId!==modelRefreshSid) return;
-      return populateModelDropdown({freshness:'session_visit'});
-    }).catch(()=>{});
-    if(typeof window!=='undefined') window._modelDropdownReady=modelRefreshPromise;
+    if(!S._bootReady&&typeof window!=='undefined'&&typeof window._startBootModelDropdown==='function'){
+      Promise.resolve().then(()=>{
+        if(_loadingSessionId!==modelRefreshSid) return;
+        return window._startBootModelDropdown();
+      }).catch(()=>{});
+    }else{
+      const modelRefreshPromise=Promise.resolve().then(()=>{
+        if(_loadingSessionId!==modelRefreshSid) return;
+        return populateModelDropdown({freshness:'session_visit'});
+      }).catch(()=>{});
+      if(typeof window!=='undefined') window._modelDropdownReady=modelRefreshPromise;
+    }
   }
   if(typeof _hydrateTodosFromSession==='function') _hydrateTodosFromSession(S.session);
   S.session._modelResolutionDeferred=true;
@@ -4148,16 +4155,7 @@ async function _runRenderSessionListRefresh(opts, _gen){
       retryTimeouts:true,
       retryStatuses:[502,503,504],
     };
-    const sessData = _sessionListHasLoadedOnce
-      ? await api('/api/sessions' + sessionListQS,{timeoutToast:false})
-      : await api('/api/sessions' + sessionListQS,sessionRequestOpts);
-    let projData={projects:_allProjects||[]};
-    try{
-      const projectQS = _showAllProfiles ? '?all_profiles=1' : '';
-      projData = await api('/api/projects' + projectQS,{timeoutToast:false});
-    }catch(projectError){
-      console.warn('renderProjectsList',projectError);
-    }
+    const {sessData, projData}=await _loadSidebarSessionListPayload(sessionListQS, sessionRequestOpts);
     // Discard stale response — a newer renderSessionList() call superseded us.
     if (_gen !== _renderSessionListGen) return;
     // #4671: while a profile switch is mid-flight, drop ANY payload — even one whose
@@ -4209,6 +4207,25 @@ async function _runRenderSessionListRefresh(opts, _gen){
       renderSessionListFromCache();
     }
   }
+}
+
+async function _loadSidebarSessionListPayload(sessionListQS, sessionRequestOpts){
+  const projectPromise = (async() => {
+    try{
+      const projectQS = _showAllProfiles ? '?all_profiles=1' : '';
+      return await api('/api/projects' + projectQS,{timeoutToast:false});
+    }catch(projectError){
+      console.warn('renderProjectsList',projectError);
+      return {projects:_allProjects||[]};
+    }
+  })();
+
+  const sessData = _sessionListHasLoadedOnce
+    ? await api('/api/sessions' + sessionListQS,{timeoutToast:false})
+    : await api('/api/sessions' + sessionListQS,sessionRequestOpts);
+  const projData = await projectPromise;
+
+  return {sessData,projData};
 }
 
 async function _drainRenderSessionListQueue(initialRequest){

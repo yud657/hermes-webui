@@ -35,6 +35,8 @@
 
 ### Fixed
 
+- **Configurable provider spend budget with a percent-used indicator.** The provider usage settings now have a "Monthly budget" field (with Set / Clear) and a progress bar showing how much of the budget the current monthly pace has used (e.g. "65% of $50.00 budget"). Budget input is validated on both the save and read paths via a shared coercion helper, so out-of-range or malformed values (e.g. `0.004`, `5e12`) are rejected rather than silently stored. Thanks @rodboev. (#5120, #692)
+
 - **Opt-in per-project "New conversation" shortcuts in the sidebar.** A new default-off setting ("Show per-project new-conversation buttons") adds a small `+` button to each sidebar project chip that starts a conversation already assigned to that project. Off by default — the sidebar is unchanged unless you enable it. Thanks @rodboev. (#5002, #4676)
 
 - **WebUI now supports an OpenAI-compatible TTS backend.** A new "OpenAI TTS (server)" option in Settings → TTS Engine (alongside Browser / Edge / ElevenLabs) routes text-to-speech through an OpenAI-compatible `/v1/audio/speech` endpoint for both the voice-mode auto-read and the per-message Listen button. The endpoint is SSRF-hardened: the configured base URL is rejected if it carries credentials or resolves to a private / loopback / link-local / reserved / multicast address (only public hosts and an explicit localhost-over-http dev case are allowed), and the request uses a no-redirect opener so an upstream redirect can't bounce to an internal target or leak the `Authorization` bearer; content-type and response-size caps apply and the key is resolved server-side. Default engine is unchanged. Thanks @rodboev. (#5079, #4982)

@@ -5578,6 +5578,24 @@ def _resolve_compatible_session_model_state(
             _target = _profile_default or default_model
             return _target, profile_provider, True
 
+        # Async server-side continuations (for example delegate_task completion
+        # re-entry) can arrive here with profile context but without a usable
+        # requested_provider, bypassing the fast-path custom-provider repair
+        # above. If the profile's configured custom-provider default is a
+        # slash-qualified model whose suffix matches the bare session model,
+        # repair back to the profile default before the provider call (#5225).
+        if (
+            "/" not in model
+            and _profile_default
+            and "/" in _profile_default
+            and _profile_default.rsplit("/", 1)[-1] == model
+            and (
+                _profile_provider_normalized == "custom"
+                or str(profile_provider).startswith("custom:")
+            )
+        ):
+            return _profile_default, profile_provider, True
+
         return model, profile_provider, False
 
     if not model:

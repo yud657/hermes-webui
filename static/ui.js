@@ -2390,6 +2390,7 @@ function _persistSessionModelCorrection(model, provider, opts){
   return opts&&opts.propagateErrors ? request : request.catch(()=>{});
 }
 let _modelDropdownRequestSeq=0;
+let _modelCatalogFallbackRetried=false;
 
 function _applySessionModelFallback(sel){
   if(!sel) return null;
@@ -2414,10 +2415,12 @@ async function populateModelDropdown(opts={}){
   const sel=$('modelSelect');
   if(!sel) return;
   if(typeof _modelDropdownRequestSeq!=='number') _modelDropdownRequestSeq=0;
+  if(typeof _modelCatalogFallbackRetried!=='boolean') _modelCatalogFallbackRetried=false;
   const requestSeq=++_modelDropdownRequestSeq;
   try{
     const modelsUrl=new URL('api/models',document.baseURI||location.href);
-    if(opts&&opts.freshness) modelsUrl.searchParams.set('freshness',opts.freshness);
+    const requestedFreshness=opts&&opts.freshness?String(opts.freshness):'';
+    if(requestedFreshness) modelsUrl.searchParams.set('freshness',requestedFreshness);
     const _modelsRes=await fetch(modelsUrl.href,{credentials:'include'});
     if(requestSeq!==_modelDropdownRequestSeq) return;
     const customRedirectIfUnauth=opts&&typeof opts.redirectIfUnauth==='function'?opts.redirectIfUnauth:null;
@@ -2469,9 +2472,10 @@ async function populateModelDropdown(opts={}){
       return groups;
     };
 
-    const groups=(Array.isArray(data.groups)&&data.groups.length)
-      ? data.groups
-      : _synthGroupsFromConfigured();
+    const usedConfiguredFallback=!(Array.isArray(data.groups)&&data.groups.length);
+    const groups=usedConfiguredFallback
+      ? _synthGroupsFromConfigured()
+      : data.groups;
 
     if(!groups.length) return; // no server groups and no configured fallback
     const previousSelection=_captureModelDropdownSelection(sel);
@@ -2518,6 +2522,10 @@ async function populateModelDropdown(opts={}){
     // Kick off a background live-model fetch for the active provider.
     // This runs after the static list is already shown (no blocking flicker).
     if(data.active_provider) _fetchLiveModels(data.active_provider, sel, requestSeq);
+    if(usedConfiguredFallback && requestedFreshness!=='session_visit' && !_modelCatalogFallbackRetried){
+      _modelCatalogFallbackRetried=true;
+      populateModelDropdown({freshness:'session_visit'}).catch(()=>{});
+    }
   }catch(e){
     if(requestSeq!==_modelDropdownRequestSeq) return;
     // API unavailable -- keep the hardcoded HTML options as fallback

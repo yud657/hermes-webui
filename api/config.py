@@ -3345,34 +3345,39 @@ def resolve_model_reasoning_efforts(
     if provider in {"cursor-acp", "copilot-acp"}:
         return []
 
-    # 0. Provider config: providers.<name>.reasoning_efforts
-    # When the user has explicitly listed valid efforts for a provider,
-    # return that list directly — no heuristics, no models.dev lookup.
-    # Handles both custom:<name> and bare registered provider names (e.g. wandb).
-    # Only short-circuits when the filtered list is non-empty; an all-invalid
-    # list (e.g. typos) falls through to heuristics instead of hiding reasoning.
-    _prov_name = None
-    if provider and provider.startswith("custom:"):
-        _prov_name = provider.split(":", 1)[1]
-    elif provider:
-        _prov_name = provider
-    if _prov_name:
-        try:
-            _prov_entry = (cfg.get("providers") or {}).get(_prov_name, {})
-            if isinstance(_prov_entry, dict):
-                _re_list = _prov_entry.get("reasoning_efforts")
-                if isinstance(_re_list, list) and _re_list:
-                    _filtered = [str(x).strip().lower() for x in _re_list
-                                 if str(x).strip().lower() in {*VALID_REASONING_EFFORTS, "none"}]
-                    if _filtered:
-                        return _filtered
-        except Exception:
-            pass
-
     hinted_model = _strip_provider_hint_for_reasoning(model)
 
+    # Master hides reasoning controls for nested image/embedding routes. Keep
+    # that hard deny above provider config so an explicit allowlist cannot
+    # re-enable controls for routes that should never expose them.
     if _nested_route_reasoning_denied(hinted_model):
         return []
+
+    # 0. Provider config: providers.<name>.reasoning_efforts or named
+    # custom_providers[].reasoning_efforts. When the user has explicitly listed
+    # valid efforts for a provider, return that list directly — no heuristics,
+    # no models.dev lookup.
+    # Only short-circuits when the filtered list is non-empty; an all-invalid
+    # list (e.g. typos) falls through to heuristics instead of hiding reasoning.
+    _re_list = None
+    try:
+        if provider and provider.startswith("custom:"):
+            for _entry in _custom_provider_entries():
+                if _custom_provider_slug_from_name(_entry.get("name")) == provider:
+                    _re_list = _entry.get("reasoning_efforts")
+                    break
+        elif provider:
+            _prov_entry = (cfg.get("providers") or {}).get(provider, {})
+            if isinstance(_prov_entry, dict):
+                _re_list = _prov_entry.get("reasoning_efforts")
+        if isinstance(_re_list, list) and _re_list:
+            _filtered = [str(x).strip().lower() for x in _re_list
+                         if str(x).strip().lower() in {*VALID_REASONING_EFFORTS, "none"}]
+            _filtered = list(dict.fromkeys(_filtered))
+            if _filtered:
+                return _filtered
+    except Exception:
+        pass
 
     if provider in {"copilot", "github-copilot"}:
         try:

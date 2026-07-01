@@ -118,6 +118,115 @@ def test_non_reasoning_http_models_hide_reasoning_effort_levels():
     ) == []
 
 
+def test_provider_config_reasoning_efforts_return_filtered_deduped(monkeypatch):
+    original = cfg.cfg.get("providers")
+    monkeypatch.setitem(
+        cfg.cfg,
+        "providers",
+        {
+            "wandb": {
+                "reasoning_efforts": [
+                    " none ",
+                    "HIGH",
+                    "bogus",
+                    "high",
+                    "xhigh",
+                ]
+            }
+        },
+    )
+    try:
+        assert cfg.resolve_model_reasoning_efforts(
+            "zai-org/GLM-5.2",
+            provider_id="wandb",
+        ) == ["none", "high", "xhigh"]
+    finally:
+        if original is None:
+            cfg.cfg.pop("providers", None)
+        else:
+            monkeypatch.setitem(cfg.cfg, "providers", original)
+
+
+def test_provider_config_all_invalid_falls_through(monkeypatch):
+    original = cfg.cfg.get("providers")
+    monkeypatch.setitem(
+        cfg.cfg,
+        "providers",
+        {"wandb": {"reasoning_efforts": ["bogus", "typo"]}},
+    )
+    try:
+        result = cfg.resolve_model_reasoning_efforts(
+            "zai-org/GLM-5.2",
+            provider_id="wandb",
+        )
+        assert result != []
+        assert "bogus" not in result
+        assert "typo" not in result
+    finally:
+        if original is None:
+            cfg.cfg.pop("providers", None)
+        else:
+            monkeypatch.setitem(cfg.cfg, "providers", original)
+
+
+def test_named_custom_provider_config_reasoning_efforts(monkeypatch):
+    original = cfg.cfg.get("custom_providers")
+    monkeypatch.setitem(
+        cfg.cfg,
+        "custom_providers",
+        [{"name": "llm-proxy", "reasoning_efforts": ["none", "high", "xhigh"]}],
+    )
+    try:
+        assert cfg.resolve_model_reasoning_efforts(
+            "some-model",
+            provider_id="custom:llm-proxy",
+        ) == ["none", "high", "xhigh"]
+    finally:
+        if original is None:
+            cfg.cfg.pop("custom_providers", None)
+        else:
+            monkeypatch.setitem(cfg.cfg, "custom_providers", original)
+
+
+def test_acp_guards_win_over_configured_reasoning_efforts(monkeypatch):
+    original = cfg.cfg.get("providers")
+    monkeypatch.setitem(
+        cfg.cfg,
+        "providers",
+        {"copilot-acp": {"reasoning_efforts": ["high"]}},
+    )
+    try:
+        assert cfg.resolve_model_reasoning_efforts(
+            "some-model",
+            provider_id="copilot-acp",
+        ) == []
+    finally:
+        if original is None:
+            cfg.cfg.pop("providers", None)
+        else:
+            monkeypatch.setitem(cfg.cfg, "providers", original)
+
+
+def test_nested_route_deny_wins_over_configured_reasoning_efforts(monkeypatch):
+    original = cfg.cfg.get("custom_providers")
+    monkeypatch.setitem(
+        cfg.cfg,
+        "custom_providers",
+        [{"name": "agg", "reasoning_efforts": ["low", "high"]}],
+    )
+    try:
+        for model in ("vertex/gemini-image-1.0", "vertex/gemini-embedding-001"):
+            assert cfg.resolve_model_reasoning_efforts(
+                model,
+                provider_id="custom:agg",
+            ) == []
+    finally:
+        if original is None:
+            cfg.cfg.pop("custom_providers", None)
+        else:
+            monkeypatch.setitem(cfg.cfg, "custom_providers", original)
+
+
 def test_get_reasoning_status_includes_supported_efforts(monkeypatch):
     monkeypatch.setattr(
         cfg,

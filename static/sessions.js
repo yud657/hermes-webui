@@ -4346,6 +4346,31 @@ function _syncSessionAttentionSoundState(sessions){
   next.forEach((sig,sid)=>_sessionAttentionSoundState.set(sid,sig));
 }
 
+// Signature of everything the sidebar render reads from the applied payload +
+// the coarse display state. Used to skip the full DOM rebuild when a poll
+// returns data identical to what is already on screen (the common idle case).
+// A streaming row's fields advance each poll so its signature changes and it
+// still renders; client-only display toggles (search, active, density, select,
+// lineage expansion) render through their own paths and are intentionally light
+// here. Serialization failure returns null → never skip. (#5455 WS2.4)
+let _lastSessionListRenderSig = null;
+function _sessionListRenderSignature(){
+  try{
+    const search=($('sessionSearch')&&$('sessionSearch').value)||'';
+    return JSON.stringify([
+      _allSessions,
+      _allProjects,
+      _activeSessionIdForSidebar(),
+      search,
+      _sessionSourceFilter,
+      !!_sessionSelectMode,
+      (window._sidebarDensity==='detailed'?'d':'c'),
+      !!_showAllProfiles,
+      _otherProfileCount,_archivedWebuiCount,_archivedCliCount,
+      _serverWebuiSessionCount,_serverCliSessionCount,
+    ]);
+  }catch(_){ return null; }
+}
 function _applySessionListPayload(sessData, projData){
   // Server's other_profile_count tells us how many sessions exist outside the
   // active profile so the "Show N from other profiles" toggle can render
@@ -4428,6 +4453,22 @@ function _applySessionListPayload(sessData, projData){
   // authoritative render replaces the profile-switch skeleton — while unrelated renders that
   // fire before this point stay blocked by the guard in renderSessionListFromCache().
   _sessionListSkeletonActive = false;
+  // No-op fast path: if this payload renders identically to what is already on
+  // screen (the common case for idle polls) and no entrance animation is
+  // pending, skip the full DOM rebuild. Only applies here in the fetch/apply
+  // path; the 60s relative-time refresh and every other render trigger call
+  // renderSessionListFromCache directly and are unaffected. Guarded by the same
+  // conditions renderSessionListFromCache bails on, so a bailed render never
+  // caches a signature that would suppress the next real repaint. (#5455 WS2.4)
+  const _canRenderNow = !_renamingSid && !_sessionActionMenu;
+  const _renderSig = _sessionListRenderSignature();
+  if(_canRenderNow && !_sessionListRefreshAnimationPending && _renderSig && _renderSig===_lastSessionListRenderSig){
+    // Preserve the per-refresh INFLIGHT cleanup that renderSessionListFromCache
+    // would otherwise perform, then skip only the DOM rebuild.
+    if(typeof _purgeStaleInflightEntries==='function') _purgeStaleInflightEntries();
+    return;
+  }
+  if(_canRenderNow) _lastSessionListRenderSig = _renderSig;
   renderSessionListFromCache();  // no-ops if rename is in progress
 }
 

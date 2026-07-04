@@ -48,9 +48,31 @@ function _composerDraftFileSignature(file) {
   };
 }
 
+// A live browser `File` JSON-serializes to `{}`, so a draft persisted to the
+// server loses its name/size/type. Canonicalize files to a plain serializable
+// shape BEFORE both persisting and signing, so the suppression signature of the
+// just-sent payload matches the signature of the same payload after it has
+// round-tripped through the server draft (otherwise a text+attachment send never
+// matches its own suppression and the stale tail can repopulate — #5471).
+function _composerDraftFilesForPersist(files) {
+  if (!Array.isArray(files)) return [];
+  return files.filter(Boolean).map((file) => {
+    if (typeof file === 'string') return file;
+    if (!file || typeof file !== 'object') return String(file || '');
+    const canon = {
+      name: String(file.name || file.filename || ''),
+      path: String(file.path || ''),
+      size: Number.isFinite(Number(file.size)) ? Number(file.size) : null,
+      type: String(file.type || file.mime || ''),
+    };
+    if (Number.isFinite(Number(file.lastModified))) canon.lastModified = Number(file.lastModified);
+    return canon;
+  });
+}
+
 function _composerDraftPayloadSignature(text, files) {
   const normalizedText = String(text || '');
-  const normalizedFiles = Array.isArray(files) ? files.filter(Boolean).map(_composerDraftFileSignature) : [];
+  const normalizedFiles = _composerDraftFilesForPersist(files).map(_composerDraftFileSignature);
   return JSON.stringify({ text: normalizedText, files: normalizedFiles });
 }
 
@@ -172,7 +194,7 @@ function _saveComposerDraft(sid, text, files) {
   if (!sid) return;
   clearTimeout(_draftSaveTimer);
   const normalizedText = String(text || '');
-  const normalizedFiles = Array.isArray(files) ? files.filter(Boolean) : [];
+  const normalizedFiles = _composerDraftFilesForPersist(files);
   if (_composerDraftHasPayload(normalizedText, normalizedFiles)) {
     _clearComposerDraftRestoreSuppression(sid);
     _composerDraftKnownPayloadSessions.add(sid);
@@ -215,7 +237,7 @@ function _saveComposerDraftNow(sid, text, files) {
   if (!sid) return Promise.resolve();
   clearTimeout(_draftSaveTimer);
   const normalizedText = String(text || '');
-  const normalizedFiles = Array.isArray(files) ? files.filter(Boolean) : [];
+  const normalizedFiles = _composerDraftFilesForPersist(files);
   if (_composerDraftHasPayload(normalizedText, normalizedFiles)) {
     _clearComposerDraftRestoreSuppression(sid);
   }

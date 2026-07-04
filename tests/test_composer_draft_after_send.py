@@ -54,3 +54,81 @@ def test_busy_send_paths_clear_persisted_composer_draft():
     assert "_clearComposerAfterQueuedSelectionSend(S.session&&S.session.session_id);" in busy_body
     assert busy_body.count("_clearComposerAfterQueuedSelectionSend(S.session&&S.session.session_id);") >= 2
     assert "_clearComposerDraft(S.session.session_id,text,_steerDraftFiles)" in busy_body, "delivered steer must clear persisted draft with the submitted payload signature"
+
+
+def test_file_signature_survives_server_draft_round_trip():
+    """#5471 attachment case: the signature of a just-sent text+File payload must
+    MATCH the signature of the same payload after it round-trips through the server
+    draft (where a live File JSON-serializes to {}). Both the persist path and the
+    signature path must canonicalize files identically, or a text+attachment send
+    never matches its own suppression and the stale tail repopulates.
+    """
+    import json
+    import shutil
+    import subprocess
+    import textwrap
+
+    node = shutil.which("node")
+    if not node:  # pragma: no cover
+        import pytest
+        pytest.skip("node not available")
+
+    persist_fn = _block(
+        SESSIONS_JS,
+        "function _composerDraftFilesForPersist(files)",
+        "function _composerDraftPayloadSignature(text, files)",
+    )
+    sig_fns = _block(
+        SESSIONS_JS,
+        "function _composerDraftFileSignature(file)",
+        "function _composerDraftPayloadSignatureForSid(sid)",
+    )
+
+    harness = textwrap.dedent(
+        """
+        %(sig_fns)s
+        %(persist_fn)s
+
+        // A real browser File exposes name/size/type via PROTOTYPE getters that
+        // JSON.stringify drops (serializes to {}). Simulate that: own props empty,
+        // metadata on the prototype.
+        function makeFile(name, size, type, lastModified) {
+          return Object.create({ name, size, type, lastModified });
+        }
+        const liveFile = makeFile('report.pdf', 1234, 'application/pdf', 42);
+
+        // THE BUG: persisting the raw File loses everything through JSON.
+        const rawPersistLossy = JSON.parse(JSON.stringify([liveFile]));   // -> [{}]
+        // THE FIX: canonicalize BEFORE persist so metadata survives the round-trip.
+        const canonPersist = JSON.parse(JSON.stringify(_composerDraftFilesForPersist([liveFile])));
+
+        // Signature of what the server would return in each case, vs the sent payload.
+        const sentSig = _composerDraftPayloadSignature('hi', [liveFile]);
+        const restoredSigLossy = _composerDraftPayloadSignature('hi', rawPersistLossy);
+        const restoredSigCanon = _composerDraftPayloadSignature('hi', canonPersist);
+        const otherSig = _composerDraftPayloadSignature('hi', [makeFile('notes.txt', 99, 'text/plain', 7)]);
+
+        console.log(JSON.stringify({
+          harnessOk: JSON.stringify(liveFile) === '{}',
+          lossyWouldMismatch: sentSig !== restoredSigLossy,   // demonstrates the bug exists
+          canonMatchesSelf: sentSig === restoredSigCanon,      // the fix
+          differsFromOther: sentSig !== otherSig,
+        }));
+        """
+    ) % {"sig_fns": sig_fns, "persist_fn": persist_fn}
+
+    proc = subprocess.run([node, "-e", harness], capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, f"node harness failed: {proc.stderr}"
+    out = json.loads(proc.stdout.strip())
+    assert out["harnessOk"] is True, "harness must simulate a File that JSON-serializes to {}"
+    assert out["lossyWouldMismatch"] is True, (
+        "sanity: persisting the raw File (the bug) loses metadata so the restored "
+        "signature would NOT match the sent one"
+    )
+    assert out["canonMatchesSelf"] is True, (
+        "the fix: canonicalizing files before persist makes a text+attachment send's "
+        "signature match the same payload after the server draft round-trip — #5471"
+    )
+    assert out["differsFromOther"] is True, (
+        "a genuinely different draft must NOT collide with the sent signature"
+    )

@@ -1290,6 +1290,17 @@ function _dashboardBrowserUrl(status){
   const displayHost=browserHost.includes(':')&&!browserHost.startsWith('[')?'['+browserHost+']':browserHost;
   return source.protocol+'//'+displayHost+':'+status.port;
 }
+function _stripInlineEventHandlers(node){
+  if(!node)return;
+  const strip=el=>{
+    Array.from(el.attributes||[]).forEach(attr=>{
+      if(attr.name&&attr.name.toLowerCase().startsWith('on'))el.removeAttribute(attr.name);
+    });
+    if('onclick' in el)el.onclick=null;
+    Array.from(el.children||[]).forEach(strip);
+  };
+  strip(node);
+}
 function _syncNavActionMirrors(){
   const rail=document.querySelector('.rail');
   const sidebar=document.querySelector('.sidebar-nav');
@@ -1305,6 +1316,7 @@ function _syncNavActionMirrors(){
     let mirror=mirrors.find(el=>el.getAttribute('data-nav-action-mirror')===source.id);
     if(!mirror){
       mirror=source.cloneNode(true);
+      _stripInlineEventHandlers(mirror);
       mirror.id=source.id+'Mobile';
       mirror.classList.remove('rail-btn');
       mirror.classList.add('nav-action-visible','has-tooltip--bottom');
@@ -1314,6 +1326,7 @@ function _syncNavActionMirrors(){
       sidebar.insertBefore(mirror,anchor||null);
     }else{
       mirror.innerHTML=source.innerHTML;
+      _stripInlineEventHandlers(mirror);
     }
     mirror._navActionSource=source;
     const label=source.getAttribute('data-tooltip')||source.getAttribute('aria-label')||'';

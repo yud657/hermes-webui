@@ -437,6 +437,7 @@ def test_extension_rail_actions_are_mirrored_to_mobile_nav():
             this.dataset = {};
             this.innerHTML = '';
             this.id = '';
+            this.onclick = null;
             this.parentNode = null;
             this._handlers = {};
             this.classList = {
@@ -464,6 +465,11 @@ def test_extension_rail_actions_are_mirrored_to_mobile_nav():
             this._attrs[name] = String(value);
             if (name.startsWith('data-')) this.dataset[name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = String(value);
           }
+          removeAttribute(name) {
+            delete this._attrs[name];
+            if (name.startsWith('data-')) delete this.dataset[name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+          }
+          get attributes() { return Object.entries(this._attrs).map(([name, value]) => ({ name, value })); }
           getAttribute(name) { return Object.prototype.hasOwnProperty.call(this._attrs, name) ? this._attrs[name] : null; }
           hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this._attrs, name); }
           addEventListener(name, fn) { this._handlers[name] = fn; }
@@ -472,6 +478,7 @@ def test_extension_rail_actions_are_mirrored_to_mobile_nav():
             const clone = new El(this.tagName);
             clone.id = this.id;
             clone.innerHTML = this.innerHTML;
+            clone.onclick = this.onclick;
             this.classList._set.forEach(c => clone.classList.add(c));
             Object.entries(this._attrs).forEach(([k, v]) => clone.setAttribute(k, v));
             return clone;
@@ -504,6 +511,8 @@ def test_extension_rail_actions_are_mirrored_to_mobile_nav():
         source.id = 'hwxThemeCreatorRailBtn';
         source.classList.add('rail-btn', 'nav-tab', 'has-tooltip');
         source.setAttribute('data-tooltip', 'Theme Creator');
+        source.setAttribute('onclick', 'clicked += 100;');
+        source.onclick = () => { clicked += 100; };
         source.innerHTML = '<svg></svg>';
         source.click = () => { clicked += 1; };
         dashboard.classList.add('dashboard-link');
@@ -525,7 +534,7 @@ def test_extension_rail_actions_are_mirrored_to_mobile_nav():
           observe(target) { observedRail = target; }
         };
 
-        const helpers = Function(extractFn('_syncNavActionMirrors') + '\\n' + extractFn('_initNavActionMirrors') + '; return { _initNavActionMirrors };')();
+        const helpers = Function(extractFn('_stripInlineEventHandlers') + '\\n' + extractFn('_syncNavActionMirrors') + '\\n' + extractFn('_initNavActionMirrors') + '; return { _initNavActionMirrors };')();
         helpers._initNavActionMirrors();
         rail.appendChild(source);
         observerCallback();
@@ -540,6 +549,8 @@ def test_extension_rail_actions_are_mirrored_to_mobile_nav():
           mirrorVisible: mirror.classList.contains('nav-action-visible'),
           mirrorRailClass: mirror.classList.contains('rail-btn'),
           mirrorLabel: mirror.getAttribute('data-label'),
+          mirrorOnclickAttribute: mirror.getAttribute('onclick'),
+          mirrorOnclickProperty: mirror.onclick === null,
           mirrorBeforeDashboard,
           mirrorRemoved: !sidebar.children.some(el => el.getAttribute('data-nav-action-mirror') === 'hwxThemeCreatorRailBtn'),
           clicked,
@@ -560,6 +571,8 @@ def test_extension_rail_actions_are_mirrored_to_mobile_nav():
         "mirrorVisible": True,
         "mirrorRailClass": False,
         "mirrorLabel": "Theme Creator",
+        "mirrorOnclickAttribute": None,
+        "mirrorOnclickProperty": True,
         "mirrorBeforeDashboard": True,
         "mirrorRemoved": True,
         "clicked": 1,

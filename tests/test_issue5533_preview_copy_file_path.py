@@ -95,3 +95,28 @@ def test_preview_toolbar_keeps_copy_button_from_shrinking_path_layout():
     selector_block = STYLE[selector_start : STYLE.index("}", selector_start) + 1]
     assert "flex-shrink:0" in selector_block
     assert "white-space:nowrap" in selector_block
+
+
+def test_preview_copy_button_is_accessible_and_icon_only_on_narrow_pane():
+    """The preview-header copy button must stay accessible when its text label is
+    hidden on a narrow pane (#5548 icon-only fold-in): it carries an aria-label,
+    its label span is class-tagged, and a narrow-width media query hides that label.
+    """
+    import re
+    # The button carries an explicit aria-label (screen-reader name survives label-hide).
+    assert 'id="btnCopyPreviewRelPath"' in INDEX
+    btn = INDEX[INDEX.index('id="btnCopyPreviewRelPath"'):]
+    btn = btn[: btn.index("</button>")]
+    assert 'aria-label="Copy relative path"' in btn
+    assert 'class="preview-btn-label"' in btn
+    # Localized tooltip + accessible name (WCAG 2.5.3): the icon-only state must not
+    # leave a Russian/German user with an English tooltip/screen-reader name.
+    assert 'data-i18n-title="copy_relative_path"' in btn
+    assert 'data-i18n-aria-label="copy_relative_path"' in btn
+    # A narrow-PANE container query (right panel, not viewport) hides the label
+    # (icon-only), keeping the glyph — so it fires on pane resize even on desktop.
+    assert re.search(
+        r"@container\s+rightpanel[^{]*max-width:\s*520px[^{]*\{[^}]*"
+        r"\.preview-path\s+#btnCopyPreviewRelPath\s+\.preview-btn-label\s*\{\s*display:\s*none",
+        STYLE,
+    ), "expected a @container rightpanel query hiding the copy-button label on a narrow pane"

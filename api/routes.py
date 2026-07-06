@@ -11459,11 +11459,19 @@ def handle_get(handler, parsed) -> bool:
         # which the request-thread wrapper could not reach. See
         # api.config.get_available_models cold path + profile_scope_for_detached_worker.
         freshness = parse_qs(parsed.query or "").get("freshness", [""])[0].strip().lower()
-        if freshness == "session_visit":
-            return j(handler, get_available_models_for_session_visit())
-        if freshness:
-            return bad(handler, f"unknown models freshness: {freshness}", status=400)
-        return j(handler, get_available_models())
+        diag = RequestDiagnostics.maybe_start("GET", parsed.path, logger=logger)
+        try:
+            diag.stage(f"enter:freshness={freshness or 'default'}") if diag else None
+            if freshness == "session_visit":
+                result = get_available_models_for_session_visit()
+                diag.stage("response_serialize") if diag else None
+                return j(handler, result)
+            if freshness:
+                return bad(handler, f"unknown models freshness: {freshness}", status=400)
+            return j(handler, get_available_models())
+        finally:
+            if diag:
+                diag.finish()
 
     if parsed.path == "/api/models/live":
         from api.profiles import profile_env_for_active_request
@@ -12616,15 +12624,24 @@ def handle_get(handler, parsed) -> bool:
     # ── Profile API (GET) ──
     if parsed.path == "/api/profiles":
         from api import profiles as profiles_api
-
-        return j(
-            handler,
-            {
-                "profiles": profiles_api.list_profiles_api(),
-                "active": profiles_api.get_active_profile_name(),
-                "single_profile_mode": _is_isolated_profile_mode(),
-            },
-        )
+        diag = RequestDiagnostics.maybe_start("GET", parsed.path, logger=logger)
+        try:
+            diag.stage("list_profiles_api") if diag else None
+            profiles_payload = profiles_api.list_profiles_api()
+            diag.stage("active_profile_lookup") if diag else None
+            active = profiles_api.get_active_profile_name()
+            diag.stage("isolated_mode_check") if diag else None
+            return j(
+                handler,
+                {
+                    "profiles": profiles_payload,
+                    "active": active,
+                    "single_profile_mode": _is_isolated_profile_mode(),
+                },
+            )
+        finally:
+            if diag:
+                diag.finish()
 
     if parsed.path == "/api/profile/active":
         from api import profiles as profiles_api

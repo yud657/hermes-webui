@@ -1,4 +1,4 @@
-// ── i18n: locale bundles and t() helper ──────────────────────────────────────
+﻿// ── i18n: locale bundles and t() helper ──────────────────────────────────────
 // To add a new language: add an entry to LOCALES below with all keys translated.
 // The language code must match a valid BCP 47 tag (used for speech recognition).
 // Keys missing in a non-English locale fall back to English automatically.
@@ -309,17 +309,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Interrupted — sending new message',
-    settings_label_busy_input_mode: 'Busy input mode',
-    settings_desc_busy_input_mode: 'Controls what happens when you send a message while the agent is running. Queue waits; Interrupt cancels and starts fresh; Steer injects a correction mid-turn without interrupting. If Steer is unavailable, the draft is restored so you can choose the next action.',
+    settings_label_default_message_mode: 'Default message mode',
+    settings_desc_default_message_mode: 'Controls what happens when you send a message while the agent is running. Queue waits; Interrupt cancels and starts fresh; Steer injects a correction mid-turn without interrupting. If Steer is unavailable, the draft is restored so you can choose the next action.',
     settings_label_fade_text_effect: 'Fade text effect',
     settings_desc_fade_text_effect: 'Fade newly streamed words in while the assistant is responding. Similar to OpenWebUI; off by default for maximum performance.',
     settings_label_max_tokens: 'Max output tokens',
     settings_desc_max_tokens: 'Caps assistant output for new streaming turns. Leave blank to use the active profile config fallback.',
     settings_placeholder_max_tokens_none: 'No override',
     settings_placeholder_max_tokens_fallback: 'No override (fallback: {0})',
-    settings_busy_input_mode_queue: 'Queue follow-up',
-    settings_busy_input_mode_interrupt: 'Interrupt current turn',
-    settings_busy_input_mode_steer: 'Steer (mid-turn correction)',
+    settings_default_message_mode_queue: 'Queue follow-up',
+    settings_default_message_mode_interrupt: 'Interrupt current turn',
+    settings_default_message_mode_steer: 'Steer (mid-turn correction)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -484,6 +484,7 @@ const LOCALES = {
      reveal_in_finder: 'Reveal in File Manager',
      reveal_failed: 'Failed to reveal: ',
      copy_file_path: 'Copy file path',
+     copy_relative_path: 'Copy relative path',
      open_in_vscode: 'Open in VS Code',
      open_in_vscode_failed: 'Failed to open in VS Code: ',
      download_folder: 'Download Folder',
@@ -546,6 +547,8 @@ const LOCALES = {
     session_archive_failed: 'Archive failed: ',
     session_duplicate: 'Duplicate conversation',
     session_duplicate_desc: 'Create a copy with the same workspace and model',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'Session duplicated',
     session_duplicate_failed: 'Duplicate failed: ',
     session_stop_response: 'Stop response',
@@ -833,6 +836,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Sidebar density',
     cmd_reasoning: 'Toggle thinking visibility (show/hide), set effort level, or check current status',
     settings_label_external_sessions: 'Show non-WebUI sessions',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: 'Show previous messaging sessions',
@@ -1111,6 +1115,8 @@ const LOCALES = {
     import: 'Import',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Export full session as JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Export as a self-contained HTML page',
     import_session_json_tooltip: 'Import session from JSON',
     clear_conversation_btn_tooltip: 'Clear all messages in this conversation',
     // Settings detail
@@ -1159,6 +1165,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Every 20 exchanges',
     settings_desc_auto_title_refresh: 'Automatically re-generates the session title based on the latest exchange, keeping it relevant as the conversation evolves. Requires an LLM title generation model to be configured.',
     settings_desc_external_sessions: 'Show conversations from CLI, Telegram, Discord, Slack, and other channels in the session list. Click to import and continue.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: 'Show older Discord, Telegram, Slack, and Weixin sessions that were replaced by reset or compression.',
@@ -1190,6 +1197,7 @@ const LOCALES = {
     providers_status_not_configured: 'No API key',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API key',
+    providers_status_model: 'Model',
     providers_status_not_configured_label: 'Not configured',
     providers_oauth_hint: 'Authenticated via OAuth. No API key needed.',
     providers_oauth_config_yaml_hint: 'Token configured via config.yaml. To update, edit the providers section in your config.yaml or run hermes auth.',
@@ -1576,7 +1584,31 @@ const LOCALES = {
     // cron form
     cron_name_label: 'Name',
     cron_name_placeholder: 'Optional',
-    cron_schedule_label: 'Schedule',
+    cron_schedule_label: 'Cron expression',
+    cron_schedule_preset_label: 'Schedule',
+    cron_schedule_preset_hourly: 'Hourly',
+    cron_schedule_preset_daily: 'Daily',
+    cron_schedule_preset_weekdays: 'Weekdays (Mon–Fri)',
+    cron_schedule_preset_weekly: 'Weekly',
+    cron_schedule_preset_monthly: 'Monthly',
+    cron_schedule_preset_custom: 'Custom',
+    cron_schedule_hour_label: 'Hour',
+    cron_schedule_minute_label: 'Minute',
+    cron_schedule_weekday_label: 'Day of week',
+    cron_schedule_month_day_label: 'Day of month',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_time_hint: 'Time is server time; cron runs server-side.',
     cron_schedule_hint: "Use 'every 1h' or a cron expression for recurring jobs. Bare durations like '30m' run once.",
     cron_schedule_once_warning: "Duration forms like '30m' run once and are removed after running. Use 'every 30m' to keep a recurring job.",
     cron_prompt_label: 'Prompt',
@@ -1682,7 +1714,7 @@ const LOCALES = {
     cancelling: 'Annullamento\u2026',
     cancel_failed: 'Annullamento fallito: ',
     mic_denied: 'Accesso al microfono negato. Controlla i permessi del browser.',
-    mic_insecure_origin: 'Voice input needs a secure connection. Open Hermes over HTTPS or from localhost to use the microphone.', // TODO: translate
+    mic_insecure_origin: 'L\'input vocale richiede una connessione sicura. Apri Hermes tramite HTTPS o da localhost per usare il microfono.',
     mic_no_speech: 'Nessuna voce rilevata. Riprova.',
     mic_network: 'Riconoscimento vocale non disponibile.',
     mic_error: 'Errore input vocale: ',
@@ -1972,17 +2004,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Interrotto — invio nuovo messaggio',
-    settings_label_busy_input_mode: 'Modalità input occupato',
-    settings_desc_busy_input_mode: "Controlla cosa succede quando invii un messaggio mentre l'agente è in esecuzione. Coda attende; Interrompi annulla e ricomincia; Steer inietta una correzione a metà turno senza interrompere (fallback a coda se agente o stream non disponibili).",
+    settings_label_default_message_mode: 'Modalità messaggio predefinita',
+    settings_desc_default_message_mode: "Controlla cosa succede quando invii un messaggio mentre l'agente è in esecuzione. Coda attende; Interrompi annulla e ricomincia; Steer inietta una correzione a metà turno senza interrompere. Se Steer non è disponibile, la bozza viene ripristinata così puoi scegliere l'azione successiva.",
     settings_label_fade_text_effect: 'Effetto dissolvenza testo',
     settings_desc_fade_text_effect: 'Dissolve gradualmente le nuove parole trasmesse in streaming mentre l’assistente risponde. Simile a OpenWebUI; disattivato per impostazione predefinita per massime prestazioni.',
     settings_label_max_tokens: 'Token massimi in uscita',
     settings_desc_max_tokens: 'Limita la lunghezza delle nuove risposte in streaming. Lascia vuoto per usare il valore di fallback del profilo attivo.',
     settings_placeholder_max_tokens_none: 'Nessun override',
     settings_placeholder_max_tokens_fallback: 'Nessun override (fallback: {0})',
-    settings_busy_input_mode_queue: 'Accoda follow-up',
-    settings_busy_input_mode_interrupt: 'Interrompi turno corrente',
-    settings_busy_input_mode_steer: 'Steer (correzione a metà turno)',
+    settings_default_message_mode_queue: 'Accoda follow-up',
+    settings_default_message_mode_interrupt: 'Interrompi turno corrente',
+    settings_default_message_mode_steer: 'Steer (correzione a metà turno)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -2147,9 +2179,10 @@ const LOCALES = {
      reveal_in_finder: 'Mostra nel File Manager',
      reveal_failed: 'Mostra fallito: ',
      copy_file_path: 'Copia percorso file',
+     copy_relative_path: 'Copia percorso relativo',
      open_in_vscode: 'Apri in VS Code',
      open_in_vscode_failed: 'Apertura in VS Code fallita: ',
-     download_folder: 'Download Folder', // TODO: translate
+     download_folder: 'Cartella download',
     path_copied: 'Percorso file copiato negli appunti',
     path_copy_failed: 'Copia percorso fallita: ',
     session_rename: 'Rinomina conversazione',
@@ -2209,6 +2242,8 @@ const LOCALES = {
     session_archive_failed: 'Archiviazione fallita: ',
     session_duplicate: 'Duplica conversazione',
     session_duplicate_desc: 'Crea una copia con lo stesso workspace e modello',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'Sessione duplicata',
     session_duplicate_failed: 'Duplicazione fallita: ',
     session_stop_response: 'Ferma risposta',
@@ -2279,8 +2314,8 @@ const LOCALES = {
     settings_label_auto_scroll_follow: 'Segui automaticamente i nuovi contenuti',
     settings_desc_auto_scroll_follow: 'Se abilitato, la vista scorre verso il basso man mano che arrivano nuovi token. Se disabilitato, controlli tu la posizione di scorrimento.',
     settings_label_render_user_markdown: 'Render markdown in user messages',
-    settings_label_show_titlebar_profile: 'Show profile switcher in titlebar', // TODO: translate
-    settings_desc_show_titlebar_profile: 'When enabled, a profile switcher button appears in the top-left app titlebar so you can change profiles from any tab. Off by default; the composer footer always has a profile switcher regardless of this setting.', // TODO: translate
+    settings_label_show_titlebar_profile: 'Mostra il selettore di profilo nella barra del titolo',
+    settings_desc_show_titlebar_profile: 'Se attivo, nella barra del titolo in alto a sinistra compare un pulsante per cambiare profilo da qualsiasi scheda. Disattivato per impostazione predefinita; il piè di pagina del compositore ha sempre un selettore di profilo indipendentemente da questa impostazione.',
     settings_desc_render_user_markdown: 'When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.',
     settings_label_large_text_paste_as_attachment: 'Attach large pasted text as file',
     settings_desc_large_text_paste_as_attachment: 'When enabled, long pasted text becomes a .md attachment instead of filling the composer.',
@@ -2338,7 +2373,7 @@ const LOCALES = {
     settings_tab_appearance: 'Aspetto',
     settings_tab_preferences: 'Preferenze',
     settings_tab_plugins: 'Plugin',
-    settings_tab_extensions: 'Extensions',  // TODO: translate
+    settings_tab_extensions: 'Estensioni',
     settings_extensions_gallery_tab: 'Gallery',
     settings_extensions_installed_tab: 'Installed',
     settings_extensions_diagnostics_tab: 'Diagnostics',
@@ -2369,19 +2404,19 @@ const LOCALES = {
     ext_gallery_install_followup: 'Estensione installata. Consulta la scheda per i prossimi passi.',
     ext_gallery_install_ok: 'Extension installed successfully.',
     ext_gallery_uninstall_ok: 'Extension uninstalled.',
-    settings_plugins_title: 'Plugins',  // TODO: translate
+    settings_plugins_title: 'Plugin',
     plugins_enable_toggle: 'Abilita',
-    settings_plugins_meta: 'View installed Hermes plugins and the lifecycle hooks they register. This panel is read-only.',  // TODO: translate
-    settings_plugins_empty: 'No Hermes plugins are currently visible. Install or enable plugins from the Hermes CLI/config to see them here.',  // TODO: translate
-    plugins_unnamed: 'Unnamed plugin',  // TODO: translate
-    plugins_no_description: 'No description provided.',  // TODO: translate
-    plugins_no_hooks: 'No registered lifecycle hooks',  // TODO: translate
-    plugins_registered_hooks: 'Registered hooks',  // TODO: translate
-    plugins_enabled: 'Enabled',  // TODO: translate
-    plugins_disabled: 'Disabled',  // TODO: translate
-    plugins_active_provider: 'Active (provider)',  // TODO: translate
-    plugins_provider_no_hooks: 'Provider plugin — no agent-visibility hooks',  // TODO: translate
-    plugins_load_failed: 'Failed to load plugins: ',  // TODO: translate
+    settings_plugins_meta: 'Visualizza i plugin Hermes installati e gli hook del ciclo di vita che registrano. Questo pannello è di sola lettura.',
+    settings_plugins_empty: 'Nessun plugin Hermes attualmente visibile. Installa o abilita i plugin dalla CLI/config di Hermes per vederli qui.',
+    plugins_unnamed: 'Plugin senza nome',
+    plugins_no_description: 'Nessuna descrizione fornita.',
+    plugins_no_hooks: 'Nessun hook del ciclo di vita registrato',
+    plugins_registered_hooks: 'Hook registrati',
+    plugins_enabled: 'Abilitato',
+    plugins_disabled: 'Disabilitato',
+    plugins_active_provider: 'Attivo (provider)',
+    plugins_provider_no_hooks: 'Plugin provider — nessun hook di visibilità per l\'agente',
+    plugins_load_failed: 'Impossibile caricare i plugin: ',
     settings_tab_system: 'Sistema',
     settings_tab_help: 'Help',
     settings_help_meta: 'Resources and support for Hermes WebUI.',
@@ -2496,6 +2531,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Densità sidebar',
     cmd_reasoning: 'Mostra/nascondi ragionamento, imposta livello sforzo o controlla stato attuale',
     settings_label_external_sessions: 'Mostra sessioni non-WebUI',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: 'Mostra sessioni di messaggistica precedenti',
@@ -2668,7 +2704,7 @@ const LOCALES = {
     dashboard_loopback_warning: 'La dashboard è solo loopback sul server. Naviga dal server stesso o riavvialo con --host 0.0.0.0 (non sicuro).',
     tab_logs: 'Log',
     tab_settings: 'Impostazioni',
-    close_menu: 'Close menu', // TODO: translate
+    close_menu: 'Chiudi menu',
     new_conversation: 'Nuova conversazione',
     filter_conversations: 'Filtra conversazioni...',
     markdown_table_filter: 'Filtra tabella',
@@ -2762,6 +2798,8 @@ const LOCALES = {
     import: 'Importa',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Esporta sessione completa come JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Esporta come pagina HTML autonoma',
     import_session_json_tooltip: 'Importa sessione da JSON',
     clear_conversation_btn_tooltip: 'Cancella tutti i messaggi in questa conversazione',
     // Settings detail
@@ -2810,6 +2848,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Ogni 20 scambi',
     settings_desc_auto_title_refresh: 'Rigenera automaticamente il titolo della sessione in base all\'ultimo scambio, mantenendolo pertinente mentre la conversazione evolve. Richiede un modello LLM per la generazione titoli.',
     settings_desc_external_sessions: 'Mostra conversazioni da CLI, Telegram, Discord, Slack e altri canali nella lista sessioni. Clicca per importare e continuare.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: 'Mostra sessioni Discord, Telegram, Slack e Weixin più vecchie sostituite da reset o compressione.',
@@ -2841,6 +2880,7 @@ const LOCALES = {
     providers_status_not_configured: 'Nessuna chiave API',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'Chiave API',
+    providers_status_model: 'Modello',
     providers_status_not_configured_label: 'Non configurato',
     providers_oauth_hint: 'Autenticato via OAuth. Nessuna chiave API necessaria.',
     providers_oauth_config_yaml_hint: 'Token configurato via config.yaml. Per aggiornare, modifica la sezione providers in config.yaml o esegui hermes auth.',
@@ -3228,6 +3268,30 @@ const LOCALES = {
     cron_name_label: 'Nome',
     cron_name_placeholder: 'Opzionale',
     cron_schedule_label: 'Pianificazione',
+    cron_schedule_preset_label: 'Preimpostazione',
+    cron_schedule_preset_hourly: 'Ogni ora',
+    cron_schedule_preset_daily: 'Ogni giorno',
+    cron_schedule_preset_weekdays: 'Giorni feriali',
+    cron_schedule_preset_weekly: 'Ogni settimana',
+    cron_schedule_preset_monthly: 'Ogni mese',
+    cron_schedule_preset_custom: 'Personalizzato',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Ora',
+    cron_schedule_minute_label: 'Minuto',
+    cron_schedule_weekday_label: 'Giorno della settimana (0-6, Dom-Sab)',
+    cron_schedule_month_day_label: 'Giorno',
+    cron_schedule_time_hint: 'L\'ora è quella del server; cron viene eseguito lato server.',
     cron_schedule_hint: 'Usa \'every 1h\' o un\'espressione cron per job ricorrenti. Durate semplici come \'30m\' vengono eseguite una volta sola.',
     cron_schedule_once_warning: 'Forme di durata come \'30m\' vengono eseguite una volta e rimosse dopo l\'esecuzione. Usa \'every 30m\' per mantenere un job ricorrente.',
     cron_prompt_label: 'Prompt',
@@ -3336,7 +3400,7 @@ const LOCALES = {
     cancelling: 'キャンセル中…',
     cancel_failed: 'キャンセル失敗: ',
     mic_denied: 'マイクへのアクセスが拒否されました。ブラウザの権限を確認してください。',
-    mic_insecure_origin: 'Voice input needs a secure connection. Open Hermes over HTTPS or from localhost to use the microphone.', // TODO: translate
+    mic_insecure_origin: '音声入力にはセキュアな接続が必要です。マイクを使うには HTTPS または localhost 経由で Hermes を開いてください。',
     mic_no_speech: '音声が検出されませんでした。もう一度お試しください。',
     mic_network: '音声認識を利用できません。',
     mic_error: '音声入力エラー: ',
@@ -3626,17 +3690,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: '中断 — 新しいメッセージを送信中',
-    settings_label_busy_input_mode: 'ビジー時の入力モード',
-    settings_desc_busy_input_mode: 'エージェント実行中にメッセージを送信した時の動作を制御します。Queue は待機、Interrupt はキャンセルして再開、Steer は中断せずにターン中に修正を注入します (エージェントやストリームが利用不可ならキューにフォールバック)。',
+    settings_label_default_message_mode: '既定のメッセージモード',
+    settings_desc_default_message_mode: 'エージェント実行中にメッセージを送信した時の動作を制御します。Queue は待機、Interrupt はキャンセルして再開、Steer は中断せずにターン中に修正を注入します。Steer が利用できない場合は、下書きが復元されるため、次の操作を選べます。',
     settings_label_fade_text_effect: 'テキストのフェード効果',
     settings_desc_fade_text_effect: 'アシスタントの応答中に新しくストリーミングされた単語をフェードインします。OpenWebUI に似た表示です。最大パフォーマンスのため既定ではオフです。',
     settings_label_max_tokens: '最大出力トークン数',
     settings_desc_max_tokens: '新しいストリーミング応答の出力量を制限します。空欄のままにすると、現在のプロファイルのフォールバック値を使います。',
     settings_placeholder_max_tokens_none: '上書きなし',
     settings_placeholder_max_tokens_fallback: '上書きなし（フォールバック: {0}）',
-    settings_busy_input_mode_queue: 'フォローアップをキュー',
-    settings_busy_input_mode_interrupt: '現在のターンを中断',
-    settings_busy_input_mode_steer: 'ステア (ターン中の修正)',
+    settings_default_message_mode_queue: 'フォローアップをキュー',
+    settings_default_message_mode_interrupt: '現在のターンを中断',
+    settings_default_message_mode_steer: 'ステア (ターン中の修正)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -3801,6 +3865,7 @@ const LOCALES = {
      reveal_in_finder: 'ファイルマネージャーで表示',
      reveal_failed: '表示に失敗しました: ',
      copy_file_path: 'ファイルパスをコピー',
+     copy_relative_path: '相対パスをコピー',
      open_in_vscode: 'VS Codeで開く',
      open_in_vscode_failed: 'VS Codeで開けませんでした: ',
      download_folder: 'フォルダをダウンロード',
@@ -3863,6 +3928,8 @@ const LOCALES = {
     session_archive_failed: 'アーカイブ失敗: ',
     session_duplicate: '会話を複製',
     session_duplicate_desc: '同じワークスペースとモデルでコピーを作成',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'セッションを複製しました',
     session_duplicate_failed: '複製失敗: ',
     session_stop_response: '応答を停止',
@@ -3933,8 +4000,8 @@ const LOCALES = {
     settings_label_auto_scroll_follow: '新しい内容を自動で追従',
     settings_desc_auto_scroll_follow: '有効にすると、ストリーミング中に画面が自動で一番下までスクロールします。無効にすると、スクロール位置を自分で操作できます。',
     settings_label_render_user_markdown: 'Render markdown in user messages',
-    settings_label_show_titlebar_profile: 'Show profile switcher in titlebar', // TODO: translate
-    settings_desc_show_titlebar_profile: 'When enabled, a profile switcher button appears in the top-left app titlebar so you can change profiles from any tab. Off by default; the composer footer always has a profile switcher regardless of this setting.', // TODO: translate
+    settings_label_show_titlebar_profile: 'タイトルバーにプロファイル切替を表示',
+    settings_desc_show_titlebar_profile: '有効にすると、左上のアプリのタイトルバーにプロファイル切替ボタンが表示され、どのタブからでもプロファイルを変更できます。既定ではオフです。この設定に関係なく、コンポーザーのフッターには常にプロファイル切替があります。',
     settings_desc_render_user_markdown: 'When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.',
     settings_label_large_text_paste_as_attachment: 'Attach large pasted text as file',
     settings_desc_large_text_paste_as_attachment: 'When enabled, long pasted text becomes a .md attachment instead of filling the composer.',
@@ -4150,6 +4217,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'サイドバー密度',
     cmd_reasoning: '思考表示の切り替え (表示/非表示)、努力レベル設定、現在状態の確認',
     settings_label_external_sessions: '非WebUIセッションを表示',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Cronセッションを表示',
     settings_label_webhook_sessions: 'Webhookセッションを表示',
     settings_label_previous_messaging_sessions: '以前のメッセージングセッションを表示',
@@ -4322,7 +4390,7 @@ const LOCALES = {
     dashboard_loopback_warning: 'ダッシュボードはサーバー上のループバック専用です。サーバー上で閲覧するか、--host 0.0.0.0（安全ではありません）で再起動してください。',
     tab_logs: 'ログ',
     tab_settings: '設定',
-    close_menu: 'Close menu', // TODO: translate
+    close_menu: 'メニューを閉じる',
     new_conversation: '新しい会話',
     filter_conversations: '会話を絞り込み...',
     markdown_table_filter: 'テーブルをフィルター',
@@ -4421,6 +4489,8 @@ const LOCALES = {
     import: 'インポート',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'セッション全体をJSONとしてエクスポート',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: '自己完結型のHTMLページとしてエクスポート',
     import_session_json_tooltip: 'JSONからセッションをインポート',
     clear_conversation_btn_tooltip: 'この会話のすべてのメッセージをクリア',
     // Settings detail
@@ -4469,6 +4539,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: '20 回ごと',
     settings_desc_auto_title_refresh: '最新のやり取りに基づいてセッションタイトルを自動再生成し、会話の進行に合わせて適切に保ちます。LLM タイトル生成モデルの設定が必要です。',
     settings_desc_external_sessions: 'CLI、Telegram、Discord、Slack その他のチャネルからの会話をセッション一覧に表示します。クリックでインポートして続行できます。',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Cronジョブの出力をサイドバーの会話として表示します。WebUI以外のセッションが有効な場合のみ機能します。デフォルトはオフ。高頻度のジョブはサイドバーを溢れさせる可能性があります。',
     settings_desc_webhook_sessions: 'Webhook実行をサイドバーの会話として表示します。WebUI以外のセッションが有効な場合のみ機能します。デフォルトはオフ。高頻度のルートはサイドバーを溢れさせる可能性があります。',
     settings_desc_previous_messaging_sessions: 'reset または compression によって置き換えられた以前の Discord、Telegram、Slack、Weixin セッションを表示します。',
@@ -4500,6 +4571,7 @@ const LOCALES = {
     providers_status_not_configured: 'APIキーなし',
     providers_status_oauth: 'OAuth（認証済み）',
     providers_status_api_key: 'APIキー',
+    providers_status_model: 'モデル',
     providers_status_not_configured_label: '未設定',
     providers_oauth_hint: 'OAuth 認証済み。APIキーは不要です。',
     providers_oauth_config_yaml_hint: 'config.yaml でトークンが設定されています。更新するには config.yaml の providers セクションを編集するか hermes auth を実行してください。',
@@ -4887,6 +4959,30 @@ const LOCALES = {
     cron_name_label: '名前',
     cron_name_placeholder: '任意',
     cron_schedule_label: 'スケジュール',
+    cron_schedule_preset_label: 'プリセット',
+    cron_schedule_preset_hourly: '毎時',
+    cron_schedule_preset_daily: '毎日',
+    cron_schedule_preset_weekdays: '平日',
+    cron_schedule_preset_weekly: '毎週',
+    cron_schedule_preset_monthly: '毎月',
+    cron_schedule_preset_custom: 'カスタム',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: '時',
+    cron_schedule_minute_label: '分',
+    cron_schedule_weekday_label: '曜日 (0-6, 日-土)',
+    cron_schedule_month_day_label: '日',
+    cron_schedule_time_hint: '時刻はサーバー時刻です。cron はサーバー側で実行されます。',
     cron_schedule_hint: "繰り返し実行には 'every 1h' または Cron 式を使います。'30m' のような期間だけの指定は 1 回だけ実行されます。",
     cron_schedule_once_warning: "'30m' のような期間指定は 1 回だけ実行され、実行後に削除されます。繰り返すには 'every 30m' を使ってください。",
     cron_prompt_label: 'プロンプト',
@@ -4994,7 +5090,7 @@ const LOCALES = {
     cancelling: 'Отменяю…',
     cancel_failed: 'Не удалось отменить: ',
     mic_denied: 'Доступ к микрофону запрещён. Проверьте разрешения браузера.',
-    mic_insecure_origin: 'Voice input needs a secure connection. Open Hermes over HTTPS or from localhost to use the microphone.', // TODO: translate
+    mic_insecure_origin: 'Для голосового ввода нужно защищённое соединение. Откройте Hermes по HTTPS или с localhost, чтобы использовать микрофон.',
     mic_no_speech: 'Речь не распознана. Попробуйте ещё раз.',
     mic_network: 'Распознавание речи недоступно.',
     mic_error: 'Ошибка ввода речи: ',
@@ -5184,7 +5280,7 @@ const LOCALES = {
     new_session_creating: 'Создаём новую беседу…',
     compressing: 'Запрашиваю сжатие контекста...',
     token_usage_on: 'Отображение токенов включено',
-    usage_personality_none: 'none', // TODO: translate
+    usage_personality_none: 'нет',
     token_usage_off: 'Отображение токенов выключено',
     usage_cache_hit_detail: 'Кэш: {0}% попаданий ({1} чтение / {2} запись)',
     usage_cached_percent: '{0}% из кэша',
@@ -5231,17 +5327,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Прервано — отправка нового сообщения',
-    settings_label_busy_input_mode: 'Режим ввода при занятости',
-    settings_desc_busy_input_mode: 'Определяет поведение при отправке сообщения во время работы агента. Очередь ждёт; Прерывание отменяет и начинает заново; Steer внедряет коррекцию без прерывания.',
+    settings_label_default_message_mode: 'Режим сообщений по умолчанию',
+    settings_desc_default_message_mode: 'Определяет поведение при отправке сообщения во время работы агента. Очередь ждёт; Прерывание отменяет и начинает заново; Steer внедряет коррекцию без прерывания. Если Steer недоступен, черновик восстанавливается, чтобы вы могли выбрать следующее действие.',
     settings_label_fade_text_effect: 'Эффект плавного появления текста',
     settings_desc_fade_text_effect: 'Плавно показывает новые слова во время ответа ассистента. Похоже на OpenWebUI; по умолчанию выключено для максимальной производительности.',
     settings_label_max_tokens: 'Максимум выходных токенов',
     settings_desc_max_tokens: 'Ограничивает длину новых потоковых ответов. Оставьте пустым, чтобы использовать резервное значение текущего профиля.',
     settings_placeholder_max_tokens_none: 'Переопределения нет',
     settings_placeholder_max_tokens_fallback: 'Переопределения нет (резерв: {0})',
-    settings_busy_input_mode_queue: 'Поставить в очередь',
-    settings_busy_input_mode_interrupt: 'Прервать текущий оборот',
-    settings_busy_input_mode_steer: 'Steer (прерывание + отправка)',
+    settings_default_message_mode_queue: 'Поставить в очередь',
+    settings_default_message_mode_interrupt: 'Прервать текущий оборот',
+    settings_default_message_mode_steer: 'Steer (коррекция в середине хода)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -5286,21 +5382,21 @@ const LOCALES = {
     session_worktree_badge: 'Worktree',
     model_search_placeholder: 'Поиск моделей…',
     model_scope_advisory: 'Применяется к этой беседе со следующего сообщения.',
-    session_toolsets: 'Session Toolsets', // TODO: translate
-    session_toolsets_desc: 'Use active profile defaults or choose a custom toolset list for this session', // TODO: translate
-    session_toolsets_global: 'Active profile defaults', // TODO: translate
-    session_toolsets_profile_defaults: 'Active profile defaults', // TODO: translate
-    session_toolsets_custom: 'Custom override', // TODO: translate
-    session_toolsets_use_profile_defaults: 'Use active profile defaults', // TODO: translate
-    session_toolsets_configured_servers: 'Configured MCP servers', // TODO: translate
-    session_toolsets_loading_servers: 'Loading configured servers...', // TODO: translate
-    session_toolsets_no_configured_servers: 'No configured MCP servers', // TODO: translate
-    session_toolsets_placeholder: 'tool1, tool2, \u2026', // TODO: translate
-    session_toolsets_apply: 'Apply', // TODO: translate
-    session_toolsets_clear: 'Use defaults', // TODO: translate
-    session_toolsets_applied: 'Toolsets updated', // TODO: translate
-    session_toolsets_cleared: 'Using active profile defaults', // TODO: translate
-    session_toolsets_failed: 'Failed to update toolsets: ', // TODO: translate
+    session_toolsets: 'Наборы инструментов сессии',
+    session_toolsets_desc: 'Использовать значения по умолчанию активного профиля или выбрать пользовательский список наборов инструментов для этой сессии',
+    session_toolsets_global: 'Значения по умолчанию активного профиля',
+    session_toolsets_profile_defaults: 'Значения по умолчанию активного профиля',
+    session_toolsets_custom: 'Пользовательское переопределение',
+    session_toolsets_use_profile_defaults: 'Использовать значения по умолчанию активного профиля',
+    session_toolsets_configured_servers: 'Настроенные серверы MCP',
+    session_toolsets_loading_servers: 'Загрузка настроенных серверов...',
+    session_toolsets_no_configured_servers: 'Нет настроенных серверов MCP',
+    session_toolsets_placeholder: 'tool1, tool2, \u2026',
+    session_toolsets_apply: 'Применить',
+    session_toolsets_clear: 'Использовать значения по умолчанию',
+    session_toolsets_applied: 'Наборы инструментов обновлены',
+    session_toolsets_cleared: 'Используются значения по умолчанию активного профиля',
+    session_toolsets_failed: 'Не удалось обновить наборы инструментов: ',
     model_scope_toast: 'Применяется к этой беседе со следующего сообщения.',
     reference_only_label: 'Только справка',
     settings_label_skin: 'Скин',
@@ -5379,9 +5475,10 @@ const LOCALES = {
      reveal_in_finder: 'Показать в файловом менеджере',
      reveal_failed: 'Не удалось открыть: ',
      copy_file_path: 'Копировать путь к файлу',
+     copy_relative_path: 'Копировать относительный путь',
      open_in_vscode: 'Открыть в VS Code',
      open_in_vscode_failed: 'Не удалось открыть в VS Code: ',
-     download_folder: 'Download Folder', // TODO: translate
+     download_folder: 'Папка загрузок',
     path_copied: 'Путь к файлу скопирован в буфер обмена',
     path_copy_failed: 'Не удалось скопировать путь: ',
     session_rename: 'Переименовать беседу',
@@ -5514,6 +5611,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Плотность боковой панели',
     cmd_reasoning: 'Toggle thinking visibility (show/hide), set effort level, or check current status',
     settings_label_external_sessions: 'Показывать внешние сеансы',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: 'Показывать предыдущие сеансы обмена сообщениями',
@@ -5676,21 +5774,21 @@ const LOCALES = {
     dashboard_loopback_warning: 'Панель доступна только через loopback на сервере. Откройте её с самого сервера или перезапустите с --host 0.0.0.0 (небезопасно).',
     tab_logs: 'Logs',
     tab_settings: 'Настройки',
-    close_menu: 'Close menu', // TODO: translate
+    close_menu: 'Закрыть меню',
 
-    logs_title: 'Logs',  // TODO: translate
-    logs_file: 'File',  // TODO: translate
-    logs_tail: 'Tail',  // TODO: translate
-    logs_auto_refresh: 'Auto-refresh (5s)',  // TODO: translate
-    logs_wrap: 'Wrap lines',  // TODO: translate
-    logs_copy_all: 'Copy all',  // TODO: translate
-    logs_empty: 'No log lines yet.',  // TODO: translate
-    logs_loading: 'Loading logs…',  // TODO: translate
-    logs_load_failed: 'Logs failed to load',  // TODO: translate
-    logs_status_idle: 'Choose a log file to view recent lines.',  // TODO: translate
-    logs_no_mtime: 'not written yet',  // TODO: translate
-    logs_truncated_hint: 'Showing the tail of a large log file; older bytes were skipped to keep memory bounded.',  // TODO: translate
-    logs_copied: 'Logs copied',  // TODO: translate
+    logs_title: 'Журналы',
+    logs_file: 'Файл',
+    logs_tail: 'Хвост',
+    logs_auto_refresh: 'Автообновление (5 с)',
+    logs_wrap: 'Перенос строк',
+    logs_copy_all: 'Копировать всё',
+    logs_empty: 'Пока нет строк журнала.',
+    logs_loading: 'Загрузка журналов…',
+    logs_load_failed: 'Не удалось загрузить журналы',
+    logs_status_idle: 'Выберите файл журнала, чтобы просмотреть последние строки.',
+    logs_no_mtime: 'ещё не записано',
+    logs_truncated_hint: 'Показан хвост большого файла журнала; более старые байты пропущены для ограничения использования памяти.',
+    logs_copied: 'Журналы скопированы',
     logs_severity: 'Уровень',
     logs_severity_all: 'Все',
     logs_severity_errors: 'Ошибки',
@@ -5733,6 +5831,8 @@ const LOCALES = {
     import: 'Импорт',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Экспортировать сессию как JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Экспортировать как автономную HTML-страницу',
     import_session_json_tooltip: 'Импортировать сессию из JSON',
     clear_conversation_btn_tooltip: 'Очистить все сообщения в этой беседе',
     settings_label_rtl: 'Раскладка чата справа налево',
@@ -5758,6 +5858,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Каждые 20 обменов',
     settings_desc_auto_title_refresh: 'Автоматически переформулирует заголовок сессии на основе последнего обмена, чтобы он оставался актуальным по мере развития беседы. Требует настроенную модель генерации заголовков.',
     settings_desc_external_sessions: 'Показать беседы из CLI, Telegram, Discord, Slack и других каналов в списке сеансов. Нажмите для импорта и продолжения.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: 'Показывать предыдущие сеансы Discord, Telegram, Slack и Weixin, замененные сбросом или сжатием.',
@@ -5789,6 +5890,7 @@ const LOCALES = {
     providers_status_not_configured: 'No API key',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API key',
+    providers_status_model: 'Model',
     providers_status_not_configured_label: 'Not configured',
     providers_oauth_hint: 'Authenticated via OAuth. No API key needed.',
     providers_oauth_config_yaml_hint: 'Token configured via config.yaml. To update, edit the providers section in your config.yaml or run hermes auth.',
@@ -5910,16 +6012,16 @@ const LOCALES = {
     provider_category_specialized: 'Специализированные',
     onboarding_api_key_label: 'Ключ API',
     onboarding_api_key_placeholder: 'Оставьте пустым, чтобы сохранить уже сохранённый ключ',
-    onboarding_api_key_label_optional: 'API key (optional)', // TODO: translate
-    onboarding_api_key_placeholder_optional: 'Leave blank for keyless servers', // TODO: translate
-    onboarding_api_key_help_keyless: 'Most LM Studio / Ollama / vLLM installs run keyless — leave this blank if your server doesn\'t require authentication. Use the Test connection button to verify.', // TODO: translate
-    oauth_login_codex: 'Login with Codex (ChatGPT)', // TODO: translate
-    oauth_codex_step1: 'Step 1: Visit this URL and enter the code', // TODO: translate
-    oauth_codex_step2: 'Step 2: Enter this code on the page', // TODO: translate
-    oauth_codex_polling: 'Waiting for authorization...', // TODO: translate
-    oauth_codex_success: 'Codex OAuth login successful!', // TODO: translate
-    oauth_codex_error: 'OAuth login failed', // TODO: translate
-    oauth_codex_expired: 'Code expired, please try again', // TODO: translate
+    onboarding_api_key_label_optional: 'API-ключ (необязательно)',
+    onboarding_api_key_placeholder_optional: 'Оставьте пустым для серверов без ключа',
+    onboarding_api_key_help_keyless: 'Большинство установок LM Studio / Ollama / vLLM работают без ключа — оставьте это поле пустым, если ваш сервер не требует аутентификации. Используйте кнопку «Проверить подключение» для проверки.',
+    oauth_login_codex: 'Войти через Codex (ChatGPT)',
+    oauth_codex_step1: 'Шаг 1. Перейдите по этому URL и введите код',
+    oauth_codex_step2: 'Шаг 2. Введите этот код на странице',
+    oauth_codex_polling: 'Ожидание авторизации...',
+    oauth_codex_success: 'Вход через Codex OAuth выполнен!',
+    oauth_codex_error: 'Не удалось выполнить вход через OAuth',
+    oauth_codex_expired: 'Срок действия кода истёк, повторите попытку',
     onboarding_api_key_help_prefix: 'Сохраняется как секрет в вашем файле `.env` Hermes с помощью',
     onboarding_base_url_label: 'Базовый URL',
     onboarding_base_url_placeholder: 'https://your-endpoint.example/v1',
@@ -5945,19 +6047,19 @@ const LOCALES = {
     onboarding_error_choose_model: 'Выберите модель перед продолжением.',
     onboarding_error_provider_required: 'Выберите режим настройки перед продолжением.',
     onboarding_error_base_url_required: 'Для собственных endpoint-ов требуется базовый URL.',
-    onboarding_probe_test_button: 'Test connection', // TODO: translate
-    onboarding_probe_probing: 'Testing connection…', // TODO: translate
-    onboarding_probe_ok: 'Connected. {n} model(s) available.', // TODO: translate
-    onboarding_probe_error_generic: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_probe_error_invalid_url: 'Base URL must start with http:// or https://.', // TODO: translate
-    onboarding_probe_error_dns: 'Could not resolve the host. Check the URL or use the host\'s IP address.', // TODO: translate
-    onboarding_probe_error_connect_refused: 'Connection refused — the server may not be running on that address. From inside Docker, try the host IP instead of localhost.', // TODO: translate
-    onboarding_probe_error_timeout: 'The endpoint did not respond in time. Check that the server is running and the URL is correct.', // TODO: translate
-    onboarding_probe_error_http_4xx: 'The endpoint returned a client error. Check authentication and the URL path (typically ends in /v1).', // TODO: translate
-    onboarding_probe_error_http_5xx: 'The endpoint returned a server error. Check the LM Studio / Ollama server logs.', // TODO: translate
-    onboarding_probe_error_parse: 'The endpoint did not return a model list in the expected shape. Verify the URL points to the OpenAI-compatible API root.', // TODO: translate
-    onboarding_probe_error_unreachable: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_error_probe_failed: 'Could not validate the configured base URL.', // TODO: translate
+    onboarding_probe_test_button: 'Проверить подключение',
+    onboarding_probe_probing: 'Проверка подключения…',
+    onboarding_probe_ok: 'Подключено. Доступно моделей: {n}.',
+    onboarding_probe_error_generic: 'Не удалось связаться с настроенным базовым URL.',
+    onboarding_probe_error_invalid_url: 'Базовый URL должен начинаться с http:// или https://.',
+    onboarding_probe_error_dns: 'Не удалось разрешить хост. Проверьте URL или используйте IP-адрес хоста.',
+    onboarding_probe_error_connect_refused: 'В подключении отказано — возможно, сервер не запущен по этому адресу. Внутри Docker попробуйте IP хоста вместо localhost.',
+    onboarding_probe_error_timeout: 'Конечная точка не ответила вовремя. Убедитесь, что сервер запущен и URL указан верно.',
+    onboarding_probe_error_http_4xx: 'Конечная точка вернула ошибку клиента. Проверьте аутентификацию и путь URL (обычно оканчивается на /v1).',
+    onboarding_probe_error_http_5xx: 'Конечная точка вернула ошибку сервера. Проверьте журналы сервера LM Studio / Ollama.',
+    onboarding_probe_error_parse: 'Конечная точка вернула список моделей в неожиданном формате. Убедитесь, что URL указывает на корень API, совместимого с OpenAI.',
+    onboarding_probe_error_unreachable: 'Не удалось связаться с настроенным базовым URL.',
+    onboarding_error_probe_failed: 'Не удалось проверить настроенный базовый URL.',
     onboarding_error_workspace_required: 'Рабочее пространство обязательно.',
     onboarding_error_model_required: 'Модель обязательна.',
     onboarding_complete: 'Первичная настройка завершена',
@@ -6190,6 +6292,30 @@ const LOCALES = {
     cron_name_label: 'Имя',
     cron_name_placeholder: 'Необязательно',
     cron_schedule_label: 'Расписание',
+    cron_schedule_preset_label: 'Предустановка',
+    cron_schedule_preset_hourly: 'Ежечасно',
+    cron_schedule_preset_daily: 'Ежедневно',
+    cron_schedule_preset_weekdays: 'По будням',
+    cron_schedule_preset_weekly: 'Еженедельно',
+    cron_schedule_preset_monthly: 'Ежемесячно',
+    cron_schedule_preset_custom: 'Пользовательский',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Час',
+    cron_schedule_minute_label: 'Минута',
+    cron_schedule_weekday_label: 'День недели (0-6, вс-сб)',
+    cron_schedule_month_day_label: 'День',
+    cron_schedule_time_hint: 'Время указано по серверу; cron выполняется на сервере.',
     cron_schedule_hint: "Для повторяющихся заданий используйте 'every 1h' или cron-выражение. Простые интервалы вроде '30m' выполняются один раз.",
     cron_schedule_once_warning: "Интервалы вроде '30m' выполняются один раз и удаляются после запуска. Используйте 'every 30m' для повторяющегося задания.",
     cron_prompt_label: 'Запрос',
@@ -6251,6 +6377,8 @@ const LOCALES = {
     session_worktree_remove_ahead_warning: (ahead) => `${ahead} unpushed commit(s) will be lost.`,
     session_duplicate: 'Duplicate conversation',
     session_duplicate_desc: 'Create a copy with the same workspace and model',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicate_failed: 'Duplicate failed: ',
     session_stop_response: 'Stop response',
     session_stop_response_desc: 'Cancel the running response for this conversation',
@@ -6314,8 +6442,8 @@ const LOCALES = {
     settings_label_auto_scroll_follow: 'Автопрокрутка к новому содержимому',
     settings_desc_auto_scroll_follow: 'Если включено, область прокручивается вниз по мере поступления новых токенов. Если выключено, вы сами управляете прокруткой.',
     settings_label_render_user_markdown: 'Render markdown in user messages',
-    settings_label_show_titlebar_profile: 'Show profile switcher in titlebar', // TODO: translate
-    settings_desc_show_titlebar_profile: 'When enabled, a profile switcher button appears in the top-left app titlebar so you can change profiles from any tab. Off by default; the composer footer always has a profile switcher regardless of this setting.', // TODO: translate
+    settings_label_show_titlebar_profile: 'Показывать переключатель профилей в заголовке окна',
+    settings_desc_show_titlebar_profile: 'Если включено, в заголовке окна в левом верхнем углу появляется кнопка переключения профилей, позволяющая менять профиль с любой вкладки. По умолчанию выключено; в нижней части редактора всегда есть переключатель профилей независимо от этой настройки.',
     settings_desc_render_user_markdown: 'When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.',
     settings_label_large_text_paste_as_attachment: 'Attach large pasted text as file',
     settings_desc_large_text_paste_as_attachment: 'When enabled, long pasted text becomes a .md attachment instead of filling the composer.',
@@ -6369,7 +6497,7 @@ const LOCALES = {
     settings_tab_conversation: 'Conversation',
     settings_tab_preferences: 'Preferences',
     settings_tab_plugins: 'Плагины',
-    settings_tab_extensions: 'Extensions',  // TODO: translate
+    settings_tab_extensions: 'Расширения',
     settings_extensions_gallery_tab: 'Gallery',
     settings_extensions_installed_tab: 'Installed',
     settings_extensions_diagnostics_tab: 'Diagnostics',
@@ -6400,19 +6528,19 @@ const LOCALES = {
     ext_gallery_install_followup: 'Расширение установлено. Следующие шаги смотрите на карточке.',
     ext_gallery_install_ok: 'Extension installed successfully.',
     ext_gallery_uninstall_ok: 'Extension uninstalled.',
-    settings_plugins_title: 'Plugins',  // TODO: translate
+    settings_plugins_title: 'Плагины',
     plugins_enable_toggle: 'Включить',
-    settings_plugins_meta: 'View installed Hermes plugins and the lifecycle hooks they register. This panel is read-only.',  // TODO: translate
-    settings_plugins_empty: 'No Hermes plugins are currently visible. Install or enable plugins from the Hermes CLI/config to see them here.',  // TODO: translate
-    plugins_unnamed: 'Unnamed plugin',  // TODO: translate
-    plugins_no_description: 'No description provided.',  // TODO: translate
-    plugins_no_hooks: 'No registered lifecycle hooks',  // TODO: translate
-    plugins_registered_hooks: 'Registered hooks',  // TODO: translate
-    plugins_enabled: 'Enabled',  // TODO: translate
-    plugins_disabled: 'Disabled',  // TODO: translate
-    plugins_active_provider: 'Active (provider)',  // TODO: translate
-    plugins_provider_no_hooks: 'Provider plugin — no agent-visibility hooks',  // TODO: translate
-    plugins_load_failed: 'Failed to load plugins: ',  // TODO: translate
+    settings_plugins_meta: 'Просмотр установленных плагинов Hermes и регистрируемых ими хуков жизненного цикла. Эта панель доступна только для чтения.',
+    settings_plugins_empty: 'Сейчас нет видимых плагинов Hermes. Установите или включите плагины через CLI/конфигурацию Hermes, чтобы увидеть их здесь.',
+    plugins_unnamed: 'Плагин без названия',
+    plugins_no_description: 'Описание не предоставлено.',
+    plugins_no_hooks: 'Нет зарегистрированных хуков жизненного цикла',
+    plugins_registered_hooks: 'Зарегистрированные хуки',
+    plugins_enabled: 'Включено',
+    plugins_disabled: 'Отключено',
+    plugins_active_provider: 'Активен (провайдер)',
+    plugins_provider_no_hooks: 'Плагин провайдера — нет хуков видимости для агента',
+    plugins_load_failed: 'Не удалось загрузить плагины: ',
     settings_tab_system: 'System',
     settings_tab_help: 'Help',
     settings_help_meta: 'Resources and support for Hermes WebUI.',
@@ -6509,24 +6637,24 @@ const LOCALES = {
     settings_label_tts_engine: 'Движок TTS',
     settings_desc_tts_engine: 'Выберите движок синтеза речи. Edge TTS использует нейронные голоса Microsoft через сервер.',
 
-    checkpoint_date: 'Date',  // TODO: translate
-    checkpoint_diff_files_changed: (n) => `${n} file${n === 1 ? '' : 's'} changed`,  // TODO: translate
-    checkpoint_diff_no_changes: 'No differences found between this checkpoint and the current workspace.',  // TODO: translate
-    checkpoint_diff_title: 'Changes in checkpoint',  // TODO: translate
-    checkpoint_empty: 'No checkpoints found for this workspace.',  // TODO: translate
-    checkpoint_error: 'Failed to load checkpoints',  // TODO: translate
-    checkpoint_files: 'Files',  // TODO: translate
-    checkpoint_loading: 'Loading checkpoints…',  // TODO: translate
-    checkpoint_message: 'Message',  // TODO: translate
-    checkpoint_restore: 'Restore',  // TODO: translate
-    checkpoint_restore_confirm_message: (ckpt) => `Restore workspace to checkpoint "${ckpt}"? This will overwrite files with the saved versions. Files added after this checkpoint will not be deleted.`,  // TODO: translate
-    checkpoint_restore_confirm_title: 'Restore checkpoint?',  // TODO: translate
-    checkpoint_restored: 'Checkpoint restored',  // TODO: translate
-    checkpoint_title: 'Checkpoints',  // TODO: translate
-    checkpoint_view_diff: 'View diff',  // TODO: translate
-    insights_activity_by_day: 'Activity by Day',  // TODO: translate
-    insights_activity_by_hour: 'Activity by Hour',  // TODO: translate
-    insights_cost: 'Estimated Cost',  // TODO: translate
+    checkpoint_date: 'Дата',
+    checkpoint_diff_files_changed: (n) => `${n} файл${n === 1 ? '' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'а' : 'ов')} изменено`,
+    checkpoint_diff_no_changes: 'Различий между этой контрольной точкой и текущим рабочим пространством не найдено.',
+    checkpoint_diff_title: 'Изменения в контрольной точке',
+    checkpoint_empty: 'Для этого рабочего пространства контрольные точки не найдены.',
+    checkpoint_error: 'Не удалось загрузить контрольные точки',
+    checkpoint_files: 'Файлы',
+    checkpoint_loading: 'Загрузка контрольных точек…',
+    checkpoint_message: 'Сообщение',
+    checkpoint_restore: 'Восстановить',
+    checkpoint_restore_confirm_message: (ckpt) => `Восстановить рабочее пространство до контрольной точки "${ckpt}"? Файлы будут перезаписаны сохранёнными версиями. Файлы, добавленные после этой контрольной точки, удалены не будут.`,
+    checkpoint_restore_confirm_title: 'Восстановить контрольную точку?',
+    checkpoint_restored: 'Контрольная точка восстановлена',
+    checkpoint_title: 'Контрольные точки',
+    checkpoint_view_diff: 'Показать diff',
+    insights_activity_by_day: 'Активность по дням',
+    insights_activity_by_hour: 'Активность по часам',
+    insights_cost: 'Оценочная стоимость',
     insights_daily_tokens: 'Daily Tokens',
     insights_model_name: 'Model',
     insights_model_sessions: 'Sessions',
@@ -6540,36 +6668,36 @@ const LOCALES = {
     insights_model_health_replacement: 'Replacement guide',
     insights_model_health_cost_per_m: 'Cost / 1M',
     insights_no_usage_data: 'No usage data yet',
-    insights_footer: 'Showing data from the last {days} days',  // TODO: translate
-    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
-    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
-    insights_skill_usage_total: 'Total invocations',  // TODO: translate
-    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
-    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
-    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
-    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
-    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
-    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
-    insights_skill_usage_col_views: 'Views',  // TODO: translate
-    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
-    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
-    insights_input_tokens: 'Input',  // TODO: translate
-    insights_messages: 'Messages',  // TODO: translate
-    insights_models: 'Models',  // TODO: translate
-    insights_no_cost: 'N/A',  // TODO: translate
-    insights_output_tokens: 'Output',  // TODO: translate
-    insights_peak_hour: 'Peak: {hour}',  // TODO: translate
-    insights_sessions: 'Sessions',  // TODO: translate
-    insights_title: 'Usage Analytics',  // TODO: translate
-    insights_token_breakdown: 'Token Breakdown',  // TODO: translate
-    insights_tokens: 'Tokens',  // TODO: translate
-    insights_total: 'Total',  // TODO: translate
-    settings_desc_api_redact: 'Self-hosted users can disable for transparency (not recommended for shared instances).',  // TODO: translate
-    settings_label_api_redact: 'Redact sensitive data in API responses',  // TODO: translate
-    subagent_children: 'Subagent sessions',  // TODO: translate
-    outline_title: 'Outline',  // TODO: translate
-    outline_empty: 'No questions yet.',  // TODO: translate
-    outline_loading: 'Loading…',  // TODO: translate
+    insights_footer: 'Показаны данные за последние {days} дн.',
+    insights_skill_usage_title: 'Использование навыков',
+    insights_skill_usage_sub: 'Частота вызова инструментов',
+    insights_skill_usage_total: 'Всего вызовов',
+    insights_skill_usage_skills_used: 'Использовано навыков',
+    insights_skill_usage_no_data: 'Пока нет данных об использовании навыков',
+    insights_skill_usage_no_data_hint: 'Навыки появятся здесь после использования в беседах.',
+    insights_skill_usage_footer: 'Подсчёты из ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'Навык',
+    insights_skill_usage_col_uses: 'Использования',
+    insights_skill_usage_col_views: 'Просмотры',
+    insights_skill_usage_col_share: 'Использование, %',
+    insights_skill_usage_col_patches: 'Патчи',
+    insights_input_tokens: 'Ввод',
+    insights_messages: 'Сообщения',
+    insights_models: 'Модели',
+    insights_no_cost: 'Н/Д',
+    insights_output_tokens: 'Вывод',
+    insights_peak_hour: 'Пик: {hour}',
+    insights_sessions: 'Сессии',
+    insights_title: 'Аналитика использования',
+    insights_token_breakdown: 'Разбивка по токенам',
+    insights_tokens: 'Токены',
+    insights_total: 'Всего',
+    settings_desc_api_redact: 'Пользователи с собственным хостингом могут отключить для прозрачности (не рекомендуется для общих экземпляров).',
+    settings_label_api_redact: 'Скрывать конфиденциальные данные в ответах API',
+    subagent_children: 'Сессии субагентов',
+    outline_title: 'Структура',
+    outline_empty: 'Пока нет вопросов.',
+    outline_loading: 'Загрузка…',
     wiki_browse: 'Browse wiki',
     wiki_search_placeholder: 'Search pages...',
     wiki_no_pages: 'No wiki pages found',
@@ -6591,7 +6719,7 @@ const LOCALES = {
     cancelling: 'Cancelando…',
     cancel_failed: 'Error al cancelar: ',
     mic_denied: 'Acceso al micrófono denegado. Revisa los permisos del navegador.',
-    mic_insecure_origin: 'Voice input needs a secure connection. Open Hermes over HTTPS or from localhost to use the microphone.', // TODO: translate
+    mic_insecure_origin: 'La entrada de voz necesita una conexión segura. Abre Hermes con HTTPS o desde localhost para usar el micrófono.',
     mic_no_speech: 'No se detectó voz. Inténtalo de nuevo.',
     mic_network: 'El reconocimiento de voz no está disponible.',
     mic_error: 'Error de entrada por voz: ',
@@ -6765,21 +6893,21 @@ const LOCALES = {
     workspace_worktree_created: 'Conversación en worktree creada',
     workspace_worktree_failed: 'Error al crear worktree: ',
     session_worktree_badge: 'Worktree',
-    session_toolsets: 'Session Toolsets', // TODO: translate
-    session_toolsets_desc: 'Use active profile defaults or choose a custom toolset list for this session', // TODO: translate
-    session_toolsets_global: 'Active profile defaults', // TODO: translate
-    session_toolsets_profile_defaults: 'Active profile defaults', // TODO: translate
-    session_toolsets_custom: 'Custom override', // TODO: translate
-    session_toolsets_use_profile_defaults: 'Use active profile defaults', // TODO: translate
-    session_toolsets_configured_servers: 'Configured MCP servers', // TODO: translate
-    session_toolsets_loading_servers: 'Loading configured servers...', // TODO: translate
-    session_toolsets_no_configured_servers: 'No configured MCP servers', // TODO: translate
-    session_toolsets_placeholder: 'tool1, tool2, \u2026', // TODO: translate
-    session_toolsets_apply: 'Apply', // TODO: translate
-    session_toolsets_clear: 'Use defaults', // TODO: translate
-    session_toolsets_applied: 'Toolsets updated', // TODO: translate
-    session_toolsets_cleared: 'Using active profile defaults', // TODO: translate
-    session_toolsets_failed: 'Failed to update toolsets: ', // TODO: translate
+    session_toolsets: 'Conjuntos de herramientas de la sesión',
+    session_toolsets_desc: 'Usa los valores predeterminados del perfil activo o elige una lista personalizada de conjuntos de herramientas para esta sesión',
+    session_toolsets_global: 'Valores predeterminados del perfil activo',
+    session_toolsets_profile_defaults: 'Valores predeterminados del perfil activo',
+    session_toolsets_custom: 'Anulación personalizada',
+    session_toolsets_use_profile_defaults: 'Usar valores predeterminados del perfil activo',
+    session_toolsets_configured_servers: 'Servidores MCP configurados',
+    session_toolsets_loading_servers: 'Cargando servidores configurados...',
+    session_toolsets_no_configured_servers: 'No hay servidores MCP configurados',
+    session_toolsets_placeholder: 'tool1, tool2, \u2026',
+    session_toolsets_apply: 'Aplicar',
+    session_toolsets_clear: 'Usar valores predeterminados',
+    session_toolsets_applied: 'Conjuntos de herramientas actualizados',
+    session_toolsets_cleared: 'Usando los valores predeterminados del perfil activo',
+    session_toolsets_failed: 'Error al actualizar los conjuntos de herramientas: ',
     model_scope_advisory: 'Se aplica a esta conversación desde tu próximo mensaje.',
     model_scope_toast: 'Se aplica a esta conversación desde tu próximo mensaje.',
     // commands.js
@@ -6825,7 +6953,7 @@ const LOCALES = {
     compress_failed_label: 'La compresión falló',
     focus_label: 'Tema',
     token_usage_on: 'Uso de tokens activado',
-    usage_personality_none: 'none', // TODO: translate
+    usage_personality_none: 'ninguna',
     token_usage_off: 'Uso de tokens desactivado',
     usage_cache_hit_detail: 'Caché: {0}% de acierto ({1} lectura / {2} escritura)',
     usage_cached_percent: '{0}% en caché',
@@ -6872,17 +7000,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Interrumpido \u2014 enviando nuevo mensaje',
-    settings_label_busy_input_mode: 'Modo de entrada ocupada',
-    settings_desc_busy_input_mode: 'Controla qué sucede al enviar mensajes mientras el agente está activo. Cola espera; Interrumpir cancela y empieza de nuevo; Steer inyecta una corrección sin interrumpir (usa cola si el agente no está disponible).',
+    settings_label_default_message_mode: 'Modo de mensaje predeterminado',
+    settings_desc_default_message_mode: 'Controla qué sucede al enviar mensajes mientras el agente está activo. Cola espera; Interrumpir cancela y empieza de nuevo; Steer inyecta una corrección sin interrumpir. Si Steer no está disponible, el borrador se restaura para que puedas elegir la siguiente acción.',
     settings_label_fade_text_effect: 'Efecto de desvanecimiento de texto',
     settings_desc_fade_text_effect: 'Hace aparecer gradualmente las palabras nuevas mientras el asistente responde. Similar a OpenWebUI; desactivado por defecto para máximo rendimiento.',
     settings_label_max_tokens: 'Máximo de tokens de salida',
     settings_desc_max_tokens: 'Limita la longitud de las nuevas respuestas en streaming. Déjalo en blanco para usar el valor de respaldo del perfil activo.',
     settings_placeholder_max_tokens_none: 'Sin reemplazo',
     settings_placeholder_max_tokens_fallback: 'Sin reemplazo (respaldo: {0})',
-    settings_busy_input_mode_queue: 'Poner en cola',
-    settings_busy_input_mode_interrupt: 'Interrumpir turno actual',
-    settings_busy_input_mode_steer: 'Steer (corrección a mitad de turno)',
+    settings_default_message_mode_queue: 'Poner en cola',
+    settings_default_message_mode_interrupt: 'Interrumpir turno actual',
+    settings_default_message_mode_steer: 'Steer (corrección a mitad de turno)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -6950,9 +7078,10 @@ const LOCALES = {
      reveal_in_finder: 'Mostrar en el gestor de archivos',
      reveal_failed: 'Error al mostrar: ',
      copy_file_path: 'Copiar ruta del archivo',
+     copy_relative_path: 'Copiar ruta relativa',
      open_in_vscode: 'Abrir en VS Code',
      open_in_vscode_failed: 'Error al abrir en VS Code: ',
-     download_folder: 'Download Folder', // TODO: translate
+     download_folder: 'Carpeta de descargas',
     path_copied: 'Ruta del archivo copiada al portapapeles',
     path_copy_failed: 'Error al copiar la ruta: ',
     session_rename: 'Renombrar conversación',
@@ -7095,6 +7224,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Densidad de la barra lateral',
     cmd_reasoning: 'Toggle thinking visibility (show/hide), set effort level, or check current status',
     settings_label_external_sessions: 'Mostrar sesiones externas',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: 'Mostrar sesiones de mensajería anteriores',
@@ -7267,21 +7397,21 @@ const LOCALES = {
     dashboard_loopback_warning: 'El panel solo usa loopback en el servidor. Navega desde el propio servidor o reinícialo con --host 0.0.0.0 (inseguro).',
     tab_logs: 'Logs',
     tab_settings: 'Ajustes',
-    close_menu: 'Close menu', // TODO: translate
+    close_menu: 'Cerrar menú',
 
-    logs_title: 'Logs',  // TODO: translate
-    logs_file: 'File',  // TODO: translate
-    logs_tail: 'Tail',  // TODO: translate
-    logs_auto_refresh: 'Auto-refresh (5s)',  // TODO: translate
-    logs_wrap: 'Wrap lines',  // TODO: translate
-    logs_copy_all: 'Copy all',  // TODO: translate
-    logs_empty: 'No log lines yet.',  // TODO: translate
-    logs_loading: 'Loading logs…',  // TODO: translate
-    logs_load_failed: 'Logs failed to load',  // TODO: translate
-    logs_status_idle: 'Choose a log file to view recent lines.',  // TODO: translate
-    logs_no_mtime: 'not written yet',  // TODO: translate
-    logs_truncated_hint: 'Showing the tail of a large log file; older bytes were skipped to keep memory bounded.',  // TODO: translate
-    logs_copied: 'Logs copied',  // TODO: translate
+    logs_title: 'Registros',
+    logs_file: 'Archivo',
+    logs_tail: 'Cola',
+    logs_auto_refresh: 'Actualización automática (5 s)',
+    logs_wrap: 'Ajustar líneas',
+    logs_copy_all: 'Copiar todo',
+    logs_empty: 'Aún no hay líneas de registro.',
+    logs_loading: 'Cargando registros…',
+    logs_load_failed: 'Error al cargar los registros',
+    logs_status_idle: 'Elige un archivo de registro para ver las líneas recientes.',
+    logs_no_mtime: 'aún no escrito',
+    logs_truncated_hint: 'Se muestra la cola de un archivo de registro grande; se omitieron los bytes más antiguos para limitar el uso de memoria.',
+    logs_copied: 'Registros copiados',
     logs_severity: 'Severidad',
     logs_severity_all: 'Todo',
     logs_severity_errors: 'Errores',
@@ -7324,6 +7454,8 @@ const LOCALES = {
     import: 'Importar',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Exportar sesión completa como JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Exportar como página HTML independiente',
     import_session_json_tooltip: 'Importar sesión desde JSON',
     clear_conversation_btn_tooltip: 'Borrar todos los mensajes de esta conversación',
     // Settings detail
@@ -7350,6 +7482,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Cada 20 intercambios',
     settings_desc_auto_title_refresh: 'Regenera automáticamente el título de la sesión basándose en el último intercambio, manteniéndolo relevante a medida que evoluciona la conversación. Requiere un modelo LLM de generación de títulos configurado.',
     settings_desc_external_sessions: 'Mostrar conversaciones de CLI, Telegram, Discord, Slack y otros canales en la lista de sesiones. Haz clic para importar y continuar.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: 'Mostrar sesiones antiguas de Discord, Telegram, Slack y Weixin reemplazadas por reset o compresión.',
@@ -7381,6 +7514,7 @@ const LOCALES = {
     providers_status_not_configured: 'No API key',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API key',
+    providers_status_model: 'Model',
     providers_status_not_configured_label: 'Not configured',
     providers_oauth_hint: 'Authenticated via OAuth. No API key needed.',
     providers_oauth_config_yaml_hint: 'Token configured via config.yaml. To update, edit the providers section in your config.yaml or run hermes auth.',
@@ -7504,16 +7638,16 @@ const LOCALES = {
     provider_category_specialized: 'Especializados',
     onboarding_api_key_label: 'API key',
     onboarding_api_key_placeholder: 'Déjala en blanco para conservar una key ya guardada',
-    onboarding_api_key_label_optional: 'API key (optional)', // TODO: translate
-    onboarding_api_key_placeholder_optional: 'Leave blank for keyless servers', // TODO: translate
-    onboarding_api_key_help_keyless: 'Most LM Studio / Ollama / vLLM installs run keyless — leave this blank if your server doesn\'t require authentication. Use the Test connection button to verify.', // TODO: translate
-    oauth_login_codex: 'Login with Codex (ChatGPT)', // TODO: translate
-    oauth_codex_step1: 'Step 1: Visit this URL and enter the code', // TODO: translate
-    oauth_codex_step2: 'Step 2: Enter this code on the page', // TODO: translate
-    oauth_codex_polling: 'Waiting for authorization...', // TODO: translate
-    oauth_codex_success: 'Codex OAuth login successful!', // TODO: translate
-    oauth_codex_error: 'OAuth login failed', // TODO: translate
-    oauth_codex_expired: 'Code expired, please try again', // TODO: translate
+    onboarding_api_key_label_optional: 'Clave de API (opcional)',
+    onboarding_api_key_placeholder_optional: 'Déjalo en blanco para servidores sin clave',
+    onboarding_api_key_help_keyless: 'La mayoría de las instalaciones de LM Studio / Ollama / vLLM funcionan sin clave: deja esto en blanco si tu servidor no requiere autenticación. Usa el botón Probar conexión para verificar.',
+    oauth_login_codex: 'Iniciar sesión con Codex (ChatGPT)',
+    oauth_codex_step1: 'Paso 1: Visita esta URL e introduce el código',
+    oauth_codex_step2: 'Paso 2: Introduce este código en la página',
+    oauth_codex_polling: 'Esperando la autorización...',
+    oauth_codex_success: '¡Inicio de sesión con Codex OAuth correcto!',
+    oauth_codex_error: 'Error al iniciar sesión con OAuth',
+    oauth_codex_expired: 'El código ha caducado, inténtalo de nuevo',
     onboarding_api_key_help_prefix: 'Se guarda como secreto en tu archivo .env de Hermes usando',
     onboarding_base_url_label: 'Base URL',
     onboarding_base_url_placeholder: 'https://tu-endpoint.example/v1',
@@ -7539,19 +7673,19 @@ const LOCALES = {
     onboarding_error_choose_model: 'Elige un modelo antes de continuar.',
     onboarding_error_provider_required: 'Elige un modo de configuración antes de continuar.',
     onboarding_error_base_url_required: 'La base URL es obligatoria para endpoints personalizados.',
-    onboarding_probe_test_button: 'Test connection', // TODO: translate
-    onboarding_probe_probing: 'Testing connection…', // TODO: translate
-    onboarding_probe_ok: 'Connected. {n} model(s) available.', // TODO: translate
-    onboarding_probe_error_generic: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_probe_error_invalid_url: 'Base URL must start with http:// or https://.', // TODO: translate
-    onboarding_probe_error_dns: 'Could not resolve the host. Check the URL or use the host\'s IP address.', // TODO: translate
-    onboarding_probe_error_connect_refused: 'Connection refused — the server may not be running on that address. From inside Docker, try the host IP instead of localhost.', // TODO: translate
-    onboarding_probe_error_timeout: 'The endpoint did not respond in time. Check that the server is running and the URL is correct.', // TODO: translate
-    onboarding_probe_error_http_4xx: 'The endpoint returned a client error. Check authentication and the URL path (typically ends in /v1).', // TODO: translate
-    onboarding_probe_error_http_5xx: 'The endpoint returned a server error. Check the LM Studio / Ollama server logs.', // TODO: translate
-    onboarding_probe_error_parse: 'The endpoint did not return a model list in the expected shape. Verify the URL points to the OpenAI-compatible API root.', // TODO: translate
-    onboarding_probe_error_unreachable: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_error_probe_failed: 'Could not validate the configured base URL.', // TODO: translate
+    onboarding_probe_test_button: 'Probar conexión',
+    onboarding_probe_probing: 'Probando la conexión…',
+    onboarding_probe_ok: 'Conectado. {n} modelo(s) disponible(s).',
+    onboarding_probe_error_generic: 'No se pudo acceder a la URL base configurada.',
+    onboarding_probe_error_invalid_url: 'La URL base debe empezar por http:// o https://.',
+    onboarding_probe_error_dns: 'No se pudo resolver el host. Comprueba la URL o usa la dirección IP del host.',
+    onboarding_probe_error_connect_refused: 'Conexión rechazada: es posible que el servidor no se esté ejecutando en esa dirección. Dentro de Docker, prueba con la IP del host en lugar de localhost.',
+    onboarding_probe_error_timeout: 'El punto de conexión no respondió a tiempo. Comprueba que el servidor se esté ejecutando y que la URL sea correcta.',
+    onboarding_probe_error_http_4xx: 'El punto de conexión devolvió un error de cliente. Comprueba la autenticación y la ruta de la URL (normalmente termina en /v1).',
+    onboarding_probe_error_http_5xx: 'El punto de conexión devolvió un error de servidor. Revisa los registros del servidor de LM Studio / Ollama.',
+    onboarding_probe_error_parse: 'El punto de conexión no devolvió una lista de modelos con el formato esperado. Verifica que la URL apunte a la raíz de la API compatible con OpenAI.',
+    onboarding_probe_error_unreachable: 'No se pudo acceder a la URL base configurada.',
+    onboarding_error_probe_failed: 'No se pudo validar la URL base configurada.',
     onboarding_error_workspace_required: 'El espacio de trabajo es obligatorio.',
     onboarding_error_model_required: 'El modelo es obligatorio.',
     onboarding_complete: 'Onboarding completado',
@@ -7768,6 +7902,30 @@ const LOCALES = {
     cron_name_label: 'Nombre',
     cron_name_placeholder: 'Opcional',
     cron_schedule_label: 'Programación',
+    cron_schedule_preset_label: 'Preajuste',
+    cron_schedule_preset_hourly: 'Cada hora',
+    cron_schedule_preset_daily: 'Diario',
+    cron_schedule_preset_weekdays: 'Días laborables',
+    cron_schedule_preset_weekly: 'Semanal',
+    cron_schedule_preset_monthly: 'Mensual',
+    cron_schedule_preset_custom: 'Personalizado',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Hora',
+    cron_schedule_minute_label: 'Minuto',
+    cron_schedule_weekday_label: 'Día de la semana (0-6, dom-sáb)',
+    cron_schedule_month_day_label: 'Día',
+    cron_schedule_time_hint: 'La hora es la del servidor; cron se ejecuta del lado del servidor.',
     cron_schedule_hint: "Usa 'every 1h' o una expresión cron para trabajos recurrentes. Duraciones como '30m' se ejecutan una sola vez.",
     cron_schedule_once_warning: "Las duraciones como '30m' se ejecutan una vez y se eliminan después de correr. Usa 'every 30m' para mantener un trabajo recurrente.",
     cron_prompt_label: 'Prompt',
@@ -7830,6 +7988,8 @@ const LOCALES = {
     session_worktree_remove_ahead_warning: (ahead) => `${ahead} commit(s) no enviados se perderán.`,
     session_duplicate: 'Duplicate conversation',
     session_duplicate_desc: 'Create a copy with the same workspace and model',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicate_failed: 'Duplicate failed: ',
     session_stop_response: 'Stop response',
     session_stop_response_desc: 'Cancel the running response for this conversation',
@@ -7893,8 +8053,8 @@ const LOCALES = {
     settings_label_auto_scroll_follow: 'Seguir automáticamente el contenido nuevo',
     settings_desc_auto_scroll_follow: 'Si está activado, la vista se desplaza hacia abajo a medida que llegan nuevos tokens. Si está desactivado, controlas tú la posición de desplazamiento.',
     settings_label_render_user_markdown: 'Render markdown in user messages',
-    settings_label_show_titlebar_profile: 'Show profile switcher in titlebar', // TODO: translate
-    settings_desc_show_titlebar_profile: 'When enabled, a profile switcher button appears in the top-left app titlebar so you can change profiles from any tab. Off by default; the composer footer always has a profile switcher regardless of this setting.', // TODO: translate
+    settings_label_show_titlebar_profile: 'Mostrar el selector de perfiles en la barra de título',
+    settings_desc_show_titlebar_profile: 'Cuando está activado, aparece un botón de cambio de perfil en la barra de título de la aplicación, en la esquina superior izquierda, para que puedas cambiar de perfil desde cualquier pestaña. Desactivado de forma predeterminada; el pie del compositor siempre tiene un selector de perfiles independientemente de este ajuste.',
     settings_desc_render_user_markdown: 'When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.',
     settings_label_large_text_paste_as_attachment: 'Attach large pasted text as file',
     settings_desc_large_text_paste_as_attachment: 'When enabled, long pasted text becomes a .md attachment instead of filling the composer.',
@@ -7979,19 +8139,19 @@ const LOCALES = {
     ext_gallery_install_followup: 'Extensión instalada. Consulta la tarjeta para ver los próximos pasos.',
     ext_gallery_install_ok: 'Extension installed successfully.',
     ext_gallery_uninstall_ok: 'Extension uninstalled.',
-    settings_plugins_title: 'Plugins',  // TODO: translate
+    settings_plugins_title: 'Plugins',
     plugins_enable_toggle: 'Activar',
-    settings_plugins_meta: 'View installed Hermes plugins and the lifecycle hooks they register. This panel is read-only.',  // TODO: translate
-    settings_plugins_empty: 'No Hermes plugins are currently visible. Install or enable plugins from the Hermes CLI/config to see them here.',  // TODO: translate
-    plugins_unnamed: 'Unnamed plugin',  // TODO: translate
-    plugins_no_description: 'No description provided.',  // TODO: translate
-    plugins_no_hooks: 'No registered lifecycle hooks',  // TODO: translate
-    plugins_registered_hooks: 'Registered hooks',  // TODO: translate
-    plugins_enabled: 'Enabled',  // TODO: translate
-    plugins_disabled: 'Disabled',  // TODO: translate
-    plugins_active_provider: 'Active (provider)',  // TODO: translate
-    plugins_provider_no_hooks: 'Provider plugin — no agent-visibility hooks',  // TODO: translate
-    plugins_load_failed: 'Failed to load plugins: ',  // TODO: translate
+    settings_plugins_meta: 'Consulta los plugins de Hermes instalados y los hooks de ciclo de vida que registran. Este panel es de solo lectura.',
+    settings_plugins_empty: 'Actualmente no hay plugins de Hermes visibles. Instala o activa plugins desde la CLI/configuración de Hermes para verlos aquí.',
+    plugins_unnamed: 'Plugin sin nombre',
+    plugins_no_description: 'No se proporcionó ninguna descripción.',
+    plugins_no_hooks: 'No hay hooks de ciclo de vida registrados',
+    plugins_registered_hooks: 'Hooks registrados',
+    plugins_enabled: 'Activado',
+    plugins_disabled: 'Desactivado',
+    plugins_active_provider: 'Activo (proveedor)',
+    plugins_provider_no_hooks: 'Plugin de proveedor — sin hooks de visibilidad para el agente',
+    plugins_load_failed: 'Error al cargar los plugins: ',
     settings_tab_system: 'System',
     settings_tab_help: 'Help',
     settings_help_meta: 'Resources and support for Hermes WebUI.',
@@ -8075,36 +8235,36 @@ const LOCALES = {
     settings_label_tts_auto_read: 'Leer respuestas automáticamente',
     settings_desc_tts_auto_read: 'Leer en voz alta las respuestas del asistente automáticamente',
     // Composer voice-mode pref (#1488)
-    settings_label_voice_mode: 'Hands-free voice mode button',  // TODO: translate
+    settings_label_voice_mode: 'Botón de modo de voz manos libres',
     settings_desc_voice_mode: 'Show the voice-mode button (audio waveform) next to the dictation mic. Lets you speak naturally — Hermes auto-sends after a pause and reads replies aloud. Requires a browser that supports both speech recognition and TTS.',
     settings_label_raw_audio: 'Send raw audio instead of transcribing',
     settings_desc_raw_audio: 'Record and send the original audio file to the agent instead of converting it to text first. The agent can then transcribe it or process the raw audio (emotion, background noise, custom STT). Like Telegram\'s voice message behavior.',
     voice_send_raw: 'Send raw audio',
-    voice_raw_attached: 'Audio attached. Press Send or type more.',  // TODO: translate
+    voice_raw_attached: 'Audio adjuntado. Pulsa Enviar o escribe más.',
     settings_label_tts_voice: 'Voz',
     settings_desc_tts_voice: 'Seleccionar voz para síntesis de voz',
     settings_label_tts_rate: 'Velocidad de voz',
     settings_label_tts_pitch: 'Tono de voz',
     settings_label_tts_engine: 'Motor TTS',
     settings_desc_tts_engine: 'Elija el motor de voz. Edge TTS utiliza voces neuronales de Microsoft a través del servidor.',
-    checkpoint_date: 'Date',  // TODO: translate
-    checkpoint_diff_files_changed: (n) => `${n} file${n === 1 ? '' : 's'} changed`,  // TODO: translate
-    checkpoint_diff_no_changes: 'No differences found between this checkpoint and the current workspace.',  // TODO: translate
-    checkpoint_diff_title: 'Changes in checkpoint',  // TODO: translate
-    checkpoint_empty: 'No checkpoints found for this workspace.',  // TODO: translate
-    checkpoint_error: 'Failed to load checkpoints',  // TODO: translate
-    checkpoint_files: 'Files',  // TODO: translate
-    checkpoint_loading: 'Loading checkpoints…',  // TODO: translate
-    checkpoint_message: 'Message',  // TODO: translate
-    checkpoint_restore: 'Restore',  // TODO: translate
-    checkpoint_restore_confirm_message: (ckpt) => `Restore workspace to checkpoint "${ckpt}"? This will overwrite files with the saved versions. Files added after this checkpoint will not be deleted.`,  // TODO: translate
-    checkpoint_restore_confirm_title: 'Restore checkpoint?',  // TODO: translate
-    checkpoint_restored: 'Checkpoint restored',  // TODO: translate
-    checkpoint_title: 'Checkpoints',  // TODO: translate
-    checkpoint_view_diff: 'View diff',  // TODO: translate
-    insights_activity_by_day: 'Activity by Day',  // TODO: translate
-    insights_activity_by_hour: 'Activity by Hour',  // TODO: translate
-    insights_cost: 'Estimated Cost',  // TODO: translate
+    checkpoint_date: 'Fecha',
+    checkpoint_diff_files_changed: (n) => `${n} archivo${n === 1 ? '' : 's'} cambiado${n === 1 ? '' : 's'}`,
+    checkpoint_diff_no_changes: 'No se encontraron diferencias entre este punto de control y el espacio de trabajo actual.',
+    checkpoint_diff_title: 'Cambios en el punto de control',
+    checkpoint_empty: 'No se encontraron puntos de control para este espacio de trabajo.',
+    checkpoint_error: 'Error al cargar los puntos de control',
+    checkpoint_files: 'Archivos',
+    checkpoint_loading: 'Cargando puntos de control…',
+    checkpoint_message: 'Mensaje',
+    checkpoint_restore: 'Restaurar',
+    checkpoint_restore_confirm_message: (ckpt) => `¿Restaurar el espacio de trabajo al punto de control "${ckpt}"? Esto sobrescribirá los archivos con las versiones guardadas. Los archivos añadidos después de este punto de control no se eliminarán.`,
+    checkpoint_restore_confirm_title: '¿Restaurar el punto de control?',
+    checkpoint_restored: 'Punto de control restaurado',
+    checkpoint_title: 'Puntos de control',
+    checkpoint_view_diff: 'Ver diff',
+    insights_activity_by_day: 'Actividad por día',
+    insights_activity_by_hour: 'Actividad por hora',
+    insights_cost: 'Coste estimado',
     insights_daily_tokens: 'Daily Tokens',
     insights_model_name: 'Model',
     insights_model_sessions: 'Sessions',
@@ -8118,45 +8278,45 @@ const LOCALES = {
     insights_model_health_replacement: 'Replacement guide',
     insights_model_health_cost_per_m: 'Cost / 1M',
     insights_no_usage_data: 'No usage data yet',
-    insights_footer: 'Showing data from the last {days} days',  // TODO: translate
-    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
-    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
-    insights_skill_usage_total: 'Total invocations',  // TODO: translate
-    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
-    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
-    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
-    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
-    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
-    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
-    insights_skill_usage_col_views: 'Views',  // TODO: translate
-    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
-    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
-    insights_input_tokens: 'Input',  // TODO: translate
-    insights_messages: 'Messages',  // TODO: translate
-    insights_models: 'Models',  // TODO: translate
-    insights_no_cost: 'N/A',  // TODO: translate
-    insights_output_tokens: 'Output',  // TODO: translate
-    insights_peak_hour: 'Peak: {hour}',  // TODO: translate
-    insights_sessions: 'Sessions',  // TODO: translate
-    insights_title: 'Usage Analytics',  // TODO: translate
-    insights_token_breakdown: 'Token Breakdown',  // TODO: translate
-    insights_tokens: 'Tokens',  // TODO: translate
-    insights_total: 'Total',  // TODO: translate
-    settings_desc_api_redact: 'Self-hosted users can disable for transparency (not recommended for shared instances).',  // TODO: translate
-    settings_label_api_redact: 'Redact sensitive data in API responses',  // TODO: translate
-    voice_error: 'Voice not supported in this browser',  // TODO: translate
-    voice_listening: 'Listening…',  // TODO: translate
-    voice_mode_active: 'Voice mode on',  // TODO: translate
-    voice_mode_off: 'Voice mode off',  // TODO: translate
-    voice_speaking: 'Speaking…',  // TODO: translate
-    voice_thinking: 'Thinking…',  // TODO: translate
+    insights_footer: 'Mostrando datos de los últimos {days} días',
+    insights_skill_usage_title: 'Uso de skills',
+    insights_skill_usage_sub: 'Frecuencia de invocación de herramientas',
+    insights_skill_usage_total: 'Invocaciones totales',
+    insights_skill_usage_skills_used: 'Skills usados',
+    insights_skill_usage_no_data: 'Aún no hay datos de uso de skills',
+    insights_skill_usage_no_data_hint: 'Los skills aparecerán aquí una vez que se usen en las conversaciones.',
+    insights_skill_usage_footer: 'Recuentos de ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'Skill',
+    insights_skill_usage_col_uses: 'Usos',
+    insights_skill_usage_col_views: 'Vistas',
+    insights_skill_usage_col_share: 'Uso %',
+    insights_skill_usage_col_patches: 'Parches',
+    insights_input_tokens: 'Entrada',
+    insights_messages: 'Mensajes',
+    insights_models: 'Modelos',
+    insights_no_cost: 'N/D',
+    insights_output_tokens: 'Salida',
+    insights_peak_hour: 'Pico: {hour}',
+    insights_sessions: 'Sesiones',
+    insights_title: 'Analíticas de uso',
+    insights_token_breakdown: 'Desglose de tokens',
+    insights_tokens: 'Tokens',
+    insights_total: 'Total',
+    settings_desc_api_redact: 'Los usuarios autoalojados pueden desactivarlo para mayor transparencia (no recomendado para instancias compartidas).',
+    settings_label_api_redact: 'Ocultar datos sensibles en las respuestas de la API',
+    voice_error: 'Voz no compatible con este navegador',
+    voice_listening: 'Escuchando…',
+    voice_mode_active: 'Modo de voz activado',
+    voice_mode_off: 'Modo de voz desactivado',
+    voice_speaking: 'Hablando…',
+    voice_thinking: 'Pensando…',
     // Composer voice buttons (#1488)
-    voice_dictate: 'Dictate',  // TODO: translate
+    voice_dictate: 'Dictar',
     voice_dictate_active: 'Stop dictation',
-    voice_recording_active: 'Detener grabación',  // TODO: translate
-    voice_mode_toggle: 'Voice mode',  // TODO: translate
-    voice_mode_toggle_active: 'Exit voice mode',  // TODO: translate
-    subagent_children: 'Subagent sessions',  // TODO: translate
+    voice_recording_active: 'Detener grabación',
+    voice_mode_toggle: 'Modo de voz',
+    voice_mode_toggle_active: 'Salir del modo de voz',
+    subagent_children: 'Sesiones de subagentes',
     outline_title: 'Esquema',
     outline_empty: 'Aún no hay preguntas.',
     outline_loading: 'Cargando…',
@@ -8181,7 +8341,7 @@ const LOCALES = {
     cancelling: 'Wird abgebrochen\u2026',
     cancel_failed: 'Abbrechen fehlgeschlagen: ',
     mic_denied: 'Mikrofonzugriff verweigert. Überprüfen Sie die Browserberechtigungen.',
-    mic_insecure_origin: 'Voice input needs a secure connection. Open Hermes over HTTPS or from localhost to use the microphone.', // TODO: translate
+    mic_insecure_origin: 'Für die Spracheingabe ist eine sichere Verbindung erforderlich. Öffne Hermes über HTTPS oder von localhost, um das Mikrofon zu verwenden.',
     mic_no_speech: 'Keine Sprache erkannt. Versuchen Sie es erneut.',
     mic_network: 'Spracherkennung nicht verfügbar.',
     mic_error: 'Spracheingabefehler: ',
@@ -8385,7 +8545,7 @@ const LOCALES = {
     compress_failed_label: 'Komprimierung fehlgeschlagen',
     focus_label: 'Thema',
     token_usage_on: 'Token-Verbrauch an',
-    usage_personality_none: 'none', // TODO: translate
+    usage_personality_none: 'keine',
     token_usage_off: 'Token-Verbrauch aus',
     usage_cache_hit_detail: 'Cache: {0}% Treffer ({1} gelesen / {2} geschrieben)',
     usage_cached_percent: '{0}% im Cache',
@@ -8434,17 +8594,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Unterbrochen \u2014 neue Nachricht wird gesendet',
-    settings_label_busy_input_mode: 'Eingabemodus bei Besch\u00e4ftigung',
-    settings_desc_busy_input_mode: 'Steuert, was passiert, wenn Sie w\u00e4hrend der Agentenaktivit\u00e4t eine Nachricht senden. Warteschlange wartet; Unterbrechen bricht ab und startet neu; Steer f\u00fcgt eine Korrektur ein ohne zu unterbrechen.',
+    settings_label_default_message_mode: 'Standard-Nachrichtenmodus',
+    settings_desc_default_message_mode: 'Steuert, was passiert, wenn Sie w\u00e4hrend der Agentenaktivit\u00e4t eine Nachricht senden. Warteschlange wartet; Unterbrechen bricht ab und startet neu; Steer f\u00fcgt eine Korrektur ein ohne zu unterbrechen. Wenn Steer nicht verf\u00fcgbar ist, wird der Entwurf wiederhergestellt, damit Sie die n\u00e4chste Aktion w\u00e4hlen k\u00f6nnen.',
     settings_label_fade_text_effect: 'Text-Fade-Effekt',
     settings_desc_fade_text_effect: 'Blendet neu gestreamte Wörter während der Antwort des Assistenten sanft ein. Ähnlich wie OpenWebUI; für maximale Leistung standardmäßig deaktiviert.',
     settings_label_max_tokens: 'Maximale Ausgabetokens',
     settings_desc_max_tokens: 'Begrenzt die Länge neuer Streaming-Antworten. Leer lassen, um den Fallback-Wert des aktiven Profils zu verwenden.',
     settings_placeholder_max_tokens_none: 'Keine Überschreibung',
     settings_placeholder_max_tokens_fallback: 'Keine Überschreibung (Fallback: {0})',
-    settings_busy_input_mode_queue: 'In Warteschlange einreihen',
-    settings_busy_input_mode_interrupt: 'Aktuellen Durchgang unterbrechen',
-    settings_busy_input_mode_steer: 'Steer (Korrektur ohne Unterbrechung)',
+    settings_default_message_mode_queue: 'In Warteschlange einreihen',
+    settings_default_message_mode_interrupt: 'Aktuellen Durchgang unterbrechen',
+    settings_default_message_mode_steer: 'Steer (Korrektur ohne Unterbrechung)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -8519,9 +8679,10 @@ const LOCALES = {
      reveal_in_finder: 'Im Dateimanager anzeigen',
      reveal_failed: 'Anzeige fehlgeschlagen: ',
      copy_file_path: 'Dateipfad kopieren',
+     copy_relative_path: 'Relativen Pfad kopieren',
      open_in_vscode: 'In VS Code öffnen',
      open_in_vscode_failed: 'In VS Code öffnen fehlgeschlagen: ',
-     download_folder: 'Download Folder', // TODO: translate
+     download_folder: 'Download-Ordner',
     path_copied: 'Dateipfad in die Zwischenablage kopiert',
     path_copy_failed: 'Pfad konnte nicht kopiert werden: ',
     session_rename: 'Unterhaltung umbenennen',
@@ -8664,6 +8825,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Seitenleistendichte',
     cmd_reasoning: 'Toggle thinking visibility (show/hide), set effort level, or check current status',
     settings_label_external_sessions: 'Externe Sitzungen anzeigen',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: 'Vorherige Messaging-Sitzungen anzeigen',
@@ -8836,21 +8998,21 @@ const LOCALES = {
     dashboard_loopback_warning: 'Das Dashboard ist auf dem Server nur per Loopback erreichbar. Öffne es direkt auf dem Server oder starte es mit --host 0.0.0.0 neu (unsicher).',
     tab_logs: 'Logs',
     tab_settings: 'Einstellungen',
-    close_menu: 'Close menu', // TODO: translate
+    close_menu: 'Menü schließen',
 
-    logs_title: 'Logs',  // TODO: translate
-    logs_file: 'File',  // TODO: translate
-    logs_tail: 'Tail',  // TODO: translate
-    logs_auto_refresh: 'Auto-refresh (5s)',  // TODO: translate
-    logs_wrap: 'Wrap lines',  // TODO: translate
-    logs_copy_all: 'Copy all',  // TODO: translate
-    logs_empty: 'No log lines yet.',  // TODO: translate
-    logs_loading: 'Loading logs…',  // TODO: translate
-    logs_load_failed: 'Logs failed to load',  // TODO: translate
-    logs_status_idle: 'Choose a log file to view recent lines.',  // TODO: translate
-    logs_no_mtime: 'not written yet',  // TODO: translate
-    logs_truncated_hint: 'Showing the tail of a large log file; older bytes were skipped to keep memory bounded.',  // TODO: translate
-    logs_copied: 'Logs copied',  // TODO: translate
+    logs_title: 'Protokolle',
+    logs_file: 'Datei',
+    logs_tail: 'Ende',
+    logs_auto_refresh: 'Automatisch aktualisieren (5 s)',
+    logs_wrap: 'Zeilen umbrechen',
+    logs_copy_all: 'Alles kopieren',
+    logs_empty: 'Noch keine Protokollzeilen.',
+    logs_loading: 'Protokolle werden geladen…',
+    logs_load_failed: 'Protokolle konnten nicht geladen werden',
+    logs_status_idle: 'Wähle eine Protokolldatei, um die letzten Zeilen anzuzeigen.',
+    logs_no_mtime: 'noch nicht geschrieben',
+    logs_truncated_hint: 'Es wird das Ende einer großen Protokolldatei angezeigt; ältere Bytes wurden übersprungen, um den Speicherverbrauch zu begrenzen.',
+    logs_copied: 'Protokolle kopiert',
     logs_severity: 'Schweregrad',
     logs_severity_all: 'Alle',
     logs_severity_errors: 'Fehler',
@@ -8883,6 +9045,8 @@ const LOCALES = {
     import: 'Importieren',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Gesamte Sitzung als JSON exportieren',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Als eigenständige HTML-Seite exportieren',
     import_session_json_tooltip: 'Sitzung aus JSON importieren',
     clear_conversation_btn_tooltip: 'Alle Nachrichten in dieser Konversation löschen',
     // Settings detail
@@ -8909,6 +9073,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Alle 20 Antworten',
     settings_desc_auto_title_refresh: 'Generiert den Sitzungstitel automatisch anhand des letzten Austauschs neu und hält ihn so aktuell, während sich das Gespräch entwickelt. Erfordert ein konfiguriertes LLM-Titelgenerierungsmodell.',
     settings_desc_external_sessions: 'Zeigt Gespräche von CLI, Telegram, Discord, Slack und anderen Kanälen in der Sitzungsliste an. Klicken zum Importieren und Fortsetzen.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: 'Zeigt ältere Discord-, Telegram-, Slack- und Weixin-Sitzungen, die durch Reset oder Compression ersetzt wurden.',
@@ -8940,6 +9105,7 @@ const LOCALES = {
     providers_status_not_configured: 'No API key',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API key',
+    providers_status_model: 'Model',
     providers_status_not_configured_label: 'Not configured',
     providers_oauth_hint: 'Authenticated via OAuth. No API key needed.',
     providers_oauth_config_yaml_hint: 'Token configured via config.yaml. To update, edit the providers section in your config.yaml or run hermes auth.',
@@ -9028,6 +9194,30 @@ const LOCALES = {
     cron_duplicated: 'Aufgabe dupliziert (pausiert)',
     cron_name_placeholder: 'Optional',
     cron_schedule_label: 'Zeitplan',
+    cron_schedule_preset_label: 'Voreinstellung',
+    cron_schedule_preset_hourly: 'Stündlich',
+    cron_schedule_preset_daily: 'Täglich',
+    cron_schedule_preset_weekdays: 'Wochentage',
+    cron_schedule_preset_weekly: 'Wöchentlich',
+    cron_schedule_preset_monthly: 'Monatlich',
+    cron_schedule_preset_custom: 'Benutzerdefiniert',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Stunde',
+    cron_schedule_minute_label: 'Minute',
+    cron_schedule_weekday_label: 'Wochentag (0-6, So-Sa)',
+    cron_schedule_month_day_label: 'Tag',
+    cron_schedule_time_hint: 'Die Zeit ist Serverzeit; cron läuft serverseitig.',
     cron_schedule_hint: "Für wiederkehrende Aufgaben 'every 1h' oder einen Cron-Ausdruck verwenden. Reine Dauern wie '30m' laufen einmal.",
     cron_schedule_once_warning: "Dauerangaben wie '30m' laufen einmal und werden nach der Ausführung entfernt. Verwende 'every 30m' für eine wiederkehrende Aufgabe.",
     cron_prompt_label: 'Prompt',
@@ -9090,6 +9280,8 @@ const LOCALES = {
     session_worktree_remove_ahead_warning: (ahead) => `${ahead} nicht gepushte Commit(s) gehen verloren.`,
     session_duplicate: 'Duplicate conversation',
     session_duplicate_desc: 'Create a copy with the same workspace and model',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicate_failed: 'Duplicate failed: ',
     session_stop_response: 'Stop response',
     session_stop_response_desc: 'Cancel the running response for this conversation',
@@ -9153,8 +9345,8 @@ const LOCALES = {
     settings_label_auto_scroll_follow: 'Neuen Inhalten automatisch folgen',
     settings_desc_auto_scroll_follow: 'Wenn aktiviert, scrollt die Ansicht nach unten, während neue Tokens eintreffen. Wenn deaktiviert, steuerst du die Scrollposition selbst.',
     settings_label_render_user_markdown: 'Render markdown in user messages',
-    settings_label_show_titlebar_profile: 'Show profile switcher in titlebar', // TODO: translate
-    settings_desc_show_titlebar_profile: 'When enabled, a profile switcher button appears in the top-left app titlebar so you can change profiles from any tab. Off by default; the composer footer always has a profile switcher regardless of this setting.', // TODO: translate
+    settings_label_show_titlebar_profile: 'Profilwechsler in der Titelleiste anzeigen',
+    settings_desc_show_titlebar_profile: 'Wenn aktiviert, erscheint in der Titelleiste der App oben links eine Schaltfläche zum Profilwechsel, sodass du das Profil von jedem Tab aus wechseln kannst. Standardmäßig deaktiviert; die Fußzeile des Editors hat unabhängig von dieser Einstellung immer einen Profilwechsler.',
     settings_desc_render_user_markdown: 'When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.',
     settings_label_large_text_paste_as_attachment: 'Attach large pasted text as file',
     settings_desc_large_text_paste_as_attachment: 'When enabled, long pasted text becomes a .md attachment instead of filling the composer.',
@@ -9242,19 +9434,19 @@ const LOCALES = {
     ext_gallery_install_followup: 'Erweiterung installiert. Die nächsten Schritte stehen auf der Karte.',
     ext_gallery_install_ok: 'Extension installed successfully.',
     ext_gallery_uninstall_ok: 'Extension uninstalled.',
-    settings_plugins_title: 'Plugins',  // TODO: translate
+    settings_plugins_title: 'Plugins',
     plugins_enable_toggle: 'Aktivieren',
-    settings_plugins_meta: 'View installed Hermes plugins and the lifecycle hooks they register. This panel is read-only.',  // TODO: translate
-    settings_plugins_empty: 'No Hermes plugins are currently visible. Install or enable plugins from the Hermes CLI/config to see them here.',  // TODO: translate
-    plugins_unnamed: 'Unnamed plugin',  // TODO: translate
-    plugins_no_description: 'No description provided.',  // TODO: translate
-    plugins_no_hooks: 'No registered lifecycle hooks',  // TODO: translate
-    plugins_registered_hooks: 'Registered hooks',  // TODO: translate
-    plugins_enabled: 'Enabled',  // TODO: translate
-    plugins_disabled: 'Disabled',  // TODO: translate
-    plugins_active_provider: 'Active (provider)',  // TODO: translate
-    plugins_provider_no_hooks: 'Provider plugin — no agent-visibility hooks',  // TODO: translate
-    plugins_load_failed: 'Failed to load plugins: ',  // TODO: translate
+    settings_plugins_meta: 'Zeigt installierte Hermes-Plugins und die von ihnen registrierten Lifecycle-Hooks an. Dieses Panel ist schreibgeschützt.',
+    settings_plugins_empty: 'Derzeit sind keine Hermes-Plugins sichtbar. Installiere oder aktiviere Plugins über die Hermes-CLI/-Konfiguration, um sie hier zu sehen.',
+    plugins_unnamed: 'Unbenanntes Plugin',
+    plugins_no_description: 'Keine Beschreibung angegeben.',
+    plugins_no_hooks: 'Keine registrierten Lifecycle-Hooks',
+    plugins_registered_hooks: 'Registrierte Hooks',
+    plugins_enabled: 'Aktiviert',
+    plugins_disabled: 'Deaktiviert',
+    plugins_active_provider: 'Aktiv (Anbieter)',
+    plugins_provider_no_hooks: 'Anbieter-Plugin — keine Hooks für die Agent-Sichtbarkeit',
+    plugins_load_failed: 'Plugins konnten nicht geladen werden: ',
     settings_tab_system: 'System',
     settings_tab_help: 'Help',
     settings_help_meta: 'Resources and support for Hermes WebUI.',
@@ -9314,21 +9506,21 @@ const LOCALES = {
     workspace_worktree_created: 'Worktree-Unterhaltung erstellt',
     workspace_worktree_failed: 'Worktree-Erstellung fehlgeschlagen: ',
     session_worktree_badge: 'Worktree',
-    session_toolsets: 'Session Toolsets', // TODO: translate
-    session_toolsets_desc: 'Use active profile defaults or choose a custom toolset list for this session', // TODO: translate
-    session_toolsets_global: 'Active profile defaults', // TODO: translate
-    session_toolsets_profile_defaults: 'Active profile defaults', // TODO: translate
-    session_toolsets_custom: 'Custom override', // TODO: translate
-    session_toolsets_use_profile_defaults: 'Use active profile defaults', // TODO: translate
-    session_toolsets_configured_servers: 'Configured MCP servers', // TODO: translate
-    session_toolsets_loading_servers: 'Loading configured servers...', // TODO: translate
-    session_toolsets_no_configured_servers: 'No configured MCP servers', // TODO: translate
-    session_toolsets_placeholder: 'tool1, tool2, \u2026', // TODO: translate
-    session_toolsets_apply: 'Apply', // TODO: translate
-    session_toolsets_clear: 'Use defaults', // TODO: translate
-    session_toolsets_applied: 'Toolsets updated', // TODO: translate
-    session_toolsets_cleared: 'Using active profile defaults', // TODO: translate
-    session_toolsets_failed: 'Failed to update toolsets: ', // TODO: translate
+    session_toolsets: 'Sitzungs-Toolsets',
+    session_toolsets_desc: 'Verwende die Standardwerte des aktiven Profils oder wähle eine benutzerdefinierte Toolset-Liste für diese Sitzung',
+    session_toolsets_global: 'Standardwerte des aktiven Profils',
+    session_toolsets_profile_defaults: 'Standardwerte des aktiven Profils',
+    session_toolsets_custom: 'Benutzerdefinierte Überschreibung',
+    session_toolsets_use_profile_defaults: 'Standardwerte des aktiven Profils verwenden',
+    session_toolsets_configured_servers: 'Konfigurierte MCP-Server',
+    session_toolsets_loading_servers: 'Konfigurierte Server werden geladen...',
+    session_toolsets_no_configured_servers: 'Keine konfigurierten MCP-Server',
+    session_toolsets_placeholder: 'tool1, tool2, \u2026',
+    session_toolsets_apply: 'Anwenden',
+    session_toolsets_clear: 'Standardwerte verwenden',
+    session_toolsets_applied: 'Toolsets aktualisiert',
+    session_toolsets_cleared: 'Standardwerte des aktiven Profils werden verwendet',
+    session_toolsets_failed: 'Toolsets konnten nicht aktualisiert werden: ',
     session_time_unknown: 'Unbekannt',
     session_time_minutes_ago: (n) => `Vor ${n} Minuten`,
     session_time_hours_ago: (n) => `Vor ${n} Stunden`,
@@ -9392,16 +9584,16 @@ const LOCALES = {
     provider_category_specialized: 'Spezialisiert',
     onboarding_api_key_label: 'API-Schlüssel',
     onboarding_api_key_placeholder: 'sk-…',
-    onboarding_api_key_label_optional: 'API key (optional)', // TODO: translate
-    onboarding_api_key_placeholder_optional: 'Leave blank for keyless servers', // TODO: translate
-    onboarding_api_key_help_keyless: 'Most LM Studio / Ollama / vLLM installs run keyless — leave this blank if your server doesn\'t require authentication. Use the Test connection button to verify.', // TODO: translate
-    oauth_login_codex: 'Login with Codex (ChatGPT)', // TODO: translate
-    oauth_codex_step1: 'Step 1: Visit this URL and enter the code', // TODO: translate
-    oauth_codex_step2: 'Step 2: Enter this code on the page', // TODO: translate
-    oauth_codex_polling: 'Waiting for authorization...', // TODO: translate
-    oauth_codex_success: 'Codex OAuth login successful!', // TODO: translate
-    oauth_codex_error: 'OAuth login failed', // TODO: translate
-    oauth_codex_expired: 'Code expired, please try again', // TODO: translate
+    onboarding_api_key_label_optional: 'API-Schlüssel (optional)',
+    onboarding_api_key_placeholder_optional: 'Für Server ohne Schlüssel leer lassen',
+    onboarding_api_key_help_keyless: 'Die meisten LM Studio- / Ollama- / vLLM-Installationen laufen ohne Schlüssel — lass dies leer, wenn dein Server keine Authentifizierung erfordert. Verwende die Schaltfläche „Verbindung testen“ zur Überprüfung.',
+    oauth_login_codex: 'Mit Codex (ChatGPT) anmelden',
+    oauth_codex_step1: 'Schritt 1: Rufe diese URL auf und gib den Code ein',
+    oauth_codex_step2: 'Schritt 2: Gib diesen Code auf der Seite ein',
+    oauth_codex_polling: 'Warten auf Autorisierung...',
+    oauth_codex_success: 'Codex-OAuth-Anmeldung erfolgreich!',
+    oauth_codex_error: 'OAuth-Anmeldung fehlgeschlagen',
+    oauth_codex_expired: 'Der Code ist abgelaufen, bitte versuche es erneut',
     onboarding_api_key_help_prefix: 'Gefunden unter',
     onboarding_base_url_label: 'Base URL',
     onboarding_base_url_placeholder: 'https://api.openai.com/v1',
@@ -9423,19 +9615,19 @@ const LOCALES = {
     onboarding_error_choose_model: 'Bitte wählen Sie ein Modell.',
     onboarding_error_provider_required: 'Anbieter erforderlich.',
     onboarding_error_base_url_required: 'Base URL erforderlich.',
-    onboarding_probe_test_button: 'Test connection', // TODO: translate
-    onboarding_probe_probing: 'Testing connection…', // TODO: translate
-    onboarding_probe_ok: 'Connected. {n} model(s) available.', // TODO: translate
-    onboarding_probe_error_generic: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_probe_error_invalid_url: 'Base URL must start with http:// or https://.', // TODO: translate
-    onboarding_probe_error_dns: 'Could not resolve the host. Check the URL or use the host\'s IP address.', // TODO: translate
-    onboarding_probe_error_connect_refused: 'Connection refused — the server may not be running on that address. From inside Docker, try the host IP instead of localhost.', // TODO: translate
-    onboarding_probe_error_timeout: 'The endpoint did not respond in time. Check that the server is running and the URL is correct.', // TODO: translate
-    onboarding_probe_error_http_4xx: 'The endpoint returned a client error. Check authentication and the URL path (typically ends in /v1).', // TODO: translate
-    onboarding_probe_error_http_5xx: 'The endpoint returned a server error. Check the LM Studio / Ollama server logs.', // TODO: translate
-    onboarding_probe_error_parse: 'The endpoint did not return a model list in the expected shape. Verify the URL points to the OpenAI-compatible API root.', // TODO: translate
-    onboarding_probe_error_unreachable: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_error_probe_failed: 'Could not validate the configured base URL.', // TODO: translate
+    onboarding_probe_test_button: 'Verbindung testen',
+    onboarding_probe_probing: 'Verbindung wird getestet…',
+    onboarding_probe_ok: 'Verbunden. {n} Modell(e) verfügbar.',
+    onboarding_probe_error_generic: 'Die konfigurierte Basis-URL konnte nicht erreicht werden.',
+    onboarding_probe_error_invalid_url: 'Die Basis-URL muss mit http:// oder https:// beginnen.',
+    onboarding_probe_error_dns: 'Der Host konnte nicht aufgelöst werden. Überprüfe die URL oder verwende die IP-Adresse des Hosts.',
+    onboarding_probe_error_connect_refused: 'Verbindung abgelehnt — der Server läuft möglicherweise nicht unter dieser Adresse. Verwende innerhalb von Docker die Host-IP anstelle von localhost.',
+    onboarding_probe_error_timeout: 'Der Endpunkt hat nicht rechtzeitig geantwortet. Überprüfe, ob der Server läuft und die URL korrekt ist.',
+    onboarding_probe_error_http_4xx: 'Der Endpunkt hat einen Client-Fehler zurückgegeben. Überprüfe die Authentifizierung und den URL-Pfad (endet normalerweise auf /v1).',
+    onboarding_probe_error_http_5xx: 'Der Endpunkt hat einen Serverfehler zurückgegeben. Überprüfe die Server-Protokolle von LM Studio / Ollama.',
+    onboarding_probe_error_parse: 'Der Endpunkt hat keine Modellliste in der erwarteten Form zurückgegeben. Stelle sicher, dass die URL auf den Stamm der OpenAI-kompatiblen API verweist.',
+    onboarding_probe_error_unreachable: 'Die konfigurierte Basis-URL konnte nicht erreicht werden.',
+    onboarding_error_probe_failed: 'Die konfigurierte Basis-URL konnte nicht validiert werden.',
     onboarding_error_workspace_required: 'Arbeitsbereich erforderlich.',
     onboarding_error_model_required: 'Modell erforderlich.',
     onboarding_complete: 'Einrichtung abgeschlossen!',
@@ -9668,12 +9860,12 @@ const LOCALES = {
     settings_label_tts_auto_read: 'Antworten automatisch vorlesen',
     settings_desc_tts_auto_read: 'Assistenten-Antworten automatisch vorlesen',
     // Composer voice-mode pref (#1488)
-    settings_label_voice_mode: 'Hands-free voice mode button',  // TODO: translate
+    settings_label_voice_mode: 'Freihändiger Sprachmodus-Button',
     settings_desc_voice_mode: 'Show the voice-mode button (audio waveform) next to the dictation mic. Lets you speak naturally — Hermes auto-sends after a pause and reads replies aloud. Requires a browser that supports both speech recognition and TTS.',
     settings_label_raw_audio: 'Send raw audio instead of transcribing',
     settings_desc_raw_audio: 'Record and send the original audio file to the agent instead of converting it to text first. The agent can then transcribe it or process the raw audio (emotion, background noise, custom STT). Like Telegram\'s voice message behavior.',
     voice_send_raw: 'Send raw audio',
-    voice_raw_attached: 'Audio attached. Press Send or type more.',  // TODO: translate
+    voice_raw_attached: 'Audio angehängt. Drücke „Senden“ oder gib mehr ein.',
     settings_label_tts_voice: 'Stimme',
     settings_desc_tts_voice: 'Stimme für Sprachsynthese auswählen',
     settings_label_tts_rate: 'Sprechgeschwindigkeit',
@@ -9681,24 +9873,24 @@ const LOCALES = {
     settings_label_tts_engine: 'TTS-Engine',
     settings_desc_tts_engine: 'Sprach-Engine auswählen. Edge TTS verwendet Microsoft Neural Voices über den Server.',
 
-    checkpoint_date: 'Date',  // TODO: translate
-    checkpoint_diff_files_changed: (n) => `${n} file${n === 1 ? '' : 's'} changed`,  // TODO: translate
-    checkpoint_diff_no_changes: 'No differences found between this checkpoint and the current workspace.',  // TODO: translate
-    checkpoint_diff_title: 'Changes in checkpoint',  // TODO: translate
-    checkpoint_empty: 'No checkpoints found for this workspace.',  // TODO: translate
-    checkpoint_error: 'Failed to load checkpoints',  // TODO: translate
-    checkpoint_files: 'Files',  // TODO: translate
-    checkpoint_loading: 'Loading checkpoints…',  // TODO: translate
-    checkpoint_message: 'Message',  // TODO: translate
-    checkpoint_restore: 'Restore',  // TODO: translate
-    checkpoint_restore_confirm_message: (ckpt) => `Restore workspace to checkpoint "${ckpt}"? This will overwrite files with the saved versions. Files added after this checkpoint will not be deleted.`,  // TODO: translate
-    checkpoint_restore_confirm_title: 'Restore checkpoint?',  // TODO: translate
-    checkpoint_restored: 'Checkpoint restored',  // TODO: translate
-    checkpoint_title: 'Checkpoints',  // TODO: translate
-    checkpoint_view_diff: 'View diff',  // TODO: translate
-    insights_activity_by_day: 'Activity by Day',  // TODO: translate
-    insights_activity_by_hour: 'Activity by Hour',  // TODO: translate
-    insights_cost: 'Estimated Cost',  // TODO: translate
+    checkpoint_date: 'Datum',
+    checkpoint_diff_files_changed: (n) => `${n} Datei${n === 1 ? '' : 'en'} geändert`,
+    checkpoint_diff_no_changes: 'Zwischen diesem Checkpoint und dem aktuellen Arbeitsbereich wurden keine Unterschiede gefunden.',
+    checkpoint_diff_title: 'Änderungen im Checkpoint',
+    checkpoint_empty: 'Für diesen Arbeitsbereich wurden keine Checkpoints gefunden.',
+    checkpoint_error: 'Checkpoints konnten nicht geladen werden',
+    checkpoint_files: 'Dateien',
+    checkpoint_loading: 'Checkpoints werden geladen…',
+    checkpoint_message: 'Nachricht',
+    checkpoint_restore: 'Wiederherstellen',
+    checkpoint_restore_confirm_message: (ckpt) => `Arbeitsbereich auf Checkpoint "${ckpt}" wiederherstellen? Dadurch werden Dateien mit den gespeicherten Versionen überschrieben. Nach diesem Checkpoint hinzugefügte Dateien werden nicht gelöscht.`,
+    checkpoint_restore_confirm_title: 'Checkpoint wiederherstellen?',
+    checkpoint_restored: 'Checkpoint wiederhergestellt',
+    checkpoint_title: 'Checkpoints',
+    checkpoint_view_diff: 'Diff anzeigen',
+    insights_activity_by_day: 'Aktivität nach Tag',
+    insights_activity_by_hour: 'Aktivität nach Stunde',
+    insights_cost: 'Geschätzte Kosten',
     insights_daily_tokens: 'Daily Tokens',
     insights_model_name: 'Model',
     insights_model_sessions: 'Sessions',
@@ -9712,45 +9904,45 @@ const LOCALES = {
     insights_model_health_replacement: 'Replacement guide',
     insights_model_health_cost_per_m: 'Cost / 1M',
     insights_no_usage_data: 'No usage data yet',
-    insights_footer: 'Showing data from the last {days} days',  // TODO: translate
-    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
-    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
-    insights_skill_usage_total: 'Total invocations',  // TODO: translate
-    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
-    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
-    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
-    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
-    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
-    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
-    insights_skill_usage_col_views: 'Views',  // TODO: translate
-    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
-    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
-    insights_input_tokens: 'Input',  // TODO: translate
-    insights_messages: 'Messages',  // TODO: translate
-    insights_models: 'Models',  // TODO: translate
-    insights_no_cost: 'N/A',  // TODO: translate
-    insights_output_tokens: 'Output',  // TODO: translate
-    insights_peak_hour: 'Peak: {hour}',  // TODO: translate
-    insights_sessions: 'Sessions',  // TODO: translate
-    insights_title: 'Usage Analytics',  // TODO: translate
-    insights_token_breakdown: 'Token Breakdown',  // TODO: translate
-    insights_tokens: 'Tokens',  // TODO: translate
-    insights_total: 'Total',  // TODO: translate
-    settings_desc_api_redact: 'Self-hosted users can disable for transparency (not recommended for shared instances).',  // TODO: translate
-    settings_label_api_redact: 'Redact sensitive data in API responses',  // TODO: translate
-    voice_error: 'Voice not supported in this browser',  // TODO: translate
-    voice_listening: 'Listening…',  // TODO: translate
-    voice_mode_active: 'Voice mode on',  // TODO: translate
-    voice_mode_off: 'Voice mode off',  // TODO: translate
-    voice_speaking: 'Speaking…',  // TODO: translate
-    voice_thinking: 'Thinking…',  // TODO: translate
+    insights_footer: 'Daten der letzten {days} Tage werden angezeigt',
+    insights_skill_usage_title: 'Skill-Nutzung',
+    insights_skill_usage_sub: 'Häufigkeit der Tool-Aufrufe',
+    insights_skill_usage_total: 'Aufrufe insgesamt',
+    insights_skill_usage_skills_used: 'Verwendete Skills',
+    insights_skill_usage_no_data: 'Noch keine Skill-Nutzungsdaten',
+    insights_skill_usage_no_data_hint: 'Skills werden hier angezeigt, sobald sie in Unterhaltungen verwendet werden.',
+    insights_skill_usage_footer: 'Zählungen aus ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'Skill',
+    insights_skill_usage_col_uses: 'Nutzungen',
+    insights_skill_usage_col_views: 'Aufrufe',
+    insights_skill_usage_col_share: 'Nutzung %',
+    insights_skill_usage_col_patches: 'Patches',
+    insights_input_tokens: 'Eingabe',
+    insights_messages: 'Nachrichten',
+    insights_models: 'Modelle',
+    insights_no_cost: 'k. A.',
+    insights_output_tokens: 'Ausgabe',
+    insights_peak_hour: 'Spitze: {hour}',
+    insights_sessions: 'Sitzungen',
+    insights_title: 'Nutzungsanalysen',
+    insights_token_breakdown: 'Token-Aufschlüsselung',
+    insights_tokens: 'Tokens',
+    insights_total: 'Gesamt',
+    settings_desc_api_redact: 'Selbst gehostete Nutzer können dies zur Transparenz deaktivieren (für gemeinsam genutzte Instanzen nicht empfohlen).',
+    settings_label_api_redact: 'Sensible Daten in API-Antworten schwärzen',
+    voice_error: 'Sprache wird in diesem Browser nicht unterstützt',
+    voice_listening: 'Höre zu…',
+    voice_mode_active: 'Sprachmodus ein',
+    voice_mode_off: 'Sprachmodus aus',
+    voice_speaking: 'Spricht…',
+    voice_thinking: 'Denkt nach…',
     // Composer voice buttons (#1488)
-    voice_dictate: 'Dictate',  // TODO: translate
+    voice_dictate: 'Diktieren',
     voice_dictate_active: 'Stop dictation',
-    voice_recording_active: 'Aufnahme stoppen',  // TODO: translate
-    voice_mode_toggle: 'Voice mode',  // TODO: translate
-    voice_mode_toggle_active: 'Exit voice mode',  // TODO: translate
-    subagent_children: 'Subagent sessions',  // TODO: translate
+    voice_recording_active: 'Aufnahme stoppen',
+    voice_mode_toggle: 'Sprachmodus',
+    voice_mode_toggle_active: 'Sprachmodus verlassen',
+    subagent_children: 'Subagenten-Sitzungen',
     outline_title: 'Gliederung',
     outline_empty: 'Noch keine Fragen.',
     outline_loading: 'Laden…',
@@ -10055,17 +10247,17 @@ const LOCALES = {
     steer_recovery_retry: '重试',
     steer_recovery_dismiss: '忽略',
     busy_interrupt_confirm: '已中断 — 正在发送新消息',
-    settings_label_busy_input_mode: '忙碌输入模式',
-    settings_desc_busy_input_mode: '控制当代理正在运行时你发送消息会发生什么。队列会等待；中断会取消并重新开始；引导会在不中断的情况下注入中间修正（当流不可用时回退到队列）。',
+    settings_label_default_message_mode: '默认消息模式',
+    settings_desc_default_message_mode: '控制当代理正在运行时你发送消息会发生什么。队列会等待；中断会取消并重新开始；引导会在不中断的情况下注入中间修正。如果引导不可用，将恢复草稿，方便你选择下一步操作。',
     settings_label_fade_text_effect: '淡入文字效果',
     settings_desc_fade_text_effect: '在助手回复时淡入新流式单词。类似于 OpenWebUI；默认关闭以获得最佳性能。',
     settings_label_max_tokens: '最大输出令牌数',
     settings_desc_max_tokens: '限制新的流式响应可生成的输出量。留空时使用当前配置文件中的回退值。',
     settings_placeholder_max_tokens_none: '无覆盖',
     settings_placeholder_max_tokens_fallback: '无覆盖（回退值：{0}）',
-    settings_busy_input_mode_queue: '队列后续消息',
-    settings_busy_input_mode_interrupt: '中断当前轮次',
-    settings_busy_input_mode_steer: '引导（中间修正）',
+    settings_default_message_mode_queue: '队列后续消息',
+    settings_default_message_mode_interrupt: '中断当前轮次',
+    settings_default_message_mode_steer: '引导（中间修正）',
     settings_label_busy_placeholder_hint: '显示忙碌占位提示',
     settings_desc_busy_placeholder_hint: '在会话运行且草稿为空时，显示带有当前忙碌操作的编辑器占位符。',
     composer_placeholder_busy_queue: 'Enter = 队列 | /interrupt | /background | /steer',
@@ -10153,6 +10345,7 @@ const LOCALES = {
      reveal_in_finder: '在文件管理器中显示',
      reveal_failed: '显示失败：',
      copy_file_path: '\u590d\u5236\u6587\u4ef6\u8def\u5f84',
+     copy_relative_path: '\u590d\u5236\u76f8\u5bf9\u8def\u5f84',
      open_in_vscode: '在VS Code中打开',
      open_in_vscode_failed: '在VS Code中打开失败：',
      download_folder: '下载文件夹',
@@ -10298,6 +10491,7 @@ const LOCALES = {
     settings_label_sidebar_density: '侧边栏密度',
     cmd_reasoning: '切换思维可见性（显示/隐藏）、设置工作强度或查看当前状态',
     settings_label_external_sessions: '显示外部会话',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: '显示定时任务会话',
     settings_label_webhook_sessions: '显示Webhook会话',
     settings_label_previous_messaging_sessions: '显示以前的消息会话',
@@ -10519,6 +10713,8 @@ const LOCALES = {
     import: '导入',
     export_session_json: 'JSON',
     export_session_json_tooltip: '将会话完整导出为 JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: '导出为独立的 HTML 网页（双击即可在浏览器打开）',
     import_session_json_tooltip: '从 JSON 导入会话',
     clear_conversation_btn_tooltip: '清空此会话中的所有消息',
     editing: '编辑中',
@@ -10548,6 +10744,7 @@ const LOCALES = {
     providers_status_not_configured: '无 API 密钥',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API 密钥',
+    providers_status_model: '模型',
     providers_status_not_configured_label: '未配置',
     providers_oauth_hint: '通过 OAuth 认证。无需 API 密钥。',
     providers_oauth_config_yaml_hint: '通过 config.yaml 配置的令牌。如需更新，请编辑 config.yaml 中的 providers 部分或运行 hermes auth。',
@@ -10634,6 +10831,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: '每 20 轮对话',
     settings_desc_auto_title_refresh: '基于最新对话自动重新生成会话标题，使其随对话发展保持相关。需要配置 LLM 标题生成模型。',
     settings_desc_external_sessions: '在会话列表中显示来自 CLI、Telegram、Discord、Slack 等渠道的对话。点击可导入并继续对话。',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: '将定时任务输出以对话形式显示在侧边栏。仅在启用非 WebUI 会话时此功能才会生效。默认关闭；高频任务可能会使侧边栏信息泛滥。',
     settings_desc_webhook_sessions: '将Webhook运行情况以对话形式显示在侧边栏。仅在启用非 WebUI 会话时此功能才会生效。默认关闭；大量的路由信息可能会使侧边栏信息泛滥。',
     settings_desc_previous_messaging_sessions: '显示被 reset 或 compression 替换的较旧的 Discord、Telegram、Slack 和 Weixin 会话。',
@@ -10960,6 +11158,30 @@ const LOCALES = {
     cron_name_label: '名称',
     cron_name_placeholder: '可选',
     cron_schedule_label: '计划',
+    cron_schedule_preset_label: '预设',
+    cron_schedule_preset_hourly: '每小时',
+    cron_schedule_preset_daily: '每天',
+    cron_schedule_preset_weekdays: '工作日',
+    cron_schedule_preset_weekly: '每周',
+    cron_schedule_preset_monthly: '每月',
+    cron_schedule_preset_custom: '自定义',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: '小时',
+    cron_schedule_minute_label: '分钟',
+    cron_schedule_weekday_label: '星期 (0-6，周日-周六)',
+    cron_schedule_month_day_label: '日期',
+    cron_schedule_time_hint: '时间以服务器时间为准；cron 在服务器端运行。',
     cron_schedule_hint: "循环任务请用 'every 1h' 或 Cron 表达式。像 '30m' 这样的裸时长只会运行一次。",
     cron_schedule_once_warning: "像 '30m' 这样的时长写法只会运行一次，并在运行后移除。要保留循环任务，请使用 'every 30m'。",
     cron_prompt_label: '提示词',
@@ -11023,6 +11245,8 @@ const LOCALES = {
     session_worktree_remove_ahead_warning: (ahead) => `${ahead} 个未推送的提交将丢失。`,
     session_duplicate: '复制会话',
     session_duplicate_desc: '用相同工作区和模型创建副本',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicate_failed: '复制失败：',
     session_stop_response: '停止回复',
     session_stop_response_desc: '取消此会话正在进行的回复',
@@ -11653,17 +11877,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: '已中斷，正在傳送新訊息',
-    settings_label_busy_input_mode: '忙碌輸入模式',
-    settings_desc_busy_input_mode: '控制 Agent 執行時送出訊息的行為。佇列會等待；中斷會取消並重新開始；Steer 會中途注入修正且不中斷（Agent 或串流無法使用時會退回佇列）。',
+    settings_label_default_message_mode: '預設訊息模式',
+    settings_desc_default_message_mode: '控制 Agent 執行時送出訊息的行為。佇列會等待；中斷會取消並重新開始；Steer 會中途注入修正且不中斷。如果 Steer 不可用，會恢復草稿，方便你選擇下一步操作。',
     settings_label_fade_text_effect: '文字淡入效果',
     settings_desc_fade_text_effect: '在助理回覆時讓新串流輸出的詞語淡入顯示。類似 OpenWebUI；為獲得最佳效能預設關閉。',
     settings_label_max_tokens: '最大輸出權杖數',
     settings_desc_max_tokens: '限制新的串流回覆可產生的輸出量。留空時使用目前設定檔中的回退值。',
     settings_placeholder_max_tokens_none: '無覆寫',
     settings_placeholder_max_tokens_fallback: '無覆寫（回退值：{0}）',
-    settings_busy_input_mode_queue: '加入佇列',
-    settings_busy_input_mode_interrupt: '中斷目前回合',
-    settings_busy_input_mode_steer: 'Steer（中途修正）',
+    settings_default_message_mode_queue: '加入佇列',
+    settings_default_message_mode_interrupt: '中斷目前回合',
+    settings_default_message_mode_steer: 'Steer（中途修正）',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -11821,6 +12045,7 @@ const LOCALES = {
     reveal_in_finder: '在檔案管理員中顯示',
     reveal_failed: '顯示失敗：',
     copy_file_path: '複製檔案路徑',
+    copy_relative_path: '複製相對路徑',
     open_in_vscode: '在 VS Code 中開啟',
     open_in_vscode_failed: '在 VS Code 中開啟失敗：',
     download_folder: '下載資料夾',
@@ -11882,6 +12107,8 @@ const LOCALES = {
     session_archive_failed: '封存失敗：',
     session_duplicate: '複製對話',
     session_duplicate_desc: '建立一個相同工作區與模型的副本',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: '對話已複製',
     session_duplicate_failed: '複製失敗：',
     session_stop_response: '停止回應',
@@ -12171,6 +12398,7 @@ const LOCALES = {
     settings_label_sidebar_density: '側邊欄密度',
     cmd_reasoning: '切換思考內容可見性（顯示／隱藏）、設定推理強度，或檢查目前狀態',
     settings_label_external_sessions: '顯示外部對話',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: '顯示以前的訊息對話',
@@ -12445,6 +12673,8 @@ const LOCALES = {
     import: '匯入',
     export_session_json: 'JSON',
     export_session_json_tooltip: '將對話完整匯出為 JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: '匯出為獨立的 HTML 網頁（雙擊即可在瀏覽器開啟）',
     import_session_json_tooltip: '從 JSON 匯入對話',
     clear_conversation_btn_tooltip: '清空此對話中的所有訊息',
     // Settings detail
@@ -12493,6 +12723,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: '每 20 輪對話',
     settings_desc_auto_title_refresh: '根據最新對話自動重新產生對話標題，讓標題隨對話發展保持相關。需要設定 LLM 標題產生模型。',
     settings_desc_external_sessions: '在對話清單中顯示來自 CLI、Telegram、Discord、Slack 等管道的對話。點選即可匯入並繼續對話。',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: '顯示被 reset 或 compression 替換的較舊的 Discord、Telegram、Slack 和 Weixin 對話。',
@@ -12524,6 +12755,7 @@ const LOCALES = {
     providers_status_not_configured: '無 API 金鑰',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API 金鑰',
+    providers_status_model: '模型',
     providers_status_not_configured_label: '未設定',
     providers_oauth_hint: '已透過 OAuth 驗證。無需 API 金鑰。',
     providers_oauth_config_yaml_hint: '已透過 config.yaml 設定權證。要更新，請編輯 config.yaml 中的 providers 區段，或執行 hermes auth。',
@@ -12911,6 +13143,30 @@ const LOCALES = {
     cron_name_label: '任務名稱',
     cron_name_placeholder: '選填',
     cron_schedule_label: '排程',
+    cron_schedule_preset_label: '預設',
+    cron_schedule_preset_hourly: '每小時',
+    cron_schedule_preset_daily: '每天',
+    cron_schedule_preset_weekdays: '工作日',
+    cron_schedule_preset_weekly: '每週',
+    cron_schedule_preset_monthly: '每月',
+    cron_schedule_preset_custom: '自訂',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: '小時',
+    cron_schedule_minute_label: '分鐘',
+    cron_schedule_weekday_label: '星期 (0-6，週日-週六)',
+    cron_schedule_month_day_label: '日期',
+    cron_schedule_time_hint: '時間以伺服器時間為準；cron 在伺服器端執行。',
     cron_schedule_hint: '週期性任務請用「every 1h」或 Cron 表示式。像「30m」這樣的裸時長只會執行一次。',
     cron_schedule_once_warning: '像「30m」這樣的時長寫法只會執行一次，並在執行後移除。要保留週期性任務，請使用「every 30m」。',
     cron_prompt_label: '提示',
@@ -13020,7 +13276,7 @@ const LOCALES = {
     cancelling: 'Cancelando…',
     cancel_failed: 'Falha ao cancelar: ',
     mic_denied: 'Acesso ao microfone negado. Verifique as permissões do navegador.',
-    mic_insecure_origin: 'Voice input needs a secure connection. Open Hermes over HTTPS or from localhost to use the microphone.', // TODO: translate
+    mic_insecure_origin: 'A entrada de voz precisa de uma conexão segura. Abra o Hermes por HTTPS ou a partir do localhost para usar o microfone.',
     mic_no_speech: 'Nenhuma fala detectada. Tente novamente.',
     mic_network: 'Reconhecimento de fala indisponível.',
     mic_error: 'Erro no input de voz: ',
@@ -13129,21 +13385,21 @@ const LOCALES = {
     model_custom_placeholder: 'ex: openai/gpt-5.4',
     model_show_all_models: 'Mostrar todos os {0} modelos',
     model_search_placeholder: 'Buscar modelos…',
-    session_toolsets: 'Session Toolsets', // TODO: translate
-    session_toolsets_desc: 'Use active profile defaults or choose a custom toolset list for this session', // TODO: translate
-    session_toolsets_global: 'Active profile defaults', // TODO: translate
-    session_toolsets_profile_defaults: 'Active profile defaults', // TODO: translate
-    session_toolsets_custom: 'Custom override', // TODO: translate
-    session_toolsets_use_profile_defaults: 'Use active profile defaults', // TODO: translate
-    session_toolsets_configured_servers: 'Configured MCP servers', // TODO: translate
-    session_toolsets_loading_servers: 'Loading configured servers...', // TODO: translate
-    session_toolsets_no_configured_servers: 'No configured MCP servers', // TODO: translate
-    session_toolsets_placeholder: 'tool1, tool2, \u2026', // TODO: translate
-    session_toolsets_apply: 'Apply', // TODO: translate
-    session_toolsets_clear: 'Use defaults', // TODO: translate
-    session_toolsets_applied: 'Toolsets updated', // TODO: translate
-    session_toolsets_cleared: 'Using active profile defaults', // TODO: translate
-    session_toolsets_failed: 'Failed to update toolsets: ', // TODO: translate
+    session_toolsets: 'Conjuntos de ferramentas da sessão',
+    session_toolsets_desc: 'Use os padrões do perfil ativo ou escolha uma lista personalizada de conjuntos de ferramentas para esta sessão',
+    session_toolsets_global: 'Padrões do perfil ativo',
+    session_toolsets_profile_defaults: 'Padrões do perfil ativo',
+    session_toolsets_custom: 'Substituição personalizada',
+    session_toolsets_use_profile_defaults: 'Usar os padrões do perfil ativo',
+    session_toolsets_configured_servers: 'Servidores MCP configurados',
+    session_toolsets_loading_servers: 'Carregando servidores configurados...',
+    session_toolsets_no_configured_servers: 'Nenhum servidor MCP configurado',
+    session_toolsets_placeholder: 'tool1, tool2, \u2026',
+    session_toolsets_apply: 'Aplicar',
+    session_toolsets_clear: 'Usar padrões',
+    session_toolsets_applied: 'Conjuntos de ferramentas atualizados',
+    session_toolsets_cleared: 'Usando os padrões do perfil ativo',
+    session_toolsets_failed: 'Falha ao atualizar os conjuntos de ferramentas: ',
     model_search_no_results: 'Nenhum modelo encontrado',
     model_group_configured: 'Configurados',
     ws_search_placeholder: 'Buscar espaços de trabalho…',
@@ -13236,17 +13492,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Interrompido — enviando nova mensagem',
-    settings_label_busy_input_mode: 'Modo de input ocupado',
-    settings_desc_busy_input_mode: 'Controla o que acontece ao enviar mensagem com agente rodando. Fila espera; Interromper cancela; Steer injeta correção.',
+    settings_label_default_message_mode: 'Modo de mensagem padrão',
+    settings_desc_default_message_mode: 'Controla o que acontece ao enviar mensagem com agente rodando. Fila espera; Interromper cancela e recomeça; Steer injeta correção no meio do turno sem interromper. Se Steer não estiver disponível, o rascunho é restaurado para você escolher a próxima ação.',
     settings_label_fade_text_effect: 'Efeito de fade no texto',
     settings_desc_fade_text_effect: 'Faz novas palavras aparecerem gradualmente enquanto o assistente responde. Similar ao OpenWebUI; desativado por padrão para melhor desempenho.',
     settings_label_max_tokens: 'Máximo de tokens de saída',
     settings_desc_max_tokens: 'Limita o tamanho das novas respostas em streaming. Deixe em branco para usar o valor de fallback do perfil ativo.',
     settings_placeholder_max_tokens_none: 'Sem substituição',
     settings_placeholder_max_tokens_fallback: 'Sem substituição (fallback: {0})',
-    settings_busy_input_mode_queue: 'Enfileirar follow-up',
-    settings_busy_input_mode_interrupt: 'Interromper turno atual',
-    settings_busy_input_mode_steer: 'Steer (correção no meio do turno)',
+    settings_default_message_mode_queue: 'Enfileirar follow-up',
+    settings_default_message_mode_interrupt: 'Interromper turno atual',
+    settings_default_message_mode_steer: 'Steer (correção no meio do turno)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -13376,9 +13632,10 @@ const LOCALES = {
      reveal_in_finder: 'Mostrar no gerenciador de arquivos',
      reveal_failed: 'Falha ao mostrar: ',
      copy_file_path: 'Copiar caminho do arquivo',
+     copy_relative_path: 'Copiar caminho relativo',
      open_in_vscode: 'Abrir no VS Code',
      open_in_vscode_failed: 'Falha ao abrir no VS Code: ',
-     download_folder: 'Download Folder', // TODO: translate
+     download_folder: 'Pasta de downloads',
     path_copied: 'Caminho do arquivo copiado para a área de transferência',
     path_copy_failed: 'Falha ao copiar caminho: ',
     session_rename: 'Renomear conversa',
@@ -13437,6 +13694,8 @@ const LOCALES = {
     session_archive_failed: 'Falha ao arquivar: ',
     session_duplicate: 'Duplicar conversa',
     session_duplicate_desc: 'Criar cópia com mesmo workspace e modelo',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'Sessão duplicada',
     session_duplicate_failed: 'Falha ao duplicar: ',
     session_stop_response: 'Stop response',
@@ -13503,8 +13762,8 @@ const LOCALES = {
     settings_label_auto_scroll_follow: 'Acompanhar automaticamente o novo conteúdo',
     settings_desc_auto_scroll_follow: 'Quando ativado, a visualização rola para baixo conforme novos tokens chegam. Quando desativado, você controla a posição de rolagem.',
     settings_label_render_user_markdown: 'Render markdown in user messages',
-    settings_label_show_titlebar_profile: 'Show profile switcher in titlebar', // TODO: translate
-    settings_desc_show_titlebar_profile: 'When enabled, a profile switcher button appears in the top-left app titlebar so you can change profiles from any tab. Off by default; the composer footer always has a profile switcher regardless of this setting.', // TODO: translate
+    settings_label_show_titlebar_profile: 'Mostrar alternador de perfis na barra de título',
+    settings_desc_show_titlebar_profile: 'Quando ativado, um botão de alternância de perfis aparece na barra de título do app, no canto superior esquerdo, para que você possa trocar de perfil em qualquer aba. Desativado por padrão; o rodapé do compositor sempre tem um alternador de perfis, independentemente desta configuração.',
     settings_desc_render_user_markdown: 'When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.',
     settings_label_large_text_paste_as_attachment: 'Attach large pasted text as file',
     settings_desc_large_text_paste_as_attachment: 'When enabled, long pasted text becomes a .md attachment instead of filling the composer.',
@@ -13593,19 +13852,19 @@ const LOCALES = {
     ext_gallery_install_followup: 'Extensão instalada. Veja o cartão para os próximos passos.',
     ext_gallery_install_ok: 'Extension installed successfully.',
     ext_gallery_uninstall_ok: 'Extension uninstalled.',
-    settings_plugins_title: 'Plugins',  // TODO: translate
+    settings_plugins_title: 'Plugins',
     plugins_enable_toggle: 'Ativar',
-    settings_plugins_meta: 'View installed Hermes plugins and the lifecycle hooks they register. This panel is read-only.',  // TODO: translate
-    settings_plugins_empty: 'No Hermes plugins are currently visible. Install or enable plugins from the Hermes CLI/config to see them here.',  // TODO: translate
-    plugins_unnamed: 'Unnamed plugin',  // TODO: translate
-    plugins_no_description: 'No description provided.',  // TODO: translate
-    plugins_no_hooks: 'No registered lifecycle hooks',  // TODO: translate
-    plugins_registered_hooks: 'Registered hooks',  // TODO: translate
-    plugins_enabled: 'Enabled',  // TODO: translate
-    plugins_disabled: 'Disabled',  // TODO: translate
-    plugins_active_provider: 'Active (provider)',  // TODO: translate
-    plugins_provider_no_hooks: 'Provider plugin — no agent-visibility hooks',  // TODO: translate
-    plugins_load_failed: 'Failed to load plugins: ',  // TODO: translate
+    settings_plugins_meta: 'Veja os plugins do Hermes instalados e os hooks de ciclo de vida que eles registram. Este painel é somente leitura.',
+    settings_plugins_empty: 'Nenhum plugin do Hermes está visível no momento. Instale ou ative plugins pela CLI/configuração do Hermes para vê-los aqui.',
+    plugins_unnamed: 'Plugin sem nome',
+    plugins_no_description: 'Nenhuma descrição fornecida.',
+    plugins_no_hooks: 'Nenhum hook de ciclo de vida registrado',
+    plugins_registered_hooks: 'Hooks registrados',
+    plugins_enabled: 'Ativado',
+    plugins_disabled: 'Desativado',
+    plugins_active_provider: 'Ativo (provedor)',
+    plugins_provider_no_hooks: 'Plugin de provedor — sem hooks de visibilidade para o agente',
+    plugins_load_failed: 'Falha ao carregar os plugins: ',
     settings_tab_system: 'Sistema',
     settings_tab_help: 'Help',
     settings_help_meta: 'Resources and support for Hermes WebUI.',
@@ -13720,6 +13979,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Densidade da sidebar',
     cmd_reasoning: 'Alternar visibilidade do pensamento (mostrar/ocultar)',
     settings_label_external_sessions: 'Mostrar sessões externas',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: 'Mostrar sessões de mensagens anteriores',
@@ -13885,21 +14145,21 @@ const LOCALES = {
     dashboard_loopback_warning: 'O painel é somente loopback no servidor. Navegue pelo próprio servidor ou reinicie com --host 0.0.0.0 (inseguro).',
     tab_logs: 'Logs',
     tab_settings: 'Configurações',
-    close_menu: 'Close menu', // TODO: translate
+    close_menu: 'Fechar menu',
 
-    logs_title: 'Logs',  // TODO: translate
-    logs_file: 'File',  // TODO: translate
-    logs_tail: 'Tail',  // TODO: translate
-    logs_auto_refresh: 'Auto-refresh (5s)',  // TODO: translate
-    logs_wrap: 'Wrap lines',  // TODO: translate
-    logs_copy_all: 'Copy all',  // TODO: translate
-    logs_empty: 'No log lines yet.',  // TODO: translate
-    logs_loading: 'Loading logs…',  // TODO: translate
-    logs_load_failed: 'Logs failed to load',  // TODO: translate
-    logs_status_idle: 'Choose a log file to view recent lines.',  // TODO: translate
-    logs_no_mtime: 'not written yet',  // TODO: translate
-    logs_truncated_hint: 'Showing the tail of a large log file; older bytes were skipped to keep memory bounded.',  // TODO: translate
-    logs_copied: 'Logs copied',  // TODO: translate
+    logs_title: 'Logs',
+    logs_file: 'Arquivo',
+    logs_tail: 'Fim',
+    logs_auto_refresh: 'Atualização automática (5 s)',
+    logs_wrap: 'Quebrar linhas',
+    logs_copy_all: 'Copiar tudo',
+    logs_empty: 'Ainda não há linhas de log.',
+    logs_loading: 'Carregando logs…',
+    logs_load_failed: 'Falha ao carregar os logs',
+    logs_status_idle: 'Escolha um arquivo de log para ver as linhas recentes.',
+    logs_no_mtime: 'ainda não escrito',
+    logs_truncated_hint: 'Exibindo o fim de um arquivo de log grande; bytes mais antigos foram ignorados para limitar o uso de memória.',
+    logs_copied: 'Logs copiados',
     logs_severity: 'Severidade',
     logs_severity_all: 'Todos',
     logs_severity_errors: 'Erros',
@@ -13942,6 +14202,8 @@ const LOCALES = {
     import: 'Importar',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Exportar sessão completa como JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Exportar como página HTML independente',
     import_session_json_tooltip: 'Importar sessão de JSON',
     clear_conversation_btn_tooltip: 'Limpar todas as mensagens nesta conversa',
     // Settings detail
@@ -13968,6 +14230,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'A cada 20 trocas',
     settings_desc_auto_title_refresh: 'Re-gera título da sessão baseado na última troca.',
     settings_desc_external_sessions: 'Mostrar conversas de CLI, Telegram, Discord, Slack e outros canais na lista de sessões. Clique para importar e continuar.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: 'Mostrar sessões antigas de Discord, Telegram, Slack e Weixin substituídas por reset ou compressão.',
@@ -13999,6 +14262,7 @@ const LOCALES = {
     providers_status_not_configured: 'Sem API key',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API key',
+    providers_status_model: 'Modelo',
     providers_status_not_configured_label: 'Não configurado',
     providers_oauth_hint: 'Autenticado via OAuth. Sem API key necessária.',
     providers_oauth_config_yaml_hint: 'Token configurado via config.yaml. Para atualizar, edite config.yaml ou rode hermes auth.',
@@ -14121,17 +14385,17 @@ const LOCALES = {
     provider_category_self_hosted: 'Open / self-hosted',
     provider_category_specialized: 'Especializado',
     onboarding_api_key_label: 'API key',
-    oauth_login_codex: 'Login with Codex (ChatGPT)', // TODO: translate
-    oauth_codex_step1: 'Step 1: Visit this URL and enter the code', // TODO: translate
-    oauth_codex_step2: 'Step 2: Enter this code on the page', // TODO: translate
-    oauth_codex_polling: 'Waiting for authorization...', // TODO: translate
-    oauth_codex_success: 'Codex OAuth login successful!', // TODO: translate
-    oauth_codex_error: 'OAuth login failed', // TODO: translate
-    oauth_codex_expired: 'Code expired, please try again', // TODO: translate
+    oauth_login_codex: 'Entrar com o Codex (ChatGPT)',
+    oauth_codex_step1: 'Etapa 1: Acesse esta URL e insira o código',
+    oauth_codex_step2: 'Etapa 2: Insira este código na página',
+    oauth_codex_polling: 'Aguardando autorização...',
+    oauth_codex_success: 'Login com Codex OAuth realizado com sucesso!',
+    oauth_codex_error: 'Falha no login com OAuth',
+    oauth_codex_expired: 'O código expirou, tente novamente',
     onboarding_api_key_placeholder: 'Deixe em branco para manter key existente',
-    onboarding_api_key_label_optional: 'API key (optional)', // TODO: translate
-    onboarding_api_key_placeholder_optional: 'Leave blank for keyless servers', // TODO: translate
-    onboarding_api_key_help_keyless: 'Most LM Studio / Ollama / vLLM installs run keyless — leave this blank if your server doesn\'t require authentication. Use the Test connection button to verify.', // TODO: translate
+    onboarding_api_key_label_optional: 'Chave de API (opcional)',
+    onboarding_api_key_placeholder_optional: 'Deixe em branco para servidores sem chave',
+    onboarding_api_key_help_keyless: 'A maioria das instalações de LM Studio / Ollama / vLLM funciona sem chave — deixe isto em branco se o seu servidor não exigir autenticação. Use o botão Testar conexão para verificar.',
     onboarding_api_key_help_prefix: 'Salvo como segredo no .env do Hermes usando',
     onboarding_base_url_label: 'Base URL',
     onboarding_base_url_placeholder: 'https://seu-endpoint.exemplo/v1',
@@ -14157,19 +14421,19 @@ const LOCALES = {
     onboarding_error_choose_model: 'Escolha modelo antes de continuar.',
     onboarding_error_provider_required: 'Escolha modo de setup antes de continuar.',
     onboarding_error_base_url_required: 'Base URL é necessária para endpoints customizados.',
-    onboarding_probe_test_button: 'Test connection', // TODO: translate
-    onboarding_probe_probing: 'Testing connection…', // TODO: translate
-    onboarding_probe_ok: 'Connected. {n} model(s) available.', // TODO: translate
-    onboarding_probe_error_generic: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_probe_error_invalid_url: 'Base URL must start with http:// or https://.', // TODO: translate
-    onboarding_probe_error_dns: 'Could not resolve the host. Check the URL or use the host\'s IP address.', // TODO: translate
-    onboarding_probe_error_connect_refused: 'Connection refused — the server may not be running on that address. From inside Docker, try the host IP instead of localhost.', // TODO: translate
-    onboarding_probe_error_timeout: 'The endpoint did not respond in time. Check that the server is running and the URL is correct.', // TODO: translate
-    onboarding_probe_error_http_4xx: 'The endpoint returned a client error. Check authentication and the URL path (typically ends in /v1).', // TODO: translate
-    onboarding_probe_error_http_5xx: 'The endpoint returned a server error. Check the LM Studio / Ollama server logs.', // TODO: translate
-    onboarding_probe_error_parse: 'The endpoint did not return a model list in the expected shape. Verify the URL points to the OpenAI-compatible API root.', // TODO: translate
-    onboarding_probe_error_unreachable: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_error_probe_failed: 'Could not validate the configured base URL.', // TODO: translate
+    onboarding_probe_test_button: 'Testar conexão',
+    onboarding_probe_probing: 'Testando a conexão…',
+    onboarding_probe_ok: 'Conectado. {n} modelo(s) disponível(is).',
+    onboarding_probe_error_generic: 'Não foi possível acessar a URL base configurada.',
+    onboarding_probe_error_invalid_url: 'A URL base deve começar com http:// ou https://.',
+    onboarding_probe_error_dns: 'Não foi possível resolver o host. Verifique a URL ou use o endereço IP do host.',
+    onboarding_probe_error_connect_refused: 'Conexão recusada — o servidor pode não estar em execução nesse endereço. Dentro do Docker, tente o IP do host em vez de localhost.',
+    onboarding_probe_error_timeout: 'O endpoint não respondeu a tempo. Verifique se o servidor está em execução e se a URL está correta.',
+    onboarding_probe_error_http_4xx: 'O endpoint retornou um erro de cliente. Verifique a autenticação e o caminho da URL (geralmente termina em /v1).',
+    onboarding_probe_error_http_5xx: 'O endpoint retornou um erro de servidor. Verifique os logs do servidor do LM Studio / Ollama.',
+    onboarding_probe_error_parse: 'O endpoint não retornou uma lista de modelos no formato esperado. Verifique se a URL aponta para a raiz da API compatível com OpenAI.',
+    onboarding_probe_error_unreachable: 'Não foi possível acessar a URL base configurada.',
+    onboarding_error_probe_failed: 'Não foi possível validar a URL base configurada.',
     onboarding_error_workspace_required: 'Workspace é necessário.',
     onboarding_error_model_required: 'Modelo é necessário.',
     onboarding_complete: 'Configuração completa',
@@ -14303,6 +14567,30 @@ const LOCALES = {
     cron_name_label: 'Nome',
     cron_name_placeholder: 'Opcional',
     cron_schedule_label: 'Agendamento',
+    cron_schedule_preset_label: 'Predefinição',
+    cron_schedule_preset_hourly: 'A cada hora',
+    cron_schedule_preset_daily: 'Diário',
+    cron_schedule_preset_weekdays: 'Dias úteis',
+    cron_schedule_preset_weekly: 'Semanal',
+    cron_schedule_preset_monthly: 'Mensal',
+    cron_schedule_preset_custom: 'Personalizado',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Hora',
+    cron_schedule_minute_label: 'Minuto',
+    cron_schedule_weekday_label: 'Dia da semana (0-6, dom-sáb)',
+    cron_schedule_month_day_label: 'Dia',
+    cron_schedule_time_hint: 'O horário usa a hora do servidor; cron roda no servidor.',
     cron_schedule_hint: "Use 'every 1h' ou uma expressão Cron para tarefas recorrentes. Durações como '30m' rodam uma vez.",
     cron_schedule_once_warning: "Durações como '30m' rodam uma vez e são removidas após executar. Use 'every 30m' para manter uma tarefa recorrente.",
     cron_prompt_label: 'Prompt',
@@ -14380,79 +14668,79 @@ const LOCALES = {
     settings_label_tts_auto_read: 'Ler respostas automaticamente',
     settings_desc_tts_auto_read: 'Ler automaticamente as respostas do assistente',
     // Composer voice-mode pref (#1488)
-    settings_label_voice_mode: 'Hands-free voice mode button',  // TODO: translate
+    settings_label_voice_mode: 'Botão de modo de voz mãos livres',
     settings_desc_voice_mode: 'Show the voice-mode button (audio waveform) next to the dictation mic. Lets you speak naturally — Hermes auto-sends after a pause and reads replies aloud. Requires a browser that supports both speech recognition and TTS.',
     settings_label_raw_audio: 'Send raw audio instead of transcribing',
     settings_desc_raw_audio: 'Record and send the original audio file to the agent instead of converting it to text first. The agent can then transcribe it or process the raw audio (emotion, background noise, custom STT). Like Telegram\'s voice message behavior.',
     voice_send_raw: 'Send raw audio',
-    voice_raw_attached: 'Audio attached. Press Send or type more.',  // TODO: translate
+    voice_raw_attached: 'Áudio anexado. Pressione Enviar ou digite mais.',
     settings_label_tts_voice: 'Voz',
     settings_desc_tts_voice: 'Selecionar voz para síntese de voz',
     settings_label_tts_rate: 'Velocidade da fala',
     settings_label_tts_pitch: 'Tom da fala',
     settings_label_tts_engine: 'Motor TTS',
     settings_desc_tts_engine: 'Escolha o mecanismo de fala. Edge TTS usa vozes neurais da Microsoft através do servidor.',
-    checkpoint_date: 'Date',  // TODO: translate
-    checkpoint_diff_files_changed: (n) => `${n} file${n === 1 ? '' : 's'} changed`,  // TODO: translate
-    checkpoint_diff_no_changes: 'No differences found between this checkpoint and the current workspace.',  // TODO: translate
-    checkpoint_diff_title: 'Changes in checkpoint',  // TODO: translate
-    checkpoint_empty: 'No checkpoints found for this workspace.',  // TODO: translate
-    checkpoint_error: 'Failed to load checkpoints',  // TODO: translate
-    checkpoint_files: 'Files',  // TODO: translate
-    checkpoint_loading: 'Loading checkpoints…',  // TODO: translate
-    checkpoint_message: 'Message',  // TODO: translate
-    checkpoint_restore: 'Restore',  // TODO: translate
-    checkpoint_restore_confirm_message: (ckpt) => `Restore workspace to checkpoint "${ckpt}"? This will overwrite files with the saved versions. Files added after this checkpoint will not be deleted.`,  // TODO: translate
-    checkpoint_restore_confirm_title: 'Restore checkpoint?',  // TODO: translate
-    checkpoint_restored: 'Checkpoint restored',  // TODO: translate
-    checkpoint_title: 'Checkpoints',  // TODO: translate
-    checkpoint_view_diff: 'View diff',  // TODO: translate
-    insights_activity_by_day: 'Activity by Day',  // TODO: translate
-    insights_activity_by_hour: 'Activity by Hour',  // TODO: translate
-    insights_cost: 'Estimated Cost',  // TODO: translate
-    insights_footer: 'Showing data from the last {days} days',  // TODO: translate
-    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
-    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
-    insights_skill_usage_total: 'Total invocations',  // TODO: translate
-    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
-    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
-    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
-    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
-    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
-    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
-    insights_skill_usage_col_views: 'Views',  // TODO: translate
-    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
-    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
-    insights_input_tokens: 'Input',  // TODO: translate
-    insights_messages: 'Messages',  // TODO: translate
-    insights_models: 'Models',  // TODO: translate
-    insights_no_cost: 'N/A',  // TODO: translate
-    insights_output_tokens: 'Output',  // TODO: translate
-    insights_peak_hour: 'Peak: {hour}',  // TODO: translate
-    insights_sessions: 'Sessions',  // TODO: translate
-    insights_title: 'Usage Analytics',  // TODO: translate
-    insights_token_breakdown: 'Token Breakdown',  // TODO: translate
-    insights_tokens: 'Tokens',  // TODO: translate
-    insights_total: 'Total',  // TODO: translate
-    insights_model_health_title: 'Model health comparison',  // TODO: translate
-    insights_model_health_provider: 'Provider',  // TODO: translate
-    insights_model_health_replacement: 'Replacement guide',  // TODO: translate
-    insights_model_health_cost_per_m: 'Cost / 1M',  // TODO: translate
-    settings_desc_api_redact: 'Self-hosted users can disable for transparency (not recommended for shared instances).',  // TODO: translate
-    settings_label_api_redact: 'Redact sensitive data in API responses',  // TODO: translate
-    voice_error: 'Voice not supported in this browser',  // TODO: translate
-    voice_listening: 'Listening…',  // TODO: translate
-    voice_mode_active: 'Voice mode on',  // TODO: translate
-    voice_mode_off: 'Voice mode off',  // TODO: translate
-    voice_speaking: 'Speaking…',  // TODO: translate
-    voice_thinking: 'Thinking…',  // TODO: translate
+    checkpoint_date: 'Data',
+    checkpoint_diff_files_changed: (n) => `${n} arquivo${n === 1 ? '' : 's'} alterado${n === 1 ? '' : 's'}`,
+    checkpoint_diff_no_changes: 'Nenhuma diferença encontrada entre este checkpoint e o espaço de trabalho atual.',
+    checkpoint_diff_title: 'Alterações no checkpoint',
+    checkpoint_empty: 'Nenhum checkpoint encontrado para este espaço de trabalho.',
+    checkpoint_error: 'Falha ao carregar os checkpoints',
+    checkpoint_files: 'Arquivos',
+    checkpoint_loading: 'Carregando checkpoints…',
+    checkpoint_message: 'Mensagem',
+    checkpoint_restore: 'Restaurar',
+    checkpoint_restore_confirm_message: (ckpt) => `Restaurar o espaço de trabalho para o checkpoint "${ckpt}"? Isso sobrescreverá os arquivos com as versões salvas. Arquivos adicionados após este checkpoint não serão excluídos.`,
+    checkpoint_restore_confirm_title: 'Restaurar checkpoint?',
+    checkpoint_restored: 'Checkpoint restaurado',
+    checkpoint_title: 'Checkpoints',
+    checkpoint_view_diff: 'Ver diff',
+    insights_activity_by_day: 'Atividade por dia',
+    insights_activity_by_hour: 'Atividade por hora',
+    insights_cost: 'Custo estimado',
+    insights_footer: 'Exibindo dados dos últimos {days} dias',
+    insights_skill_usage_title: 'Uso de skills',
+    insights_skill_usage_sub: 'Frequência de invocação de ferramentas',
+    insights_skill_usage_total: 'Total de invocações',
+    insights_skill_usage_skills_used: 'Skills usados',
+    insights_skill_usage_no_data: 'Ainda não há dados de uso de skills',
+    insights_skill_usage_no_data_hint: 'Os skills aparecerão aqui depois de usados nas conversas.',
+    insights_skill_usage_footer: 'Contagens de ~/.hermes/skills/',
+    insights_skill_usage_col_skill: 'Skill',
+    insights_skill_usage_col_uses: 'Usos',
+    insights_skill_usage_col_views: 'Visualizações',
+    insights_skill_usage_col_share: 'Uso %',
+    insights_skill_usage_col_patches: 'Patches',
+    insights_input_tokens: 'Entrada',
+    insights_messages: 'Mensagens',
+    insights_models: 'Modelos',
+    insights_no_cost: 'N/D',
+    insights_output_tokens: 'Saída',
+    insights_peak_hour: 'Pico: {hour}',
+    insights_sessions: 'Sessões',
+    insights_title: 'Análise de uso',
+    insights_token_breakdown: 'Detalhamento de tokens',
+    insights_tokens: 'Tokens',
+    insights_total: 'Total',
+    insights_model_health_title: 'Comparação do estado dos modelos',
+    insights_model_health_provider: 'Provedor',
+    insights_model_health_replacement: 'Guia de substituição',
+    insights_model_health_cost_per_m: 'Custo / 1 mi',
+    settings_desc_api_redact: 'Usuários com hospedagem própria podem desativar para maior transparência (não recomendado para instâncias compartilhadas).',
+    settings_label_api_redact: 'Ocultar dados sensíveis nas respostas da API',
+    voice_error: 'Voz não suportada neste navegador',
+    voice_listening: 'Ouvindo…',
+    voice_mode_active: 'Modo de voz ativado',
+    voice_mode_off: 'Modo de voz desativado',
+    voice_speaking: 'Falando…',
+    voice_thinking: 'Pensando…',
     // Composer voice buttons (#1488)
-    voice_dictate: 'Dictate',  // TODO: translate
+    voice_dictate: 'Ditar',
     voice_dictate_active: 'Stop dictation',
-    voice_recording_active: 'Parar gravação',  // TODO: translate
-    voice_mode_toggle: 'Voice mode',  // TODO: translate
-    voice_mode_toggle_active: 'Exit voice mode',  // TODO: translate
-    subagent_children: 'Subagent sessions',  // TODO: translate
+    voice_recording_active: 'Parar gravação',
+    voice_mode_toggle: 'Modo de voz',
+    voice_mode_toggle_active: 'Sair do modo de voz',
+    subagent_children: 'Sessões de subagentes',
     // login-flow keys (issue #1442)
     sign_out_failed: 'Falha ao sair: ',
     disable_auth_confirm_title: 'Desativar proteção por senha',
@@ -14494,7 +14782,7 @@ const LOCALES = {
     cancelling: '취소 중\u2026',
     cancel_failed: '취소 실패: ',
     mic_denied: '마이크 접근이 거부되었습니다. 브라우저 권한을 확인하세요.',
-    mic_insecure_origin: 'Voice input needs a secure connection. Open Hermes over HTTPS or from localhost to use the microphone.', // TODO: translate
+    mic_insecure_origin: '음성 입력에는 보안 연결이 필요합니다. 마이크를 사용하려면 HTTPS 또는 localhost를 통해 Hermes를 여세요.',
     mic_no_speech: '음성이 감지되지 않았습니다. 다시 시도하세요.',
     mic_network: '음성 인식을 사용할 수 없습니다.',
     mic_error: '음성 입력 오류: ',
@@ -14659,21 +14947,21 @@ const LOCALES = {
     model_custom_placeholder: 'e.g. openai/gpt-5.4',
     model_show_all_models: '{0}개 모델 모두 보기',
     model_search_placeholder: 'Search models…',
-    session_toolsets: 'Session Toolsets', // TODO: translate
-    session_toolsets_desc: 'Use active profile defaults or choose a custom toolset list for this session', // TODO: translate
-    session_toolsets_global: 'Active profile defaults', // TODO: translate
-    session_toolsets_profile_defaults: 'Active profile defaults', // TODO: translate
-    session_toolsets_custom: 'Custom override', // TODO: translate
-    session_toolsets_use_profile_defaults: 'Use active profile defaults', // TODO: translate
-    session_toolsets_configured_servers: 'Configured MCP servers', // TODO: translate
-    session_toolsets_loading_servers: 'Loading configured servers...', // TODO: translate
-    session_toolsets_no_configured_servers: 'No configured MCP servers', // TODO: translate
-    session_toolsets_placeholder: 'tool1, tool2, \u2026', // TODO: translate
-    session_toolsets_apply: 'Apply', // TODO: translate
-    session_toolsets_clear: 'Use defaults', // TODO: translate
-    session_toolsets_applied: 'Toolsets updated', // TODO: translate
-    session_toolsets_cleared: 'Using active profile defaults', // TODO: translate
-    session_toolsets_failed: 'Failed to update toolsets: ', // TODO: translate
+    session_toolsets: '세션 도구 세트',
+    session_toolsets_desc: '활성 프로필 기본값을 사용하거나 이 세션에 대한 사용자 지정 도구 세트 목록을 선택합니다',
+    session_toolsets_global: '활성 프로필 기본값',
+    session_toolsets_profile_defaults: '활성 프로필 기본값',
+    session_toolsets_custom: '사용자 지정 재정의',
+    session_toolsets_use_profile_defaults: '활성 프로필 기본값 사용',
+    session_toolsets_configured_servers: '구성된 MCP 서버',
+    session_toolsets_loading_servers: '구성된 서버를 불러오는 중...',
+    session_toolsets_no_configured_servers: '구성된 MCP 서버 없음',
+    session_toolsets_placeholder: 'tool1, tool2, \u2026',
+    session_toolsets_apply: '적용',
+    session_toolsets_clear: '기본값 사용',
+    session_toolsets_applied: '도구 세트가 업데이트됨',
+    session_toolsets_cleared: '활성 프로필 기본값을 사용 중',
+    session_toolsets_failed: '도구 세트를 업데이트하지 못했습니다: ',
     model_search_no_results: 'No models found',
     model_group_configured: '구성됨',
     ws_search_placeholder: '워크스페이스 검색…',
@@ -14773,17 +15061,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Interrupted — sending new message',
-    settings_label_busy_input_mode: '작업 중 입력 방식',
-    settings_desc_busy_input_mode: '에이전트가 실행 중일 때 메시지를 보내면 어떻게 처리할지 제어합니다. 대기는 다음 차례까지 기다리고, 중단은 현재 작업을 취소하고 새로 시작하며, 조정은 현재 작업을 중단하지 않고 중간 수정 사항을 전달합니다(에이전트 또는 스트림을 사용할 수 없으면 대기로 전환).',
+    settings_label_default_message_mode: '기본 메시지 모드',
+    settings_desc_default_message_mode: '에이전트가 실행 중일 때 메시지를 보내면 어떻게 처리할지 제어합니다. 대기는 다음 차례까지 기다리고, 중단은 현재 작업을 취소하고 새로 시작하며, 조정은 현재 작업을 중단하지 않고 중간 수정 사항을 전달합니다. 조정을 사용할 수 없으면 초안이 복원되어 다음 동작을 선택할 수 있습니다.',
     settings_label_fade_text_effect: '텍스트 페이드 효과',
     settings_desc_fade_text_effect: '어시스턴트가 응답하는 동안 새로 스트리밍되는 단어를 부드럽게 표시합니다. OpenWebUI와 비슷하며, 최대 성능을 위해 기본값은 꺼짐입니다.',
     settings_label_max_tokens: '최대 출력 토큰',
     settings_desc_max_tokens: '새 스트리밍 응답의 출력 길이를 제한합니다. 비워 두면 현재 프로필의 대체 값을 사용합니다.',
     settings_placeholder_max_tokens_none: '재정의 없음',
     settings_placeholder_max_tokens_fallback: '재정의 없음(대체값: {0})',
-    settings_busy_input_mode_queue: '후속 메시지 대기',
-    settings_busy_input_mode_interrupt: '현재 작업 중단',
-    settings_busy_input_mode_steer: '조정(중간 수정)',
+    settings_default_message_mode_queue: '후속 메시지 대기',
+    settings_default_message_mode_interrupt: '현재 작업 중단',
+    settings_default_message_mode_steer: '조정(중간 수정)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -14924,9 +15212,10 @@ const LOCALES = {
      reveal_in_finder: '파일 관리자에서 열기',
      reveal_failed: '표시 실패: ',
      copy_file_path: '파일 경로 복사',
+     copy_relative_path: '상대 경로 복사',
      open_in_vscode: 'VS Code에서 열기',
      open_in_vscode_failed: 'VS Code에서 열기 실패: ',
-     download_folder: 'Download Folder', // TODO: translate
+     download_folder: '다운로드 폴더',
     path_copied: '파일 경로가 클립보드에 복사되었습니다',
     path_copy_failed: '경로 복사 실패: ',
     session_rename: '대화 이름 변경',
@@ -14986,6 +15275,8 @@ const LOCALES = {
     session_archive_failed: 'Archive failed: ',
     session_duplicate: 'Duplicate conversation',
     session_duplicate_desc: 'Create a copy with the same workspace and model',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'Session duplicated',
     session_duplicate_failed: 'Duplicate failed: ',
     session_stop_response: 'Stop response',
@@ -15056,8 +15347,8 @@ const LOCALES = {
     settings_label_auto_scroll_follow: '새 내용 자동 따라가기',
     settings_desc_auto_scroll_follow: '활성화하면 토큰이 스트리밍되는 동안 화면이 자동으로 맨 아래로 스크롤됩니다. 비활성화하면 스크롤 위치를 직접 제어합니다.',
     settings_label_render_user_markdown: 'Render markdown in user messages',
-    settings_label_show_titlebar_profile: 'Show profile switcher in titlebar', // TODO: translate
-    settings_desc_show_titlebar_profile: 'When enabled, a profile switcher button appears in the top-left app titlebar so you can change profiles from any tab. Off by default; the composer footer always has a profile switcher regardless of this setting.', // TODO: translate
+    settings_label_show_titlebar_profile: '제목 표시줄에 프로필 전환기 표시',
+    settings_desc_show_titlebar_profile: '활성화하면 앱 제목 표시줄 왼쪽 상단에 프로필 전환 버튼이 나타나 어느 탭에서든 프로필을 변경할 수 있습니다. 기본적으로 꺼져 있습니다. 이 설정과 관계없이 작성기 하단에는 항상 프로필 전환기가 있습니다.',
     settings_desc_render_user_markdown: 'When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.',
     settings_label_large_text_paste_as_attachment: 'Attach large pasted text as file',
     settings_desc_large_text_paste_as_attachment: 'When enabled, long pasted text becomes a .md attachment instead of filling the composer.',
@@ -15115,7 +15406,7 @@ const LOCALES = {
     settings_tab_appearance: '외형',
     settings_tab_preferences: '환경설정',
     settings_tab_plugins: '플러그인',
-    settings_tab_extensions: 'Extensions',  // TODO: translate
+    settings_tab_extensions: '확장',
     settings_extensions_gallery_tab: 'Gallery',
     settings_extensions_installed_tab: 'Installed',
     settings_extensions_diagnostics_tab: 'Diagnostics',
@@ -15146,19 +15437,19 @@ const LOCALES = {
     ext_gallery_install_followup: '확장이 설치되었습니다. 카드에서 다음 단계를 확인하세요.',
     ext_gallery_install_ok: 'Extension installed successfully.',
     ext_gallery_uninstall_ok: 'Extension uninstalled.',
-    settings_plugins_title: 'Plugins',  // TODO: translate
+    settings_plugins_title: '플러그인',
     plugins_enable_toggle: '활성화',
-    settings_plugins_meta: 'View installed Hermes plugins and the lifecycle hooks they register. This panel is read-only.',  // TODO: translate
-    settings_plugins_empty: 'No Hermes plugins are currently visible. Install or enable plugins from the Hermes CLI/config to see them here.',  // TODO: translate
-    plugins_unnamed: 'Unnamed plugin',  // TODO: translate
-    plugins_no_description: 'No description provided.',  // TODO: translate
-    plugins_no_hooks: 'No registered lifecycle hooks',  // TODO: translate
-    plugins_registered_hooks: 'Registered hooks',  // TODO: translate
-    plugins_enabled: 'Enabled',  // TODO: translate
-    plugins_disabled: 'Disabled',  // TODO: translate
-    plugins_active_provider: 'Active (provider)',  // TODO: translate
-    plugins_provider_no_hooks: 'Provider plugin — no agent-visibility hooks',  // TODO: translate
-    plugins_load_failed: 'Failed to load plugins: ',  // TODO: translate
+    settings_plugins_meta: '설치된 Hermes 플러그인과 이들이 등록하는 수명 주기 훅을 봅니다. 이 패널은 읽기 전용입니다.',
+    settings_plugins_empty: '현재 표시되는 Hermes 플러그인이 없습니다. 여기에서 보려면 Hermes CLI/구성에서 플러그인을 설치하거나 활성화하세요.',
+    plugins_unnamed: '이름 없는 플러그인',
+    plugins_no_description: '제공된 설명이 없습니다.',
+    plugins_no_hooks: '등록된 수명 주기 훅 없음',
+    plugins_registered_hooks: '등록된 훅',
+    plugins_enabled: '활성화됨',
+    plugins_disabled: '비활성화됨',
+    plugins_active_provider: '활성(공급자)',
+    plugins_provider_no_hooks: '공급자 플러그인 — 에이전트 표시 훅 없음',
+    plugins_load_failed: '플러그인을 불러오지 못했습니다: ',
     settings_tab_system: '시스템',
     settings_tab_help: 'Help',
     settings_help_meta: 'Resources and support for Hermes WebUI.',
@@ -15273,6 +15564,7 @@ const LOCALES = {
     settings_label_sidebar_density: '사이드바 밀도',
     cmd_reasoning: 'Toggle thinking visibility (show/hide), set effort level, or check current status',
     settings_label_external_sessions: '외부 세션 표시',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: '이전 메시징 세션 표시',
@@ -15437,21 +15729,21 @@ const LOCALES = {
     dashboard_loopback_warning: '대시보드는 서버에서 loopback 전용입니다. 서버 자체에서 접속하거나 --host 0.0.0.0(안전하지 않음)으로 다시 시작하세요.',
     tab_logs: 'Logs',
     tab_settings: '설정',
-    close_menu: 'Close menu', // TODO: translate
+    close_menu: '메뉴 닫기',
 
-    logs_title: 'Logs',  // TODO: translate
-    logs_file: 'File',  // TODO: translate
-    logs_tail: 'Tail',  // TODO: translate
-    logs_auto_refresh: 'Auto-refresh (5s)',  // TODO: translate
-    logs_wrap: 'Wrap lines',  // TODO: translate
-    logs_copy_all: 'Copy all',  // TODO: translate
-    logs_empty: 'No log lines yet.',  // TODO: translate
-    logs_loading: 'Loading logs…',  // TODO: translate
-    logs_load_failed: 'Logs failed to load',  // TODO: translate
-    logs_status_idle: 'Choose a log file to view recent lines.',  // TODO: translate
-    logs_no_mtime: 'not written yet',  // TODO: translate
-    logs_truncated_hint: 'Showing the tail of a large log file; older bytes were skipped to keep memory bounded.',  // TODO: translate
-    logs_copied: 'Logs copied',  // TODO: translate
+    logs_title: '로그',
+    logs_file: '파일',
+    logs_tail: '끝부분',
+    logs_auto_refresh: '자동 새로고침(5초)',
+    logs_wrap: '줄 바꿈',
+    logs_copy_all: '모두 복사',
+    logs_empty: '아직 로그 줄이 없습니다.',
+    logs_loading: '로그를 불러오는 중…',
+    logs_load_failed: '로그를 불러오지 못했습니다',
+    logs_status_idle: '최근 줄을 보려면 로그 파일을 선택하세요.',
+    logs_no_mtime: '아직 기록되지 않음',
+    logs_truncated_hint: '대용량 로그 파일의 끝부분을 표시합니다. 메모리 사용을 제한하기 위해 오래된 바이트는 건너뛰었습니다.',
+    logs_copied: '로그가 복사됨',
     logs_severity: '심각도',
     logs_severity_all: '전체',
     logs_severity_errors: '오류',
@@ -15494,6 +15786,8 @@ const LOCALES = {
     import: '가져오기',
     export_session_json: 'JSON',
     export_session_json_tooltip: '전체 세션을 JSON으로 내보내기',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: '독립형 HTML 페이지로 내보내기',
     import_session_json_tooltip: 'JSON에서 세션 가져오기',
     clear_conversation_btn_tooltip: '이 대화의 모든 메시지 지우기',
     // Settings detail
@@ -15520,6 +15814,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Every 20 exchanges',
     settings_desc_auto_title_refresh: '최신 대화를 바탕으로 세션 제목을 자동으로 다시 생성해 대화가 진행되어도 제목을 관련 있게 유지합니다. LLM 제목 생성 모델 설정이 필요합니다.',
     settings_desc_external_sessions: 'CLI, Telegram, Discord, Slack 및 기타 채널의 대화를 세션 목록에 표시합니다. 클릭하여 가져오고 계속하세요.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: 'reset 또는 compression으로 교체된 이전 Discord, Telegram, Slack, Weixin 세션을 표시합니다.',
@@ -15551,6 +15846,7 @@ const LOCALES = {
     providers_status_not_configured: 'No API key',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API key',
+    providers_status_model: 'Model',
     providers_status_not_configured_label: 'Not configured',
     providers_oauth_hint: 'Authenticated via OAuth. No API key needed.',
     providers_oauth_config_yaml_hint: 'Token configured via config.yaml. To update, edit the providers section in your config.yaml or run hermes auth.',
@@ -15673,17 +15969,17 @@ const LOCALES = {
     provider_category_self_hosted: 'Open / self-hosted',
     provider_category_specialized: 'Specialized',
     onboarding_api_key_label: 'API key',
-    oauth_login_codex: 'Login with Codex (ChatGPT)', // TODO: translate
-    oauth_codex_step1: 'Step 1: Visit this URL and enter the code', // TODO: translate
-    oauth_codex_step2: 'Step 2: Enter this code on the page', // TODO: translate
-    oauth_codex_polling: 'Waiting for authorization...', // TODO: translate
-    oauth_codex_success: 'Codex OAuth login successful!', // TODO: translate
-    oauth_codex_error: 'OAuth login failed', // TODO: translate
-    oauth_codex_expired: 'Code expired, please try again', // TODO: translate
+    oauth_login_codex: 'Codex(ChatGPT)로 로그인',
+    oauth_codex_step1: '1단계: 이 URL을 방문하여 코드를 입력하세요',
+    oauth_codex_step2: '2단계: 페이지에 이 코드를 입력하세요',
+    oauth_codex_polling: '인증을 기다리는 중...',
+    oauth_codex_success: 'Codex OAuth 로그인 성공!',
+    oauth_codex_error: 'OAuth 로그인 실패',
+    oauth_codex_expired: '코드가 만료되었습니다. 다시 시도하세요',
     onboarding_api_key_placeholder: 'Leave blank to keep an existing saved key',
-    onboarding_api_key_label_optional: 'API key (optional)', // TODO: translate
-    onboarding_api_key_placeholder_optional: 'Leave blank for keyless servers', // TODO: translate
-    onboarding_api_key_help_keyless: 'Most LM Studio / Ollama / vLLM installs run keyless — leave this blank if your server doesn\'t require authentication. Use the Test connection button to verify.', // TODO: translate
+    onboarding_api_key_label_optional: 'API 키(선택 사항)',
+    onboarding_api_key_placeholder_optional: '키가 없는 서버는 비워 두세요',
+    onboarding_api_key_help_keyless: '대부분의 LM Studio / Ollama / vLLM 설치는 키 없이 실행됩니다. 서버에 인증이 필요하지 않으면 비워 두세요. 확인하려면 연결 테스트 버튼을 사용하세요.',
     onboarding_api_key_help_prefix: 'Saved as a secret in your Hermes .env file using',
     onboarding_base_url_label: 'Base URL',
     onboarding_base_url_placeholder: 'https://your-endpoint.example/v1',
@@ -15709,19 +16005,19 @@ const LOCALES = {
     onboarding_error_choose_model: 'Choose a model before continuing.',
     onboarding_error_provider_required: 'Choose a setup mode before continuing.',
     onboarding_error_base_url_required: 'Base URL is required for custom endpoints.',
-    onboarding_probe_test_button: 'Test connection', // TODO: translate
-    onboarding_probe_probing: 'Testing connection…', // TODO: translate
-    onboarding_probe_ok: 'Connected. {n} model(s) available.', // TODO: translate
-    onboarding_probe_error_generic: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_probe_error_invalid_url: 'Base URL must start with http:// or https://.', // TODO: translate
-    onboarding_probe_error_dns: 'Could not resolve the host. Check the URL or use the host\'s IP address.', // TODO: translate
-    onboarding_probe_error_connect_refused: 'Connection refused — the server may not be running on that address. From inside Docker, try the host IP instead of localhost.', // TODO: translate
-    onboarding_probe_error_timeout: 'The endpoint did not respond in time. Check that the server is running and the URL is correct.', // TODO: translate
-    onboarding_probe_error_http_4xx: 'The endpoint returned a client error. Check authentication and the URL path (typically ends in /v1).', // TODO: translate
-    onboarding_probe_error_http_5xx: 'The endpoint returned a server error. Check the LM Studio / Ollama server logs.', // TODO: translate
-    onboarding_probe_error_parse: 'The endpoint did not return a model list in the expected shape. Verify the URL points to the OpenAI-compatible API root.', // TODO: translate
-    onboarding_probe_error_unreachable: 'Could not reach the configured base URL.', // TODO: translate
-    onboarding_error_probe_failed: 'Could not validate the configured base URL.', // TODO: translate
+    onboarding_probe_test_button: '연결 테스트',
+    onboarding_probe_probing: '연결을 테스트하는 중…',
+    onboarding_probe_ok: '연결됨. {n}개 모델 사용 가능.',
+    onboarding_probe_error_generic: '구성된 기본 URL에 접근할 수 없습니다.',
+    onboarding_probe_error_invalid_url: '기본 URL은 http:// 또는 https://로 시작해야 합니다.',
+    onboarding_probe_error_dns: '호스트를 확인할 수 없습니다. URL을 확인하거나 호스트의 IP 주소를 사용하세요.',
+    onboarding_probe_error_connect_refused: '연결이 거부되었습니다 — 해당 주소에서 서버가 실행되고 있지 않을 수 있습니다. Docker 내부에서는 localhost 대신 호스트 IP를 사용해 보세요.',
+    onboarding_probe_error_timeout: '엔드포인트가 제때 응답하지 않았습니다. 서버가 실행 중이고 URL이 올바른지 확인하세요.',
+    onboarding_probe_error_http_4xx: '엔드포인트가 클라이언트 오류를 반환했습니다. 인증과 URL 경로(일반적으로 /v1로 끝남)를 확인하세요.',
+    onboarding_probe_error_http_5xx: '엔드포인트가 서버 오류를 반환했습니다. LM Studio / Ollama 서버 로그를 확인하세요.',
+    onboarding_probe_error_parse: '엔드포인트가 예상한 형식의 모델 목록을 반환하지 않았습니다. URL이 OpenAI 호환 API 루트를 가리키는지 확인하세요.',
+    onboarding_probe_error_unreachable: '구성된 기본 URL에 접근할 수 없습니다.',
+    onboarding_error_probe_failed: '구성된 기본 URL을 검증할 수 없습니다.',
     onboarding_error_workspace_required: 'Workspace is required.',
     onboarding_error_model_required: 'Model is required.',
     onboarding_complete: '설정 완료',
@@ -15938,6 +16234,30 @@ const LOCALES = {
     cron_name_label: 'Name',
     cron_name_placeholder: 'Optional',
     cron_schedule_label: 'Schedule',
+    cron_schedule_preset_label: 'Preset',
+    cron_schedule_preset_hourly: 'Hourly',
+    cron_schedule_preset_daily: 'Daily',
+    cron_schedule_preset_weekdays: 'Weekdays',
+    cron_schedule_preset_weekly: 'Weekly',
+    cron_schedule_preset_monthly: 'Monthly',
+    cron_schedule_preset_custom: 'Custom',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: '시간',
+    cron_schedule_minute_label: '분',
+    cron_schedule_weekday_label: '요일 (0-6, 일-토)',
+    cron_schedule_month_day_label: '일',
+    cron_schedule_time_hint: '시간은 서버 시간 기준이며 cron은 서버에서 실행됩니다.',
     cron_schedule_hint: "Use 'every 1h' or a cron expression for recurring jobs. Bare durations like '30m' run once.",
     cron_schedule_once_warning: "Duration forms like '30m' run once and are removed after running. Use 'every 30m' to keep a recurring job.",
     cron_prompt_label: 'Prompt',
@@ -16032,36 +16352,36 @@ const LOCALES = {
     settings_label_tts_auto_read: '답변 자동 읽기',
     settings_desc_tts_auto_read: '도움말 답변을 자동으로 읽어줌',
     // Composer voice-mode pref (#1488)
-    settings_label_voice_mode: 'Hands-free voice mode button',  // TODO: translate
+    settings_label_voice_mode: '핸즈프리 음성 모드 버튼',
     settings_desc_voice_mode: 'Show the voice-mode button (audio waveform) next to the dictation mic. Lets you speak naturally — Hermes auto-sends after a pause and reads replies aloud. Requires a browser that supports both speech recognition and TTS.',
     settings_label_raw_audio: 'Send raw audio instead of transcribing',
     settings_desc_raw_audio: 'Record and send the original audio file to the agent instead of converting it to text first. The agent can then transcribe it or process the raw audio (emotion, background noise, custom STT). Like Telegram\'s voice message behavior.',
     voice_send_raw: 'Send raw audio',
-    voice_raw_attached: 'Audio attached. Press Send or type more.',  // TODO: translate
+    voice_raw_attached: '오디오가 첨부되었습니다. 보내기를 누르거나 더 입력하세요.',
     settings_label_tts_voice: '음성',
     settings_desc_tts_voice: '음성 합성 음성 선택',
     settings_label_tts_rate: '말 속도',
     settings_label_tts_pitch: '말 톤',
     settings_label_tts_engine: 'TTS 엔진',
     settings_desc_tts_engine: '음성 엔진을 선택하세요. Edge TTS는 서버를 통해 Microsoft 신경 음성을 사용합니다.',
-    checkpoint_date: 'Date',  // TODO: translate
-    checkpoint_diff_files_changed: (n) => `${n} file${n === 1 ? '' : 's'} changed`,  // TODO: translate
-    checkpoint_diff_no_changes: 'No differences found between this checkpoint and the current workspace.',  // TODO: translate
-    checkpoint_diff_title: 'Changes in checkpoint',  // TODO: translate
-    checkpoint_empty: 'No checkpoints found for this workspace.',  // TODO: translate
-    checkpoint_error: 'Failed to load checkpoints',  // TODO: translate
-    checkpoint_files: 'Files',  // TODO: translate
-    checkpoint_loading: 'Loading checkpoints…',  // TODO: translate
-    checkpoint_message: 'Message',  // TODO: translate
-    checkpoint_restore: 'Restore',  // TODO: translate
-    checkpoint_restore_confirm_message: (ckpt) => `Restore workspace to checkpoint "${ckpt}"? This will overwrite files with the saved versions. Files added after this checkpoint will not be deleted.`,  // TODO: translate
-    checkpoint_restore_confirm_title: 'Restore checkpoint?',  // TODO: translate
-    checkpoint_restored: 'Checkpoint restored',  // TODO: translate
-    checkpoint_title: 'Checkpoints',  // TODO: translate
-    checkpoint_view_diff: 'View diff',  // TODO: translate
-    insights_activity_by_day: 'Activity by Day',  // TODO: translate
-    insights_activity_by_hour: 'Activity by Hour',  // TODO: translate
-    insights_cost: 'Estimated Cost',  // TODO: translate
+    checkpoint_date: '날짜',
+    checkpoint_diff_files_changed: (n) => `파일 ${n}개 변경됨`,
+    checkpoint_diff_no_changes: '이 체크포인트와 현재 작업 공간 사이에 차이가 없습니다.',
+    checkpoint_diff_title: '체크포인트의 변경 사항',
+    checkpoint_empty: '이 작업 공간에 대한 체크포인트를 찾을 수 없습니다.',
+    checkpoint_error: '체크포인트를 불러오지 못했습니다',
+    checkpoint_files: '파일',
+    checkpoint_loading: '체크포인트를 불러오는 중…',
+    checkpoint_message: '메시지',
+    checkpoint_restore: '복원',
+    checkpoint_restore_confirm_message: (ckpt) => `작업 공간을 체크포인트 "${ckpt}"(으)로 복원하시겠습니까? 파일이 저장된 버전으로 덮어쓰기됩니다. 이 체크포인트 이후에 추가된 파일은 삭제되지 않습니다.`,
+    checkpoint_restore_confirm_title: '체크포인트를 복원하시겠습니까?',
+    checkpoint_restored: '체크포인트가 복원됨',
+    checkpoint_title: '체크포인트',
+    checkpoint_view_diff: 'diff 보기',
+    insights_activity_by_day: '일별 활동',
+    insights_activity_by_hour: '시간별 활동',
+    insights_cost: '예상 비용',
     insights_daily_tokens: '일별 토큰',
     insights_model_name: '모델',
     insights_model_sessions: '세션',
@@ -16075,45 +16395,45 @@ const LOCALES = {
     insights_model_health_replacement: 'Replacement guide',
     insights_model_health_cost_per_m: 'Cost / 1M',
     insights_no_usage_data: '아직 사용 데이터가 없습니다',
-    insights_footer: 'Showing data from the last {days} days',  // TODO: translate
-    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
-    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
-    insights_skill_usage_total: 'Total invocations',  // TODO: translate
-    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
-    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
-    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
-    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
-    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
-    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
-    insights_skill_usage_col_views: 'Views',  // TODO: translate
-    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
-    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
-    insights_input_tokens: 'Input',  // TODO: translate
-    insights_messages: 'Messages',  // TODO: translate
-    insights_models: 'Models',  // TODO: translate
-    insights_no_cost: 'N/A',  // TODO: translate
-    insights_output_tokens: 'Output',  // TODO: translate
-    insights_peak_hour: 'Peak: {hour}',  // TODO: translate
-    insights_sessions: 'Sessions',  // TODO: translate
-    insights_title: 'Usage Analytics',  // TODO: translate
-    insights_token_breakdown: 'Token Breakdown',  // TODO: translate
-    insights_tokens: 'Tokens',  // TODO: translate
-    insights_total: 'Total',  // TODO: translate
-    settings_desc_api_redact: 'Self-hosted users can disable for transparency (not recommended for shared instances).',  // TODO: translate
-    settings_label_api_redact: 'Redact sensitive data in API responses',  // TODO: translate
-    voice_error: 'Voice not supported in this browser',  // TODO: translate
-    voice_listening: 'Listening…',  // TODO: translate
-    voice_mode_active: 'Voice mode on',  // TODO: translate
-    voice_mode_off: 'Voice mode off',  // TODO: translate
-    voice_speaking: 'Speaking…',  // TODO: translate
-    voice_thinking: 'Thinking…',  // TODO: translate
+    insights_footer: '최근 {days}일간의 데이터 표시 중',
+    insights_skill_usage_title: '스킬 사용',
+    insights_skill_usage_sub: '도구 호출 빈도',
+    insights_skill_usage_total: '전체 호출 수',
+    insights_skill_usage_skills_used: '사용된 스킬',
+    insights_skill_usage_no_data: '아직 스킬 사용 데이터가 없습니다',
+    insights_skill_usage_no_data_hint: '스킬은 대화에서 사용되면 여기에 표시됩니다.',
+    insights_skill_usage_footer: '~/.hermes/skills/의 집계',
+    insights_skill_usage_col_skill: '스킬',
+    insights_skill_usage_col_uses: '사용',
+    insights_skill_usage_col_views: '조회',
+    insights_skill_usage_col_share: '사용률 %',
+    insights_skill_usage_col_patches: '패치',
+    insights_input_tokens: '입력',
+    insights_messages: '메시지',
+    insights_models: '모델',
+    insights_no_cost: '해당 없음',
+    insights_output_tokens: '출력',
+    insights_peak_hour: '최고: {hour}',
+    insights_sessions: '세션',
+    insights_title: '사용량 분석',
+    insights_token_breakdown: '토큰 분석',
+    insights_tokens: '토큰',
+    insights_total: '전체',
+    settings_desc_api_redact: '자체 호스팅 사용자는 투명성을 위해 비활성화할 수 있습니다(공유 인스턴스에는 권장되지 않음).',
+    settings_label_api_redact: 'API 응답에서 민감한 데이터 가리기',
+    voice_error: '이 브라우저에서는 음성이 지원되지 않습니다',
+    voice_listening: '듣는 중…',
+    voice_mode_active: '음성 모드 켜짐',
+    voice_mode_off: '음성 모드 꺼짐',
+    voice_speaking: '말하는 중…',
+    voice_thinking: '생각하는 중…',
     // Composer voice buttons (#1488)
-    voice_dictate: 'Dictate',  // TODO: translate
+    voice_dictate: '받아쓰기',
     voice_dictate_active: 'Stop dictation',
-    voice_recording_active: '녹음 중지',  // TODO: translate
-    voice_mode_toggle: 'Voice mode',  // TODO: translate
-    voice_mode_toggle_active: 'Exit voice mode',  // TODO: translate
-    subagent_children: 'Subagent sessions',  // TODO: translate
+    voice_recording_active: '녹음 중지',
+    voice_mode_toggle: '음성 모드',
+    voice_mode_toggle_active: '음성 모드 종료',
+    subagent_children: '서브에이전트 세션',
     outline_title: '개요',
     outline_empty: '아직 질문이 없습니다.',
     outline_loading: '로딩 중…',
@@ -16419,17 +16739,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Interrompu — envoi d\'un nouveau message',
-    settings_label_busy_input_mode: 'Mode de saisie lorsque occupé',
-    settings_desc_busy_input_mode: 'Contrôle ce qui se passe lorsque vous envoyez un message pendant que l\'agent est en cours d\'exécution. File d\'attente attend ; Interruption annule et recommence ; Steer injecte une correction en milieu de tour sans interrompre. Si Steer est indisponible, le brouillon est restauré pour que vous puissiez choisir la prochaine action.',
+    settings_label_default_message_mode: 'Mode de message par défaut',
+    settings_desc_default_message_mode: 'Contrôle ce qui se passe lorsque vous envoyez un message pendant que l\'agent est en cours d\'exécution. File d\'attente attend ; Interruption annule et recommence ; Steer injecte une correction en milieu de tour sans interrompre. Si Steer est indisponible, le brouillon est restauré pour que vous puissiez choisir la prochaine action.',
     settings_label_fade_text_effect: 'Effet de fondu du texte',
     settings_desc_fade_text_effect: 'Affiche progressivement les nouveaux mots diffusés pendant que l’assistant répond. Similaire à OpenWebUI ; désactivé par défaut pour des performances maximales.',
     settings_label_max_tokens: 'Nombre maximal de jetons en sortie',
     settings_desc_max_tokens: 'Limite la longueur des nouvelles réponses en streaming. Laissez vide pour utiliser la valeur de repli du profil actif.',
     settings_placeholder_max_tokens_none: 'Aucune surcharge',
     settings_placeholder_max_tokens_fallback: 'Aucune surcharge (repli : {0})',
-    settings_busy_input_mode_queue: 'Suivi de file d\'attente',
-    settings_busy_input_mode_interrupt: 'Interrompre le tour en cours',
-    settings_busy_input_mode_steer: 'Steer (correction en milieu de tour)',
+    settings_default_message_mode_queue: 'Suivi de file d\'attente',
+    settings_default_message_mode_interrupt: 'Interrompre le tour en cours',
+    settings_default_message_mode_steer: 'Steer (correction en milieu de tour)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -16591,6 +16911,7 @@ const LOCALES = {
     reveal_in_finder: 'Révéler dans le gestionnaire de fichiers',
     reveal_failed: 'Échec de la révélation : ',
     copy_file_path: 'Copier le chemin du fichier',
+    copy_relative_path: 'Copier le chemin relatif',
     open_in_vscode: 'Ouvrir dans VS Code',
     open_in_vscode_failed: 'Échec de l\'ouverture dans VS Code : ',
     download_folder: 'Télécharger le dossier',
@@ -16653,6 +16974,8 @@ const LOCALES = {
     session_archive_failed: 'Échec de l\'archivage : ',
     session_duplicate: 'Dupliquer la conversation',
     session_duplicate_desc: 'Créer une copie avec le même espace de travail et le même modèle',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'Session dupliquée',
     session_duplicate_failed: 'Échec de la duplication : ',
     session_stop_response: 'Arrêter la réponse',
@@ -16939,6 +17262,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Densité de la barre latérale',
     cmd_reasoning: 'Basculer la visibilité du raisonnement (afficher/masquer), définir le niveau d\'effort, ou vérifier l\'état actuel',
     settings_label_external_sessions: 'Afficher les sessions non-WebUI',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Afficher les sessions cron',
     settings_label_webhook_sessions: 'Afficher les sessions webhook',
     settings_label_previous_messaging_sessions: 'Afficher les sessions de messagerie précédentes',
@@ -17209,6 +17533,8 @@ const LOCALES = {
     import: 'Importer',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Exporter la session complète en JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Exporter en page HTML autonome',
     import_session_json_tooltip: 'Importer une session depuis JSON',
     clear_conversation_btn_tooltip: 'Effacer tous les messages de cette conversation',
     settings_label_rtl: 'Disposition du chat de droite à gauche',
@@ -17254,6 +17580,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Tous les 20 échanges',
     settings_desc_auto_title_refresh: 'Régénère automatiquement le titre de la session en fonction du dernier échange, le gardant pertinent à mesure que la conversation évolue. Nécessite qu\'un modèle de génération de titres LLM soit configuré.',
     settings_desc_external_sessions: 'Afficher les conversations de la CLI, Telegram, Discord, Slack et d\'autres canaux dans la liste des sessions. Cliquez pour importer et continuer.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Afficher les sorties des tâches cron comme des conversations dans la barre latérale. Uniquement actif lorsque les sessions non-WebUI sont activées. Désactivé par défaut ; les tâches à haute fréquence peuvent inonder la barre latérale.',
     settings_desc_webhook_sessions: 'Afficher les exécutions webhook comme des conversations dans la barre latérale. Uniquement actif lorsque les sessions non-WebUI sont activées. Désactivé par défaut ; les routes à volume élevé peuvent inonder la barre latérale.',
     settings_desc_previous_messaging_sessions: 'Afficher les anciennes sessions Discord, Telegram, Slack et Weixin qui ont été remplacées par une réinitialisation ou une compression.',
@@ -17284,6 +17611,7 @@ const LOCALES = {
     providers_status_not_configured: 'Aucune clé API',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'Clé API',
+    providers_status_model: 'Modèle',
     providers_status_not_configured_label: 'Non configuré',
     providers_oauth_hint: 'Authentifié via OAuth. Aucune clé API nécessaire.',
     providers_oauth_config_yaml_hint: 'Jeton configuré via config.yaml. Pour mettre à jour, modifiez la section des fournisseurs dans votre config.yaml ou exécutez hermes auth.',
@@ -17665,6 +17993,30 @@ const LOCALES = {
     cron_name_label: 'Nom',
     cron_name_placeholder: 'Facultatif',
     cron_schedule_label: 'Planification',
+    cron_schedule_preset_label: 'Préréglage',
+    cron_schedule_preset_hourly: 'Toutes les heures',
+    cron_schedule_preset_daily: 'Quotidien',
+    cron_schedule_preset_weekdays: 'Jours ouvrés',
+    cron_schedule_preset_weekly: 'Hebdomadaire',
+    cron_schedule_preset_monthly: 'Mensuel',
+    cron_schedule_preset_custom: 'Personnalisé',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Heure',
+    cron_schedule_minute_label: 'Minute',
+    cron_schedule_weekday_label: 'Jour de la semaine (0-6, dim-sam)',
+    cron_schedule_month_day_label: 'Jour',
+    cron_schedule_time_hint: 'L\'heure est celle du serveur; cron s\'exécute côté serveur.',
     cron_schedule_hint: "Utilisez 'every 1h' ou une expression cron pour les tâches récurrentes. Les durées simples comme '30m' s'exécutent une fois.",
     cron_schedule_once_warning: "Les formes de durée comme '30m' s'exécutent une fois et sont supprimées après l'exécution. Utilisez 'every 30m' pour conserver une tâche récurrente.",
     cron_prompt_label: 'Invite',
@@ -17769,7 +18121,7 @@ const LOCALES = {
     cancelling: 'İptal ediliyor\u2026',
     cancel_failed: 'İptal başarısız oldu:',
     mic_denied: 'Mikrofon erişimi reddedildi. Tarayıcı izinlerini kontrol edin.',
-    mic_insecure_origin: 'Voice input needs a secure connection. Open Hermes over HTTPS or from localhost to use the microphone.', // TODO: translate
+    mic_insecure_origin: 'Sesli giriş güvenli bir bağlantı gerektirir. Mikrofonu kullanmak için Hermes\'i HTTPS üzerinden veya localhost\'tan açın.',
     mic_no_speech: 'Konuşma algılanmadı. Tekrar deneyin.',
     mic_network: 'Konuşma tanıma kullanılamıyor.',
     mic_error: 'Ses girişi hatası:',
@@ -18063,17 +18415,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Kesintiye uğradı — yeni mesaj gönderilir',
-    settings_label_busy_input_mode: 'Meşgul giriş modu',
-    settings_desc_busy_input_mode: 'Aracı çalışırken bir mesaj gönderdiğinizde ne olacağını kontrol eder. Sıra bekler; Interrupt iptal eder ve yeniden başlar; Steer, dönüşün ortasında kesintiye uğramadan bir düzeltme enjekte eder (aracı veya akış mevcut olmadığında kuyruğa geri döner).',
+    settings_label_default_message_mode: 'Varsayılan mesaj modu',
+    settings_desc_default_message_mode: 'Aracı çalışırken bir mesaj gönderdiğinizde ne olacağını kontrol eder. Sıra bekler; Interrupt iptal eder ve yeniden başlar; Steer, dönüşün ortasında kesintiye uğramadan bir düzeltme enjekte eder. Steer kullanılamıyorsa taslak geri yüklenir, böylece sonraki adımı seçebilirsiniz.',
     settings_label_fade_text_effect: 'Metin efektini soldur',
     settings_desc_fade_text_effect: 'Asistan yanıt verirken yeni aktarılan sözcüklerin geçişini sağlayın. OpenWebUI\'ye benzer; Maksimum performans için varsayılan olarak kapalıdır.',
     settings_label_max_tokens: 'Maksimum çıktı belirteci',
     settings_desc_max_tokens: 'Yeni akış yanıtlarının uzunluğunu sınırlar. Etkin profilin yedek değerini kullanmak için boş bırakın.',
     settings_placeholder_max_tokens_none: 'Geçersiz kılma yok',
     settings_placeholder_max_tokens_fallback: 'Geçersiz kılma yok (yedek: {0})',
-    settings_busy_input_mode_queue: 'Sıra takibi',
-    settings_busy_input_mode_interrupt: 'Mevcut dönüşü kes',
-    settings_busy_input_mode_steer: 'Yönlendirme (dönüş ortası düzeltme)',
+    settings_default_message_mode_queue: 'Sıra takibi',
+    settings_default_message_mode_interrupt: 'Mevcut dönüşü kes',
+    settings_default_message_mode_steer: 'Yönlendirme (dönüş ortası düzeltme)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -18214,6 +18566,7 @@ const LOCALES = {
     reveal_in_finder: 'Dosya Yöneticisinde Göster',
     reveal_failed: 'Açıklanamadı:',
     copy_file_path: 'Dosya yolunu kopyala',
+    copy_relative_path: 'Göreli yolu kopyala',
     download_folder: 'İndirme klasörü',
     path_copied: 'Dosya yolu panoya kopyalandı',
     path_copy_failed: 'Yol kopyalanamadı:',
@@ -18274,6 +18627,8 @@ const LOCALES = {
     session_archive_failed: 'Arşivleme başarısız oldu:',
     session_duplicate: 'Yinelenen görüşme',
     session_duplicate_desc: 'Aynı çalışma alanı ve modelle bir kopya oluşturun',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'Oturum kopyalandı',
     session_duplicate_failed: 'Kopyalama başarısız oldu:',
     session_stop_response: 'Yanıtı durdur',
@@ -18344,8 +18699,8 @@ const LOCALES = {
     settings_label_auto_scroll_follow: 'Yeni içeriği otomatik takip et',
     settings_desc_auto_scroll_follow: 'Etkinleştirildiğinde, yeni belirteçler akarken görünüm en alta kaydırılır. Devre dışı bırakıldığında kaydırma konumunu kendiniz kontrol edersiniz.',
     settings_label_render_user_markdown: 'Render markdown in user messages',
-    settings_label_show_titlebar_profile: 'Show profile switcher in titlebar', // TODO: translate
-    settings_desc_show_titlebar_profile: 'When enabled, a profile switcher button appears in the top-left app titlebar so you can change profiles from any tab. Off by default; the composer footer always has a profile switcher regardless of this setting.', // TODO: translate
+    settings_label_show_titlebar_profile: 'Başlık çubuğunda profil değiştiriciyi göster',
+    settings_desc_show_titlebar_profile: 'Etkinleştirildiğinde, sol üstteki uygulama başlık çubuğunda bir profil değiştirici düğmesi görünür, böylece herhangi bir sekmeden profil değiştirebilirsiniz. Varsayılan olarak kapalıdır; bu ayardan bağımsız olarak oluşturucu altbilgisinde her zaman bir profil değiştirici bulunur.',
     settings_desc_render_user_markdown: 'When enabled, bold, italic, links, and other markdown in your own messages are rendered. Off by default; fenced code blocks and math always render regardless of this setting.',
     settings_label_large_text_paste_as_attachment: 'Attach large pasted text as file',
     settings_desc_large_text_paste_as_attachment: 'When enabled, long pasted text becomes a .md attachment instead of filling the composer.',
@@ -18403,7 +18758,7 @@ const LOCALES = {
     settings_tab_appearance: 'Dış görünüş',
     settings_tab_preferences: 'Tercihler',
     settings_tab_plugins: 'Eklentiler',
-    settings_tab_extensions: 'Extensions',  // TODO: translate
+    settings_tab_extensions: 'Uzantılar',
     settings_extensions_gallery_tab: 'Gallery',
     settings_extensions_installed_tab: 'Installed',
     settings_extensions_diagnostics_tab: 'Diagnostics',
@@ -18561,6 +18916,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Kenar çubuğu yoğunluğu',
     cmd_reasoning: 'Düşünme görünürlüğünü değiştirin (göster/gizle), çaba düzeyini ayarlayın veya mevcut durumu kontrol edin',
     settings_label_external_sessions: 'WebUI olmayan oturumları göster',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Show cron sessions',
     settings_label_webhook_sessions: 'Show webhook sessions',
     settings_label_previous_messaging_sessions: 'Önceki mesajlaşma oturumlarını göster',
@@ -18724,7 +19080,7 @@ const LOCALES = {
     dashboard_loopback_warning: 'Kontrol Paneli sunucuda yalnızca geri döngüye sahiptir. Ya sunucunun kendisinden göz atın ya da --host 0.0.0.0 (güvenli değil) ile yeniden başlatın.',
     tab_logs: 'Günlükler',
     tab_settings: 'Ayarlar',
-    close_menu: 'Close menu', // TODO: translate
+    close_menu: 'Menüyü kapat',
 
     logs_title: 'Günlükler',
     logs_file: 'Dosya',
@@ -18781,6 +19137,8 @@ const LOCALES = {
     import: 'İçe aktarmak',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Tüm oturumu JSON olarak dışa aktar',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Bağımsız bir HTML sayfası olarak dışa aktar',
     import_session_json_tooltip: 'JSON\'dan oturumu içe aktar',
     clear_conversation_btn_tooltip: 'Bu görüşmedeki tüm mesajları temizle',
     // Settings detail
@@ -18807,6 +19165,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Her 20 değişimde bir',
     settings_desc_auto_title_refresh: 'Oturum başlıklarını en son konuşmaya göre otomatik olarak yeniden oluşturarak konuşma ilerledikçe başlıkların alakalı kalmasını sağlar. LLM başlık oluşturma modeli yapılandırması gerektirir.',
     settings_desc_external_sessions: 'Oturum listesinde CLI, Telegram, Discord, Slack ve diğer kanallardan gelen konuşmaları gösterin. İçe aktarmak ve devam etmek için tıklayın.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Surface cron job output as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-frequency jobs can flood the sidebar.',
     settings_desc_webhook_sessions: 'Surface webhook runs as conversations in the sidebar. Only active when non-WebUI sessions are enabled. Defaults off; high-volume routes can flood the sidebar.',
     settings_desc_previous_messaging_sessions: 'Sıfırlama veya sıkıştırmayla değiştirilen eski Discord, Telegram, Slack ve Weixin oturumlarını gösterin.',
@@ -18837,6 +19196,7 @@ const LOCALES = {
     providers_status_not_configured: 'API anahtarı yok',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API anahtarı',
+    providers_status_model: 'Model',
     providers_status_not_configured_label: 'Yapılandırılmadı',
     providers_oauth_hint: 'OAuth aracılığıyla kimlik doğrulaması yapıldı. API anahtarına gerek yok.',
     providers_oauth_config_yaml_hint: 'Belirteç config.yaml aracılığıyla yapılandırıldı. Güncellemek için config.yaml dosyanızdaki sağlayıcılar bölümünü düzenleyin veya hermes auth\'u çalıştırın.',
@@ -19224,6 +19584,30 @@ const LOCALES = {
     cron_name_label: 'İsim',
     cron_name_placeholder: 'İsteğe bağlı',
     cron_schedule_label: 'Takvim',
+    cron_schedule_preset_label: 'Ön ayar',
+    cron_schedule_preset_hourly: 'Saatlik',
+    cron_schedule_preset_daily: 'Günlük',
+    cron_schedule_preset_weekdays: 'Hafta içi',
+    cron_schedule_preset_weekly: 'Haftalık',
+    cron_schedule_preset_monthly: 'Aylık',
+    cron_schedule_preset_custom: 'Özel',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Saat',
+    cron_schedule_minute_label: 'Dakika',
+    cron_schedule_weekday_label: 'Haftanın günü (0-6, Paz-Cmt)',
+    cron_schedule_month_day_label: 'Gün',
+    cron_schedule_time_hint: 'Saat sunucu saatidir; cron sunucu tarafında çalışır.',
     cron_schedule_hint: "Use 'every 1h' or a cron expression for recurring jobs. Bare durations like '30m' run once.",
     cron_schedule_once_warning: "Duration forms like '30m' run once and are removed after running. Use 'every 30m' to keep a recurring job.",
     cron_prompt_label: 'Çabuk',
@@ -19362,18 +19746,18 @@ const LOCALES = {
     insights_model_health_cost_per_m: 'Cost / 1M',
     insights_no_usage_data: 'Henüz kullanım verisi yok',
     insights_footer: 'Son {days} günün verileri gösteriliyor',
-    insights_skill_usage_title: 'Skill Usage',  // TODO: translate
-    insights_skill_usage_sub: 'Tool invocation frequency',  // TODO: translate
-    insights_skill_usage_total: 'Total invocations',  // TODO: translate
-    insights_skill_usage_skills_used: 'Skills used',  // TODO: translate
-    insights_skill_usage_no_data: 'No skill usage data yet',  // TODO: translate
-    insights_skill_usage_no_data_hint: 'Skills will appear here once used in conversations.',  // TODO: translate
-    insights_skill_usage_footer: 'Counts from ~/.hermes/skills/',  // TODO: translate
-    insights_skill_usage_col_skill: 'Skill',  // TODO: translate
-    insights_skill_usage_col_uses: 'Uses',  // TODO: translate
-    insights_skill_usage_col_views: 'Views',  // TODO: translate
-    insights_skill_usage_col_share: 'Usage %',  // TODO: translate
-    insights_skill_usage_col_patches: 'Patches',  // TODO: translate
+    insights_skill_usage_title: 'Beceri kullanımı',
+    insights_skill_usage_sub: 'Araç çağırma sıklığı',
+    insights_skill_usage_total: 'Toplam çağrılar',
+    insights_skill_usage_skills_used: 'Kullanılan beceriler',
+    insights_skill_usage_no_data: 'Henüz beceri kullanım verisi yok',
+    insights_skill_usage_no_data_hint: 'Beceriler, konuşmalarda kullanıldıklarında burada görünür.',
+    insights_skill_usage_footer: '~/.hermes/skills/ konumundan sayımlar',
+    insights_skill_usage_col_skill: 'Beceri',
+    insights_skill_usage_col_uses: 'Kullanımlar',
+    insights_skill_usage_col_views: 'Görüntülemeler',
+    insights_skill_usage_col_share: 'Kullanım %',
+    insights_skill_usage_col_patches: 'Yamalar',
     insights_input_tokens: 'Giriş',
     insights_messages: 'Mesajlar',
     insights_models: 'Modeller',
@@ -19703,17 +20087,17 @@ const LOCALES = {
     steer_recovery_retry: 'Spróbuj ponownie',
     steer_recovery_dismiss: 'Odrzuć',
     busy_interrupt_confirm: 'Przerwano — wysyłanie nowej wiadomości',
-    settings_label_busy_input_mode: 'Tryb wprowadzania przy zajętości',
-    settings_desc_busy_input_mode: 'Kontroluje, co dzieje się, gdy wysyłasz wiadomość, podczas gdy agent pracuje. Kolejkowanie czeka; Przerwanie anuluje i zaczyna od nowa; Kierowanie (Steer) wprowadza korektę w środku tury bez przerywania (cofa się do kolejkowania, gdy agent lub strumień jest niedostępny).',
+    settings_label_default_message_mode: 'Domyślny tryb wiadomości',
+    settings_desc_default_message_mode: 'Kontroluje, co dzieje się, gdy wysyłasz wiadomość, podczas gdy agent pracuje. Kolejkowanie czeka; Przerwanie anuluje i zaczyna od nowa; Kierowanie (Steer) wprowadza korektę w środku tury bez przerywania. Jeśli Steer jest niedostępny, szkic zostaje przywrócony, aby można było wybrać następne działanie.',
     settings_label_fade_text_effect: 'Efekt pojawiania się tekstu',
     settings_desc_fade_text_effect: 'Płynne pojawianie się nowo przesyłanych słów, podczas gdy asystent odpowiada. Podobnie jak w OpenWebUI; domyślnie wyłączone dla maksymalnej wydajności.',
     settings_label_max_tokens: 'Maksymalna liczba tokenów wyjściowych',
     settings_desc_max_tokens: 'Ogranicza długość nowych odpowiedzi strumieniowanych. Pozostaw puste, aby użyć wartości zapasowej z bieżącego profilu.',
     settings_placeholder_max_tokens_none: 'Brak nadpisania',
     settings_placeholder_max_tokens_fallback: 'Brak nadpisania (wartość zapasowa: {0})',
-    settings_busy_input_mode_queue: 'Kolejkuj tury',
-    settings_busy_input_mode_interrupt: 'Przerwij bieżącą turę',
-    settings_busy_input_mode_steer: 'Korekta w trakcie tury (steer)',
+    settings_default_message_mode_queue: 'Kolejkuj tury',
+    settings_default_message_mode_interrupt: 'Przerwij bieżącą turę',
+    settings_default_message_mode_steer: 'Korekta w trakcie tury (steer)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -19882,6 +20266,7 @@ const LOCALES = {
     reveal_in_finder: 'Pokaż w Menedżerze Plików',
     reveal_failed: 'Nie udało się pokazać: ',
     copy_file_path: 'Kopiuj ścieżkę pliku',
+    copy_relative_path: 'Kopiuj ścieżkę względną',
     open_in_vscode: 'Otwórz w VS Code',
     open_in_vscode_failed: 'Nie udało się otworzyć w VS Code: ',
     download_folder: 'Pobierz folder',
@@ -19944,6 +20329,8 @@ const LOCALES = {
     session_archive_failed: 'Archiwizacja nie powiodła się: ',
     session_duplicate: 'Duplikuj konwersację',
     session_duplicate_desc: 'Utwórz kopię konwersacji z tym samym obszarem roboczym i modelem',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'Zduplikowano konwersację',
     session_duplicate_failed: 'Duplikowanie nie powiodło się: ',
     session_stop_response: 'Zatrzymaj odpowiedź',
@@ -20229,6 +20616,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Gęstość paska bocznego',
     cmd_reasoning: 'Przełącz widoczność myślenia (pokaż/ukryj), ustaw poziom wysiłku lub sprawdź bieżący status',
     settings_label_external_sessions: 'Pokaż sesje inne niż WebUI',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Pokaż sesje cron',
     settings_label_webhook_sessions: 'Pokaż sesje webhooków',
     settings_label_previous_messaging_sessions: 'Pokaż poprzednie sesje komunikatorów',
@@ -20488,6 +20876,8 @@ const LOCALES = {
     import: 'Importuj',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Eksportuj pełną sesję jako JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Eksportuj jako samodzielną stronę HTML',
     import_session_json_tooltip: 'Importuj sesję z pliku JSON',
     clear_conversation_btn_tooltip: 'Wyczyść wszystkie wiadomości w tej konwersacji',
     // Settings detail
@@ -20545,6 +20935,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Co 20 wymian',
     settings_desc_auto_title_refresh: 'Automatycznie generuje na nowo tytuł konwersacji na podstawie najnowszej wymiany, utrzymując go adekwatnym w miarę rozwoju rozmowy. Wymaga skonfigurowanego modelu LLM do generowania tytułów.',
     settings_desc_external_sessions: 'Pokaż konwersacje z CLI, Telegrama, Discorda, Slacka i innych kanałów na liście sesji. Kliknij, aby zaimportować i kontynuować.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Wyświetlaj wyjście zadań cron jako konwersacje na pasku bocznym. Aktywne tylko wtedy, gdy włączone są sesje spoza WebUI. Domyślnie wyłączone; zadania o wysokiej częstotliwości mogą zalać pasek boczny.',
     settings_desc_webhook_sessions: 'Wyświetlaj uruchomienia webhooków jako konwersacje na pasku bocznym. Aktywne tylko wtedy, gdy włączone są sesje spoza WebUI. Domyślnie wyłączone; trasy o dużym natężeniu mogą zalać pasek boczny.',
     settings_desc_previous_messaging_sessions: 'Pokaż starsze sesje z Discorda, Telegrama, Slacka i Weixin, które zostały zastąpione przez reset lub kompresję.',
@@ -20576,6 +20967,7 @@ const LOCALES = {
     providers_status_not_configured: 'Brak klucza API',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'Klucz API',
+    providers_status_model: 'Model',
     providers_status_not_configured_label: 'Nieskonfigurowany',
     providers_oauth_hint: 'Uwierzytelniono przez OAuth. Klucz API nie jest wymagany.',
     providers_oauth_config_yaml_hint: 'Token skonfigurowany w config.yaml. Aby zaktualizować, edytuj sekcję providers w config.yaml lub uruchom hermes auth.',
@@ -20963,6 +21355,30 @@ const LOCALES = {
     cron_name_label: 'Nazwa',
     cron_name_placeholder: 'Opcjonalnie',
     cron_schedule_label: 'Harmonogram',
+    cron_schedule_preset_label: 'Ustawienie wstępne',
+    cron_schedule_preset_hourly: 'Co godzinę',
+    cron_schedule_preset_daily: 'Codziennie',
+    cron_schedule_preset_weekdays: 'Dni robocze',
+    cron_schedule_preset_weekly: 'Co tydzień',
+    cron_schedule_preset_monthly: 'Co miesiąc',
+    cron_schedule_preset_custom: 'Niestandardowe',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Godzina',
+    cron_schedule_minute_label: 'Minuta',
+    cron_schedule_weekday_label: 'Dzień tygodnia (0-6, niedz.-sob.)',
+    cron_schedule_month_day_label: 'Dzień',
+    cron_schedule_time_hint: 'Czas jest czasem serwera; cron działa po stronie serwera.',
     cron_schedule_hint: "Użyj 'every 1h' lub wyrażenia cron dla zadań cyklicznych. Same formy czasu trwania, jak '30m', zostaną uruchomione tylko raz.",
     cron_schedule_once_warning: 'Formy czasu trwania, takie jak \'30m\', są uruchamiane raz i usuwane po uruchomieniu. Użyj \'every 30m\', aby utrzymać zadanie cykliczne.',
     cron_prompt_label: 'Monit',
@@ -21329,17 +21745,17 @@ const LOCALES = {
     steer_recovery_retry: 'Retry',
     steer_recovery_dismiss: 'Dismiss',
     busy_interrupt_confirm: 'Đã ngắt — đang gửi tin nhắn mới',
-    settings_label_busy_input_mode: 'Chế độ nhập khi bận',
-    settings_desc_busy_input_mode: 'Điều khiển hành vi khi bạn gửi tin nhắn trong lúc agent đang chạy. Queue sẽ chờ; Interrupt sẽ hủy và bắt đầu mới; Steer sẽ chèn điều chỉnh giữa lượt mà không ngắt (sẽ fallback sang queue nếu agent hoặc stream không khả dụng).',
+    settings_label_default_message_mode: 'Chế độ tin nhắn mặc định',
+    settings_desc_default_message_mode: 'Điều khiển hành vi khi bạn gửi tin nhắn trong lúc agent đang chạy. Queue sẽ chờ; Interrupt sẽ hủy và bắt đầu mới; Steer sẽ chèn điều chỉnh giữa lượt mà không ngắt. Nếu Steer không khả dụng, bản nháp sẽ được khôi phục để bạn chọn hành động tiếp theo.',
     settings_label_fade_text_effect: 'Hiệu ứng mờ chữ',
     settings_desc_fade_text_effect: 'Làm mờ dần các từ mới stream vào khi assistant đang phản hồi. Tương tự OpenWebUI; mặc định tắt để đạt hiệu năng tối đa.',
     settings_label_max_tokens: 'Số token đầu ra tối đa',
     settings_desc_max_tokens: 'Giới hạn độ dài của các phản hồi stream mới. Để trống để dùng giá trị dự phòng của hồ sơ hiện tại.',
     settings_placeholder_max_tokens_none: 'Không ghi đè',
     settings_placeholder_max_tokens_fallback: 'Không ghi đè (dự phòng: {0})',
-    settings_busy_input_mode_queue: 'Xếp hàng phản hồi tiếp theo',
-    settings_busy_input_mode_interrupt: 'Ngắt lượt hiện tại',
-    settings_busy_input_mode_steer: 'Steer (điều chỉnh giữa lượt)',
+    settings_default_message_mode_queue: 'Xếp hàng phản hồi tiếp theo',
+    settings_default_message_mode_interrupt: 'Ngắt lượt hiện tại',
+    settings_default_message_mode_steer: 'Steer (điều chỉnh giữa lượt)',
     settings_label_busy_placeholder_hint: 'Show busy placeholder hint',
     settings_desc_busy_placeholder_hint: 'Shows the composer placeholder with the current busy action while the session is running and the draft is empty.',
     composer_placeholder_busy_queue: 'Enter = queue | /interrupt | /background | /steer',
@@ -21488,6 +21904,7 @@ const LOCALES = {
      reveal_in_finder: 'Hiện trong trình quản lý tệp',
      reveal_failed: 'Hiển thị thất bại: ',
      copy_file_path: 'Sao chép đường dẫn file',
+     copy_relative_path: 'Sao chép đường dẫn tương đối',
      open_in_vscode: 'Mở bằng VS Code',
      open_in_vscode_failed: 'Mở bằng VS Code thất bại: ',
      download_folder: 'Tải thư mục',
@@ -21550,6 +21967,8 @@ const LOCALES = {
     session_archive_failed: 'Lưu trữ thất bại: ',
     session_duplicate: 'Nhân bản cuộc trò chuyện',
     session_duplicate_desc: 'Tạo bản sao với cùng workspace và model',
+    session_export_html: 'Export as HTML',
+    session_export_html_desc: 'Download this conversation as a self-contained HTML file',
     session_duplicated: 'Đã nhân bản phiên',
     session_duplicate_failed: 'Nhân bản thất bại: ',
     session_stop_response: 'Dừng phản hồi',
@@ -21725,6 +22144,7 @@ const LOCALES = {
     settings_label_sidebar_density: 'Mật độ sidebar',
     cmd_reasoning: 'Bật/tắt hiển thị suy nghĩ (show/hide), đặt mức effort hoặc kiểm tra trạng thái hiện tại',
     settings_label_external_sessions: 'Hiện phiên không phải WebUI',
+    settings_label_claude_code_sessions: 'Show Claude Code sessions',
     settings_label_cron_sessions: 'Hiện phiên cron',
     settings_label_webhook_sessions: 'Hiện phiên webhook',
     settings_label_previous_messaging_sessions: 'Hiện các phiên nhắn tin trước đó',
@@ -21990,6 +22410,8 @@ const LOCALES = {
     import: 'Import',
     export_session_json: 'JSON',
     export_session_json_tooltip: 'Xuất toàn bộ phiên dưới dạng JSON',
+    export_session_html: 'HTML',
+    export_session_html_tooltip: 'Xuất dưới dạng trang HTML độc lập',
     import_session_json_tooltip: 'Nhập phiên từ JSON',
     clear_conversation_btn_tooltip: 'Xóa toàn bộ tin nhắn trong cuộc trò chuyện này',
     // Settings detail
@@ -22038,6 +22460,7 @@ const LOCALES = {
     settings_auto_title_refresh_20: 'Mỗi 20 lượt trao đổi',
     settings_desc_auto_title_refresh: 'Tự động tạo lại tiêu đề phiên dựa trên lượt trao đổi mới nhất, giúp tiêu đề luôn phù hợp khi cuộc trò chuyện phát triển. Yêu cầu có model tạo tiêu đề LLM được cấu hình.',
     settings_desc_external_sessions: 'Hiển thị các cuộc trò chuyện từ CLI, Telegram, Discord, Slack và các kênh khác trong danh sách phiên. Bấm để import và tiếp tục.',
+    settings_desc_claude_code_sessions: 'Show Claude Code imported sessions in the sidebar, or hide them while leaving other external sessions visible.',
     settings_desc_cron_sessions: 'Hiển thị output của cron job như các cuộc trò chuyện trong sidebar. Chỉ hoạt động khi bật phiên không phải WebUI. Mặc định tắt; job tần suất cao có thể làm sidebar bị ngập.',
     settings_desc_webhook_sessions: 'Hiển thị các lần chạy webhook như các cuộc trò chuyện trong sidebar. Chỉ hoạt động khi bật phiên không phải WebUI. Mặc định tắt; route lưu lượng cao có thể làm sidebar bị ngập.',
     settings_desc_previous_messaging_sessions: 'Hiển thị các phiên Discord, Telegram, Slack và Weixin cũ đã bị thay thế bởi reset hoặc nén.',
@@ -22069,6 +22492,7 @@ const LOCALES = {
     providers_status_not_configured: 'Chưa có API key',
     providers_status_oauth: 'OAuth',
     providers_status_api_key: 'API key',
+    providers_status_model: 'Mô hình',
     providers_status_not_configured_label: 'Chưa cấu hình',
     providers_oauth_hint: 'Đã xác thực bằng OAuth. Không cần API key.',
     providers_oauth_config_yaml_hint: 'Token được cấu hình qua config.yaml. Để cập nhật, chỉnh sửa phần providers trong config.yaml hoặc chạy hermes auth.',
@@ -22456,6 +22880,30 @@ const LOCALES = {
     cron_name_label: 'Tên',
     cron_name_placeholder: 'Tùy chọn',
     cron_schedule_label: 'Lịch chạy',
+    cron_schedule_preset_label: 'Cài đặt sẵn',
+    cron_schedule_preset_hourly: 'Hàng giờ',
+    cron_schedule_preset_daily: 'Hàng ngày',
+    cron_schedule_preset_weekdays: 'Ngày trong tuần',
+    cron_schedule_preset_weekly: 'Hàng tuần',
+    cron_schedule_preset_monthly: 'Hàng tháng',
+    cron_schedule_preset_custom: 'Tùy chỉnh',
+    cron_schedule_time_label: 'Time',
+    cron_schedule_conj_on: 'on',
+    cron_schedule_conj_on_day: 'on day',
+    cron_schedule_conj_at: 'at',
+    cron_schedule_conj_at_minute: 'at minute',
+    cron_weekday_sun: 'Sunday',
+    cron_weekday_mon: 'Monday',
+    cron_weekday_tue: 'Tuesday',
+    cron_weekday_wed: 'Wednesday',
+    cron_weekday_thu: 'Thursday',
+    cron_weekday_fri: 'Friday',
+    cron_weekday_sat: 'Saturday',
+    cron_schedule_hour_label: 'Giờ',
+    cron_schedule_minute_label: 'Phút',
+    cron_schedule_weekday_label: 'Thứ trong tuần (0-6, CN-T7)',
+    cron_schedule_month_day_label: 'Ngày',
+    cron_schedule_time_hint: 'Thời gian dùng giờ máy chủ; cron chạy phía máy chủ.',
     cron_schedule_hint: "Dùng 'every 1h' hoặc biểu thức cron cho job lặp lại. Các khoảng thời gian đơn như '30m' chỉ chạy một lần.",
     cron_schedule_once_warning: "Các dạng thời lượng như '30m' chỉ chạy một lần và sẽ bị xóa sau khi chạy. Dùng 'every 30m' để giữ job lặp lại.",
     cron_prompt_label: 'Prompt',

@@ -679,6 +679,15 @@ function _micToastKeyForRecognitionError(error){
     }
   }
 
+  function _applyRawAudioModePreference(enabled){
+    _rawAudioMode=!!enabled;
+    try{localStorage.setItem('hermes-raw-audio-mode',_rawAudioMode?'true':'false');}catch(_){}
+    const rawAudioCheckbox=document.getElementById('settingsRawAudio');
+    if(rawAudioCheckbox) rawAudioCheckbox.checked=_rawAudioMode;
+    _updateMicTooltip();
+  }
+  window._applyRawAudioModePreference=_applyRawAudioModePreference;
+
   async function _sendRawAudio(blob){
     const ext=(blob.type&&blob.type.includes('ogg'))?'ogg':'webm';
     const file=new File([blob],`voice-input-${Date.now()}.${ext}`,{type:blob.type||`audio/${ext}`});
@@ -921,6 +930,7 @@ function _micToastKeyForRecognitionError(error){
     }
     if(recognition && !_forceMediaRecorder && !_rawAudioMode){
       _activeCaptureMode='speech';
+      recognition.lang=(typeof _locale!=='undefined'&&_locale._speech)||'en-US';
       recognition.start();
       _setRecording(true);
       return;
@@ -1054,9 +1064,7 @@ function _micToastKeyForRecognitionError(error){
   if(rawAudioCheckbox){
     rawAudioCheckbox.checked = _rawAudioMode;
     rawAudioCheckbox.addEventListener('change', function(){
-      _rawAudioMode = this.checked;
-      localStorage.setItem('hermes-raw-audio-mode', _rawAudioMode ? 'true' : 'false');
-      _updateMicTooltip();
+      _applyRawAudioModePreference(this.checked);
     });
   }
   _updateMicTooltip();
@@ -1064,34 +1072,43 @@ function _micToastKeyForRecognitionError(error){
 window._micActive=window._micActive||false;
 window._micPendingSend=window._micPendingSend||false;
 
-// ── Busy input mode eager default (#5167) ───────────────────────────────────
-// The Busy input mode preference (queue/interrupt/steer) is read on the send
-// path via `window._busyInputMode||'queue'`. The authoritative value only
-// arrives once the async boot IIFE below resolves the `/api/settings` fetch.
-// Without an eager value, every send during that boot window silently falls
-// back to 'queue', ignoring a saved 'steer'/'interrupt' preference (worse on
+// ── Default message mode eager default (#5167 / #5145) ──────────────────────
+// The Default message mode preference (queue/interrupt/steer) is read on the
+// send path via `window._defaultMessageMode||'steer'`. The authoritative value
+// only arrives once the async boot IIFE below resolves the `/api/settings`
+// fetch. Without an eager value, every send during that boot window silently
+// falls back, ignoring a saved 'queue'/'interrupt' preference (worse on
 // slow/contended environments like WSL2, see #5132). Mirror the resolved value
 // into localStorage — the same synchronous-source pattern used by hermes-lang /
 // hermes-theme — so the very first send after a reload honors the saved choice.
-const _BUSY_INPUT_MODES=['queue','interrupt','steer'];
-function _normalizeBusyInputMode(mode){
-  return _BUSY_INPUT_MODES.includes(mode)?mode:'queue';
+const _DEFAULT_MESSAGE_MODES=['queue','interrupt','steer'];
+// Legacy localStorage key (pre-#5145 rename); read it as a fallback so an
+// existing user's persisted busy-input-mode preference survives the rename.
+const _LEGACY_DEFAULT_MESSAGE_MODE_KEY='hermes-busy-input-mode';
+const _DEFAULT_MESSAGE_MODE_KEY='hermes-default-message-mode';
+function _normalizeDefaultMessageMode(mode){
+  return _DEFAULT_MESSAGE_MODES.includes(mode)?mode:'steer';
 }
-function _persistBusyInputMode(mode){
-  const m=_normalizeBusyInputMode(mode);
-  try{localStorage.setItem('hermes-busy-input-mode',m);}catch(_){}
+function _persistDefaultMessageMode(mode){
+  const m=_normalizeDefaultMessageMode(mode);
+  try{localStorage.setItem(_DEFAULT_MESSAGE_MODE_KEY,m);}catch(_){}
   return m;
 }
-function _readPersistedBusyInputMode(){
+function _readPersistedDefaultMessageMode(){
   let stored=null;
-  try{stored=localStorage.getItem('hermes-busy-input-mode');}catch(_){}
-  return _normalizeBusyInputMode(stored);
+  try{
+    // Prefer the new key; fall back to the legacy key so a pre-rename
+    // preference is honored until the next explicit save rewrites the new key.
+    stored=localStorage.getItem(_DEFAULT_MESSAGE_MODE_KEY);
+    if(stored===null||stored===undefined) stored=localStorage.getItem(_LEGACY_DEFAULT_MESSAGE_MODE_KEY);
+  }catch(_){}
+  return _normalizeDefaultMessageMode(stored);
 }
-window._persistBusyInputMode=_persistBusyInputMode;
-window._readPersistedBusyInputMode=_readPersistedBusyInputMode;
+window._persistDefaultMessageMode=_persistDefaultMessageMode;
+window._readPersistedDefaultMessageMode=_readPersistedDefaultMessageMode;
 // Eager default set BEFORE the async settings fetch resolves so first sends in
-// the boot window honor the persisted preference instead of defaulting to queue.
-window._busyInputMode=_readPersistedBusyInputMode();
+// the boot window honor the persisted preference instead of the raw default.
+window._defaultMessageMode=_readPersistedDefaultMessageMode();
 
 // ── Extension TTS-engine registry (registerHermesTtsEngine) ──────────────────
 // Defined at MODULE scope (not inside the voice-mode IIFE below) so the public
@@ -1205,12 +1222,12 @@ window._hermesTtsSynth=function(id, text, opts){
   let _browserTtsWatchdog=null;
   let _browserTtsSuppressNextErrorRearm=false;
   // Configurable via localStorage keys (set from dev console or a future settings panel).
-  //   hermes-voice-silence-ms   — pause duration before auto-send (ms, default 1800)
-  //   hermes-voice-continuous   — keep mic open across natural pauses ("true"/"false", default false)
-  const _silenceMsRaw=parseInt(localStorage.getItem('hermes-voice-silence-ms'),10);
-  // Fall back to 1800 for missing/NaN/non-positive values, and floor at 200ms so a
-  // mistyped tiny/negative value can't make the recognizer auto-send instantly.
-  const SILENCE_MS=(Number.isFinite(_silenceMsRaw)&&_silenceMsRaw>0)?Math.max(200,_silenceMsRaw):1800;
+  //   hermes-voice-silence-ms, pause duration before auto-send (ms, default 1800)
+  //   hermes-voice-continuous, keep mic open across natural pauses ("true"/"false", default false)
+  function _voiceSilenceMs(){
+    const _silenceMsRaw=parseInt(localStorage.getItem('hermes-voice-silence-ms'),10);
+    return (Number.isFinite(_silenceMsRaw)&&_silenceMsRaw>0)?Math.max(200,_silenceMsRaw):1800;
+  }
 
   function _clearBrowserTtsRecovery(){
     if(_browserTtsKeepAlive){
@@ -1295,7 +1312,7 @@ window._hermesTtsSynth=function(id, text, opts){
       if(_finalText){
         _silenceTimer=setTimeout(()=>{
           _voiceModeSend();
-        },SILENCE_MS);
+        },_voiceSilenceMs());
       }
     };
 
@@ -1734,6 +1751,37 @@ $('btnExportJSON').onclick=()=>{
   const a=document.createElement('a');a.href=url;
   a.download=`hermes-${S.session.session_id}.json`;a.click();
 };
+function exportSessionHTML(session){
+  const target=session||S.session;
+  if(!target||!target.session_id)return;
+  const sid=target.session_id;
+  const theme=document.documentElement.classList.contains('dark')?'dark':'light';
+  // Capture the live WebUI palette so the export matches the user's active
+  // theme + skin exactly, not just the built-in dark/light fallback. Map each
+  // export-template variable to its WebUI source; getComputedStyle resolves to
+  // the currently rendered colour regardless of which skin is selected.
+  const cs=getComputedStyle(document.documentElement);
+  const read=(...names)=>{for(const n of names){const v=cs.getPropertyValue(n).trim();if(v)return v;}return '';};
+  const palette={
+    'bg':read('--bg'),
+    'panel':read('--surface','--bg'),
+    'panel2':read('--code-bg','--surface'),
+    'border':read('--border'),
+    'text':read('--text'),
+    'muted':read('--muted','--text'),
+    'accent':read('--accent'),
+    'code-bg':read('--code-bg'),
+    'code-border':read('--border2','--border'),
+    'code-text':read('--text'),
+  };
+  // Drop empties so the inlined fallback keeps working for anything we couldn't read.
+  const clean={};for(const k in palette){if(palette[k])clean[k]=palette[k];}
+  const paletteB64=btoa(unescape(encodeURIComponent(JSON.stringify(clean))));
+  const url=`/api/session/export?session_id=${encodeURIComponent(sid)}&format=html&theme=${theme}&palette=${encodeURIComponent(paletteB64)}`;
+  const a=document.createElement('a');a.href=url;
+  a.download=`hermes-${sid}.html`;a.click();
+}
+$('btnExportHTML').onclick=()=>exportSessionHTML();
 $('btnImportJSON').onclick=()=>$('importFileInput').click();
 $('importFileInput').onchange=async(e)=>{
   const file=e.target.files[0];
@@ -1868,6 +1916,28 @@ $('msg').addEventListener('input',()=>{
     hideCmdDropdown();
   }
 });
+// #5514/#5515: re-pin the transcript on ANY composer height change, not only the
+// ones that route through the input->autoResize path. A multi-line paste
+// (WisprFlow), a draft restore, an attachment tray / selection-chip appearing, a
+// programmatic value set, or a font/reflow can all grow the composer and shrink
+// the flex:1 transcript viewport, stranding a pinned reader above the bottom
+// (reads as a "random" upward jump — #5515). Observe the whole #composerWrap
+// (not just #msg) so tray/chip growth is covered too, at one seam. The re-pin is
+// guarded (only fires when genuinely pinned), so it never fights a reader who
+// scrolled away. First callback fires on observe (initial size) — the guard
+// makes that a cheap no-op.
+(()=>{
+  const _cw=$('composerWrap')||$('msg');
+  if(!_cw || typeof ResizeObserver!=='function' || typeof _repinMessagesAfterComposerResize!=='function') return;
+  let _lastComposerH=_cw.offsetHeight;
+  const _ro=new ResizeObserver(()=>{
+    const h=_cw.offsetHeight;
+    if(h<=_lastComposerH){_lastComposerH=h;return;}   // shrink/no-op: enlarges the viewport, can't strand
+    _lastComposerH=h;
+    _repinMessagesAfterComposerResize();               // grow: re-pin the pinned reader
+  });
+  try{ _ro.observe(_cw); }catch(_){ }
+})();
 // Track IME composition for East Asian input. Safari fires the committing
 // keydown AFTER compositionend with isComposing=false, so we also keep a
 // manual flag and reset it on the next tick to swallow that trailing Enter.
@@ -2673,6 +2743,21 @@ function _applyComposerFooterVisibilitySettings(){
   if(hidden.hide_composer_reasoning&&typeof closeReasoningDropdown==='function') closeReasoningDropdown();
   if(hidden.hide_composer_toolsets&&typeof closeToolsetsDropdown==='function') closeToolsetsDropdown();
   if(hidden.hide_composer_mobile_config&&typeof closeMobileComposerConfig==='function') closeMobileComposerConfig();
+
+  // Hide the divider when all left-group buttons before it are hidden
+  // Stops a lone vertical separator from appearing when attach/saved-prompts/mic/voice are all hidden.
+  const _divider=document.querySelector('.composer-divider');
+  if(_divider){
+    const _leftBtnSelectors=['#btnAttach','#btnSavedPrompts','#btnMic','#btnVoiceMode'];
+    const _allLeftHidden=_leftBtnSelectors.every(sel=>{
+      const el=document.querySelector(sel);
+      return !el||el.classList.contains('composer-control-hidden')||el.style.display==='none';
+    });
+    // Use classList.toggle directly instead of _setComposerControlHidden
+    // so we don't strip the intentional aria-hidden="true" on the decorative divider
+    // when buttons are visible (Greptile feedback).
+    _divider.classList.toggle('composer-control-hidden',_allLeftHidden);
+  }
 }
 window._applyComposerFooterVisibilitySettings=_applyComposerFooterVisibilitySettings;
 
@@ -2683,6 +2768,77 @@ function _applyTitlebarProfileVisibility(){
 }
 window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
 
+function _mirrorSpeechSettingsFromServer(s){
+  if(!s||typeof s!=='object') return;
+  const persistedSpeechKeys = new Set(
+    Array.isArray(s.persisted_speech_keys) ? s.persisted_speech_keys : []
+  );
+  const hasServerValue=(settingKey)=>persistedSpeechKeys.has(settingKey);
+  const defaults={
+    tts_enabled:false,
+    tts_auto_read:false,
+    tts_engine:'browser',
+    tts_voice:'',
+    tts_rate:1,
+    tts_pitch:1,
+    voice_mode_button:false,
+    voice_continuous:false,
+    voice_silence_ms:1800,
+    raw_audio_mode:false,
+  };
+  const cachedValue=(storageKey)=>{
+    try{return localStorage.getItem(storageKey);}catch(_){return null;}
+  };
+  const boolValue=(value)=>value===true||value==='true';
+  const resolveBool=(settingKey,storageKey)=>{
+    const server=hasServerValue(settingKey)?s[settingKey]:defaults[settingKey];
+    const cached=cachedValue(storageKey);
+    if(!hasServerValue(settingKey)&&cached!==null){
+      return boolValue(cached);
+    }
+    return boolValue(server);
+  };
+  const resolveScalar=(settingKey,storageKey)=>{
+    const server=hasServerValue(settingKey)?s[settingKey]:defaults[settingKey];
+    const cached=cachedValue(storageKey);
+    if(!hasServerValue(settingKey)&&cached!==null){
+      return cached;
+    }
+    return server;
+  };
+  const boolKeys=[
+    ['tts_enabled','hermes-tts-enabled'],
+    ['tts_auto_read','hermes-tts-auto-read'],
+    ['voice_mode_button','hermes-voice-mode-button'],
+    ['voice_continuous','hermes-voice-continuous'],
+  ];
+  boolKeys.forEach(([settingKey,storageKey])=>{
+    if(hasServerValue(settingKey)){
+      try{localStorage.setItem(storageKey,resolveBool(settingKey,storageKey)?'true':'false');}catch(_){}
+    }
+  });
+  [
+    ['tts_engine','hermes-tts-engine'],
+    ['tts_voice','hermes-tts-voice'],
+    ['tts_rate','hermes-tts-rate'],
+    ['tts_pitch','hermes-tts-pitch'],
+    ['voice_silence_ms','hermes-voice-silence-ms'],
+  ].forEach(([settingKey,storageKey])=>{
+    if(hasServerValue(settingKey)){
+      try{localStorage.setItem(storageKey,String(resolveScalar(settingKey,storageKey)));}catch(_){}
+    }
+  });
+  if(hasServerValue('raw_audio_mode')){
+    const rawAudioMode=resolveBool('raw_audio_mode','hermes-raw-audio-mode');
+    if(typeof window._applyRawAudioModePreference==='function'){
+      window._applyRawAudioModePreference(rawAudioMode);
+    }else{
+      try{localStorage.setItem('hermes-raw-audio-mode',rawAudioMode?'true':'false');}catch(_){}
+    }
+  }
+}
+window._mirrorSpeechSettingsFromServer=_mirrorSpeechSettingsFromServer;
+
 (async()=>{
   // Load send key preference
   let _bootSettings={};
@@ -2690,6 +2846,7 @@ window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
   try{
     const s=await api('/api/settings');
     _bootSettings=s;
+    if(typeof checkWebUIVersionSkew==='function'){try{checkWebUIVersionSkew(s);}catch(_){}}
     window._sendKey=s.send_key||'enter';
     // Persist default workspace so the blank new-chat page can show it
     // and workspace actions (New file/folder) work before the first session (#804).
@@ -2733,7 +2890,11 @@ window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
       stringChars:parseInt(s.inflight_state_max_string_chars||60000,10)||60000,
       jsonChars:parseInt(s.inflight_state_max_json_chars||1500000,10)||1500000,
     };
-    window._busyInputMode=_persistBusyInputMode(s.busy_input_mode);
+    // #5162 rename + steer default, layered on the #5170 localStorage mirror:
+    // resolve the mode (new key, legacy busy_input_mode fallback, else 'steer'
+    // via _normalizeDefaultMessageMode) and persist it so the very first send
+    // after a reload honors the saved choice.
+    window._defaultMessageMode=_persistDefaultMessageMode(s.default_message_mode||s.busy_input_mode);
     window._showBusyPlaceholderHint=!!s.show_busy_placeholder_hint;
     window._sessionEndlessScrollEnabled=!!s.session_endless_scroll;
     window._autoScrollFollow=s.auto_scroll_follow!==false;
@@ -2828,6 +2989,14 @@ window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
       setLocale(_lang);
       if(typeof applyLocaleToDOM==='function')applyLocaleToDOM();
     }
+    _mirrorSpeechSettingsFromServer(s);
+    // Apply voice-mode visibility BEFORE computing the divider so the
+    // .composer-divider (#5451) sees #btnVoiceMode final display even
+    // when a server/localStorage sync path flipped the pref between
+    // module init and settings-load completion (round-2 SILENT race).
+    // Note: must use window._applyVoiceModePref — the bare name is
+    // closure-local to the voice-mode IIFE and not visible here.
+    if(typeof window._applyVoiceModePref==='function') window._applyVoiceModePref();
     _applyComposerFooterVisibilitySettings();
     // TTS: apply enabled state on boot so buttons show/hide correctly (#499)
     if(typeof _applyTtsEnabled==='function') _applyTtsEnabled(localStorage.getItem('hermes-tts-enabled')==='true');
@@ -2859,12 +3028,12 @@ window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
     window._structuredCodeAutoTreeLines=10;
     window._sidebarDensity='compact';
     window._pinnedSessionsLimit=3;
-    // Settings load failed: keep the persisted busy-input-mode preference (the
-    // eager default already read it from the localStorage mirror) instead of
-    // clobbering it with 'queue', so a saved 'steer'/'interrupt' still applies
+    // Settings load failed: keep the persisted default-message-mode preference
+    // (the eager default already read it from the localStorage mirror) instead
+    // of clobbering it, so a saved 'steer'/'interrupt'/'queue' still applies
     // when the server is unreachable (#5167). The placeholder-hint has no
     // persisted mirror, so it defaults off on failure.
-    window._busyInputMode=_readPersistedBusyInputMode();
+    window._defaultMessageMode=_readPersistedDefaultMessageMode();
     window._showBusyPlaceholderHint=false;
     window._sessionEndlessScrollEnabled=false;
     window._autoScrollFollow=true;
@@ -2880,6 +3049,14 @@ window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
       setLocale(_lang);
       if(typeof applyLocaleToDOM==='function')applyLocaleToDOM();
     }
+    // Apply voice-mode visibility BEFORE computing the divider so the
+    // .composer-divider (#5451) sees #btnVoiceMode final display even when
+    // a server/localStorage sync path flipped the pref between module init
+    // and settings-load completion (round-2 SILENT race fix; safe no-op on
+    // the failure-fallback path because _applyVoiceModePref is idempotent).
+    // Note: must use window._applyVoiceModePref — the bare name is
+    // closure-local to the voice-mode IIFE and not visible here.
+    if(typeof window._applyVoiceModePref==='function') window._applyVoiceModePref();
     _applyComposerFooterVisibilitySettings();
     if(typeof _applyTtsEnabled==='function') _applyTtsEnabled(localStorage.getItem('hermes-tts-enabled')==='true');
   }
@@ -2923,6 +3100,10 @@ window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
       return true;
     };
     const redirectToLogin=(nextUrl)=>{
+      // #5578: never nest the login URL into its own next= — if already on a
+      // login-shaped page, reload 'login' bare (the page keeps its inner next).
+      const _p=(window.location.pathname||'').replace(/\/+$/,'');
+      if(/(?:^|\/)login$/.test(_p)){window.location.href='login';return;}
       window.location.href='login?next='+encodeURIComponent(nextUrl);
     };
     return {

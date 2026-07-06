@@ -444,15 +444,19 @@ def _apply_config_defaults(config_data: dict) -> None:
  
 def reload_config_if_stale() -> None:
     """Refresh config.yaml once for concurrent stale read paths."""
+    global cfg
     with _cfg_lock:
         try:
             config_path = _get_config_path()
             current_mtime = config_path.stat().st_mtime
         except OSError:
             current_mtime = 0.0
-        cache_stale = current_mtime != _cfg_mtime or _cfg_path != config_path
-        if not _cfg_cache or (cache_stale and not _cfg_has_in_memory_overrides()):
+        path_changed = _cfg_path != config_path
+        mtime_stale = current_mtime != _cfg_mtime
+        if not _cfg_cache or path_changed or (mtime_stale and not _cfg_has_in_memory_overrides()):
             _refresh_config_cache(config_path)
+            if path_changed:
+                cfg = _cfg_cache
 
 
 def get_config() -> dict:
@@ -462,8 +466,9 @@ def get_config() -> dict:
         current_mtime = config_path.stat().st_mtime
     except OSError:
         current_mtime = 0.0
-    cache_stale = current_mtime != _cfg_mtime or _cfg_path != config_path
-    if not _cfg_cache or (cache_stale and not _cfg_has_in_memory_overrides()):
+    path_changed = _cfg_path != config_path
+    mtime_stale = current_mtime != _cfg_mtime
+    if not _cfg_cache or path_changed or (mtime_stale and not _cfg_has_in_memory_overrides()):
         reload_config_if_stale()
     # When a test (or runtime caller) has rebound ``cfg`` to a different dict
     # via monkeypatch.setattr(config, "cfg", ...), return that override rather
@@ -1444,12 +1449,15 @@ def _canonicalise_provider_id(name: object) -> str:
     # keep as-is to avoid round-tripping through aliases (e.g. x-ai → xai).
     if raw in _PROVIDER_DISPLAY or raw in _PROVIDER_MODELS:
         return raw
-    # Try alias resolution. Only accept the result if it's itself a
-    # canonical id in _PROVIDER_DISPLAY — that prevents aliases pointing
-    # at non-canonical strings (legacy, hermes_cli-specific) from leaking
-    # in. Falls back to the normalised input otherwise.
+    # Try alias resolution. Accept the result if it's a canonical id known to
+    # either _PROVIDER_DISPLAY OR _PROVIDER_MODELS (mirroring the direct-hit
+    # check above) — some canonical targets (e.g. `gemini`) are indexed in
+    # _PROVIDER_MODELS but not _PROVIDER_DISPLAY, so a _DISPLAY-only check
+    # rejected valid aliases like `google-gemini`→`gemini`, leaving the id
+    # uncanonicalised and silently breaking provider-ownership checks (#5511).
+    # This still blocks aliases that point at non-canonical/legacy strings.
     resolved = _resolve_provider_alias(raw)
-    if resolved and resolved.lower() in _PROVIDER_DISPLAY:
+    if resolved and (resolved.lower() in _PROVIDER_DISPLAY or resolved.lower() in _PROVIDER_MODELS):
         return resolved.lower()
     return raw
 
@@ -2522,16 +2530,47 @@ def resolve_model_provider(model_id: str) -> tuple:
     )
     _default_model = model_cfg.get('default') if isinstance(model_cfg, dict) else None
     # Owns model if it appears in the static catalog for the configured provider.
+    # _PROVIDER_MODELS is keyed by CANONICAL slug (e.g. 'zai', not the 'z-ai'
+    # alias a user may write in config), so canonicalise config_provider before
+    # the lookup — otherwise an aliased active provider gets an empty ownership
+    # set and _skip_custom_providers guard-2 silently fails, letting another
+    # providers.<slug>.models entry hijack an active-owned model (#5511).
+    _canon_config_provider = _canonicalise_provider_id(config_provider) if config_provider else ""
     _provider_models_set: set[str] = set()
     if (
-        config_provider is not None
-        and config_provider in _PROVIDER_MODELS
-        and isinstance(_PROVIDER_MODELS[config_provider], list)
+        _canon_config_provider
+        and _canon_config_provider in _PROVIDER_MODELS
+        and isinstance(_PROVIDER_MODELS[_canon_config_provider], list)
     ):
         _provider_models_set = {
-            m.get('id', '') for m in _PROVIDER_MODELS[config_provider]
+            m.get('id', '') for m in _PROVIDER_MODELS[_canon_config_provider]
             if isinstance(m, dict) and isinstance(m.get('id'), str)
         }
+    # The active provider may be defined ENTIRELY via config.yaml `providers:`
+    # (no static _PROVIDER_MODELS entry) with its own `models:` allowlist. Fold
+    # that allowlist into the ownership set too, so the active provider owns its
+    # own declared models and can't be hijacked by another providers.<slug>
+    # entry that happens to list the same bare id earlier in config order (#5511).
+    if _canon_config_provider:
+        _providers_cfg_own = cfg.get('providers', {})
+        if isinstance(_providers_cfg_own, dict):
+            for _slug, _pdef in _providers_cfg_own.items():
+                if not isinstance(_pdef, dict):
+                    continue
+                if _canonicalise_provider_id(_slug) != _canon_config_provider:
+                    continue
+                if _canon_config_provider == "copilot":
+                    continue  # copilot.models is a settings map, not an allowlist
+                _own_models = _pdef.get('models')
+                if isinstance(_own_models, list):
+                    for _m in _own_models:
+                        _mid = str(_m.get('id') or '') if isinstance(_m, dict) else str(_m or '')
+                        if _mid.strip():
+                            _provider_models_set.add(_mid.strip())
+                elif isinstance(_own_models, dict):
+                    _provider_models_set.update(
+                        str(k).strip() for k in _own_models if isinstance(k, str) and str(k).strip()
+                    )
     _skip_custom_providers = (
         _is_explicit_non_custom_provider
         and (
@@ -2562,6 +2601,50 @@ def resolve_model_provider(model_id: str) -> tuple:
             if entry_name and model_id in entry_model_ids:
                 provider_hint = _custom_provider_slug_from_name(entry_name)
                 return model_id, provider_hint, entry_base_url or None
+
+    # Check user-defined providers (config.yaml → providers:).
+    # Mirrors the custom_providers scan above — exact match against each
+    # entry's declared models list (case-sensitive to match custom_providers).
+    providers_cfg = cfg.get('providers', {})
+    if isinstance(providers_cfg, dict):
+        target = model_id.strip()
+        # Honor the same active/default ownership guard as the custom_providers
+        # scan (_skip_custom_providers, config.py:2535): when the active provider
+        # explicitly owns this model (it's the configured default or in the
+        # active provider's model set), another provider's overlapping
+        # `providers.<slug>.models` entry must NOT hijack routing away from the
+        # active provider (#5511 gate finding — e.g. active ai-gateway + default
+        # gpt-5 was being pulled to providers.openai.models.gpt-5). In that case
+        # restrict the scan to the active provider's own canonical slug.
+        _active_slug = _canon_config_provider
+        for slug, pdef in providers_cfg.items():
+            if not isinstance(pdef, dict):
+                continue
+            # Copilot is the documented exception: `providers.copilot.models` is
+            # a per-model SETTINGS map (reasoning_effort, limits, etc.), NOT a
+            # routable allowlist (see the exception at the catalog-build site).
+            # Scanning it here would let a Copilot per-model settings entry
+            # hijack that model's routing away from its real provider (#5511).
+            if _canonicalise_provider_id(slug) == "copilot":
+                continue
+            # Ownership guard: when the active provider owns this model, only its
+            # own providers: entry may match; skip all other slugs.
+            if _skip_custom_providers and _canonicalise_provider_id(slug) != _active_slug:
+                continue
+            p_models = pdef.get('models')
+            if isinstance(p_models, list):
+                for m in p_models:
+                    mid = str(m.get('id') or '') if isinstance(m, dict) else str(m or '')
+                    if not mid:
+                        continue
+                    if mid.strip() == target:
+                        p_base_url = str(pdef.get('base_url') or '').strip()
+                        return model_id, slug, p_base_url or None
+            elif isinstance(p_models, dict):
+                for mid in p_models:
+                    if isinstance(mid, str) and mid.strip() == target:
+                        p_base_url = str(pdef.get('base_url') or '').strip()
+                        return model_id, slug, p_base_url or None
 
     # @provider:model format — explicit provider hint from the dropdown.
     # Route through that provider directly (resolve_runtime_provider will
@@ -5677,10 +5760,9 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
     except OSError:
         _current_path = _get_config_path()
         _current_mtime = 0.0
-    if (
-        (_current_mtime != _cfg_mtime or _current_path != _cfg_path)
-        and not _cfg_has_in_memory_overrides()
-    ):
+    path_changed = _current_path != _cfg_path
+    mtime_stale = _current_mtime != _cfg_mtime
+    if path_changed or (mtime_stale and not _cfg_has_in_memory_overrides()):
         reload_config_if_stale()
     # ── COLD PATH helper ─────────────────────────────────────────────────────
     # Extracted so it runs inside _available_models_cache_lock (RLock) to
@@ -6925,6 +7007,12 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     if not raw_models:
                         if pid == "moa":
                             raw_models = _moa_preset_models_from_config(cfg)
+                        elif pid == "opencode-go":
+                            # Skip live /v1/models probe for OpenCode Go — it
+                            # returns models from the public catalog that are
+                            # not enabled on the Go tier, causing 404 when
+                            # selected. Use the curated static list only. (#5311)
+                            pass
                         else:
                             raw_models = _models_from_live_provider_ids(
                                 pid,
@@ -7999,6 +8087,7 @@ _SETTINGS_DEFAULTS = {
     "show_tps": False,  # show tokens-per-second chip in assistant message headers
     "fade_text_effect": False,  # animate newly streamed words with a lightweight fade-in effect
     "show_cli_sessions": True,  # merge CLI/TUI/messaging sessions from state.db into the sidebar by default (#3988); established installs are grandfathered OFF by the load_settings backfill
+    "show_claude_code_sessions": True,  # allow filtering Claude Code rows without hiding other imported sources
     "show_cron_sessions": False,  # surface cron sessions in the sidebar (subordinate to show_cli_sessions)
     "show_webhook_sessions": False,  # surface webhook sessions in the sidebar (subordinate to show_cli_sessions)
     "show_previous_messaging_sessions": False,  # show older Telegram/Discord/etc. reset segments
@@ -8006,6 +8095,16 @@ _SETTINGS_DEFAULTS = {
     "check_for_updates": True,  # check if webui/agent repos are behind upstream
     "ignore_agent_updates": False,  # keep WebUI update notices but suppress Agent update checks
     "whats_new_summary_enabled": False,  # show an LLM-written What's New summary before diff links
+    "tts_enabled": False,
+    "tts_auto_read": False,
+    "tts_engine": "browser",
+    "tts_voice": "",
+    "tts_rate": 1.0,
+    "tts_pitch": 1.0,
+    "voice_mode_button": False,
+    "voice_continuous": False,
+    "voice_silence_ms": 1800,
+    "raw_audio_mode": False,
     "theme": "dark",  # light | dark | system
     "skin": "default",  # accent color skin: default | ares | mono | graphite | slate | poseidon | sisyphus | charizard | sienna | catppuccin | nous
     "font_size": "default",  # small | default | large | xlarge
@@ -8059,11 +8158,24 @@ _SETTINGS_DEFAULTS = {
     "dashboard_plugins": {},  # plugin_name -> bool, opt-in per plugin (default off per PF-10b)
     "sidebar_density": "compact",  # compact | detailed
     "auto_title_refresh_every": "0",  # adaptive title refresh: 0=off, 5/10/20=every N exchanges
-    "busy_input_mode": "queue",  # behavior when sending while agent is running: queue | interrupt | steer
+    "default_message_mode": "steer",  # behavior when sending while agent is running: queue | interrupt | steer
     "password_hash": None,  # PBKDF2-HMAC-SHA256 hash; None = auth disabled
     "auth_disabled_acknowledged": False,  # user acknowledged unauthenticated risk
     "provider_cost_budget": None,
 }
+_SETTINGS_SPEECH_KEYS = {
+    "tts_enabled",
+    "tts_auto_read",
+    "tts_engine",
+    "tts_voice",
+    "tts_rate",
+    "tts_pitch",
+    "voice_mode_button",
+    "voice_continuous",
+    "voice_silence_ms",
+    "raw_audio_mode",
+}
+_SETTINGS_PERSISTED_SPEECH_KEYS_FIELD = "persisted_speech_keys"
 _SETTINGS_LEGACY_DROP_KEYS = {
     "assistant_language",
     "bubble_layout",
@@ -8141,69 +8253,104 @@ def _normalize_appearance(theme, skin) -> tuple[str, str]:
     return next_theme, next_skin
 
 
+def _read_raw_settings_file() -> dict:
+    """Read settings.json without applying defaults."""
+    try:
+        if not SETTINGS_FILE.exists():
+            return {}
+    except OSError:
+        # PermissionError or other OS-level error (e.g. UID mismatch in Docker)
+        # Treat as missing rather than failing startup.
+        logger.debug("Cannot stat settings file %s (inaccessible?)", SETTINGS_FILE)
+        return {}
+
+    try:
+        loaded = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        logger.debug("Failed to load settings from %s", SETTINGS_FILE)
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _extract_persisted_speech_keys(stored: dict) -> set[str]:
+    if not isinstance(stored, dict):
+        return set()
+    return {key for key in _SETTINGS_SPEECH_KEYS if key in stored}
+
+
+def persisted_speech_settings_keys() -> list[str]:
+    return sorted(_extract_persisted_speech_keys(_read_raw_settings_file()))
+
+
+def _settings_payload_for_write(settings: dict, persisted_speech_keys: set[str]) -> dict:
+    persisted = {
+        k: v
+        for k, v in settings.items()
+        if k not in {"default_model", _SETTINGS_PERSISTED_SPEECH_KEYS_FIELD}
+    }
+    for speech_key in _SETTINGS_SPEECH_KEYS:
+        if speech_key not in persisted_speech_keys:
+            persisted.pop(speech_key, None)
+    return persisted
+
+
 def load_settings() -> dict:
     """Load settings from disk, merging with defaults for any missing keys."""
     settings = dict(_SETTINGS_DEFAULTS)
-    stored = None
-    try:
-        settings_exists = SETTINGS_FILE.exists()
-    except OSError:
-        # PermissionError or other OS-level error (e.g. UID mismatch in Docker)
-        # Treat as missing — start with defaults rather than crashing.
-        logger.debug("Cannot stat settings file %s (inaccessible?)", SETTINGS_FILE)
-        settings_exists = False
-    if settings_exists:
-        try:
-            stored = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-            if isinstance(stored, dict):
-                if (
-                    "worklog_details_expanded_default" not in stored
-                    and "activity_feed_expanded_default" in stored
-                ):
-                    settings["worklog_details_expanded_default"] = bool(
-                        stored.get("activity_feed_expanded_default")
-                    )
-                settings.update(
-                    {
-                        k: v
-                        for k, v in stored.items()
-                        if k not in _SETTINGS_LEGACY_DROP_KEYS
-                    }
-                )
-                # Grandfather established installs OFF for show_cli_sessions (#3988).
-                # The default flipped True so NEW users see CLI/TUI/messaging
-                # sessions without hunting for the toggle — but an existing user
-                # who never opted in should not have their sidebar silently change.
-                # Treat the install as established (and pin the old False default)
-                # when show_cli_sessions is absent AND the file already carries
-                # real user state — either onboarding was completed, or some
-                # setting OTHER than a not-yet-completed onboarding flag has been
-                # persisted. Keying on "has saved user state" (not just
-                # onboarding_completed) also covers a CLI-configured user who
-                # tweaked a WebUI setting before running the wizard. A genuinely
-                # new / still-mid-onboarding file falls through to the True default.
-                _established_keys = [
-                    k for k in stored
-                    if k not in ("show_cli_sessions", "onboarding_completed")
-                ]
-                if "show_cli_sessions" not in stored and (
-                    bool(stored.get("onboarding_completed")) or _established_keys
-                ):
-                    settings["show_cli_sessions"] = False
-                # Force-off-for-everyone migration for virtualize_transcript (#4343).
-                # The feature shipped opt-OUT/default-on in #4325, then proved to
-                # cause scroll-up flicker on long sessions (variable-height anchor
-                # oscillation). It is now EXPERIMENTAL/opt-IN (default off). Any
-                # stored virtualize_transcript=True from the #4325 window is a stale
-                # pre-flip value and must be reset to off, so 100% of existing users
-                # land on off — re-enabling requires an explicit opt-in made AFTER
-                # the flip, which writes virtualize_transcript_optin=True alongside.
-                # Honor a stored True only when that marker is present.
-                if not bool(stored.get("virtualize_transcript_optin")):
-                    settings["virtualize_transcript"] = False
-
-        except Exception:
-            logger.debug("Failed to load settings from %s", SETTINGS_FILE)
+    stored = _read_raw_settings_file()
+    if isinstance(stored, dict):
+        if (
+            "worklog_details_expanded_default" not in stored
+            and "activity_feed_expanded_default" in stored
+        ):
+            settings["worklog_details_expanded_default"] = bool(
+                stored.get("activity_feed_expanded_default")
+            )
+        settings.update(
+            {
+                k: v
+                for k, v in stored.items()
+                if k not in _SETTINGS_LEGACY_DROP_KEYS
+                and k != _SETTINGS_PERSISTED_SPEECH_KEYS_FIELD
+            }
+        )
+        if (
+            "default_message_mode" not in stored
+            and "busy_input_mode" in stored
+        ):
+            settings["default_message_mode"] = stored.get("busy_input_mode")
+        settings.pop("busy_input_mode", None)
+        # Grandfather established installs OFF for show_cli_sessions (#3988).
+        # The default flipped True so NEW users see CLI/TUI/messaging
+        # sessions without hunting for the toggle — but an existing user
+        # who never opted in should not have their sidebar silently change.
+        # Treat the install as established (and pin the old False default)
+        # when show_cli_sessions is absent AND the file already carries
+        # real user state — either onboarding was completed, or some
+        # setting OTHER than a not-yet-completed onboarding flag has been
+        # persisted. Keying on "has saved user state" (not just
+        # onboarding_completed) also covers a CLI-configured user who
+        # tweaked a WebUI setting before running the wizard. A genuinely
+        # new / still-mid-onboarding file falls through to the True default.
+        _established_keys = [
+            k for k in stored
+            if k not in ("show_cli_sessions", "onboarding_completed")
+        ]
+        if "show_cli_sessions" not in stored and (
+            bool(stored.get("onboarding_completed")) or _established_keys
+        ):
+            settings["show_cli_sessions"] = False
+        # Force-off-for-everyone migration for virtualize_transcript (#4343).
+        # The feature shipped opt-OUT/default-on in #4325, then proved to
+        # cause scroll-up flicker on long sessions (variable-height anchor
+        # oscillation). It is now EXPERIMENTAL/opt-IN (default off). Any
+        # stored virtualize_transcript=True from the #4325 window is a stale
+        # pre-flip value and must be reset to off, so 100% of existing users
+        # land on off — re-enabling requires an explicit opt-in made AFTER
+        # the flip, which writes virtualize_transcript_optin=True alongside.
+        # Honor a stored True only when that marker is present.
+        if not bool(stored.get("virtualize_transcript_optin")):
+            settings["virtualize_transcript"] = False
     settings["theme"], settings["skin"] = _normalize_appearance(
         stored.get("theme") if isinstance(stored, dict) else settings.get("theme"),
         stored.get("skin") if isinstance(stored, dict) else settings.get("skin"),
@@ -8228,7 +8375,7 @@ _SETTINGS_ENUM_VALUES = {
     "sidebar_density": {"compact", "detailed"},
     "font_size": {"small", "default", "large", "xlarge"},
     "auto_title_refresh_every": {"0", "5", "10", "20"},
-    "busy_input_mode": {"queue", "interrupt", "steer"},
+    "default_message_mode": {"queue", "interrupt", "steer"},
     "chat_activity_display_mode": {"compact_worklog", "transparent_stream"},
     "structured_code_default_view": {"auto", "on", "off"},
 }
@@ -8240,6 +8387,11 @@ _SETTINGS_INT_RANGES = {
     "inflight_state_max_string_chars": (1000, 500000),
     "inflight_state_max_json_chars": (100000, 4000000),
     "structured_code_auto_tree_lines": (1, 1000),
+    "voice_silence_ms": (200, 60000),
+}
+_SETTINGS_FLOAT_RANGES = {
+    "tts_rate": (0.5, 2.0),
+    "tts_pitch": (0.0, 2.0),
 }
 _SETTINGS_BOOL_KEYS = {
     "onboarding_completed",
@@ -8253,6 +8405,7 @@ _SETTINGS_BOOL_KEYS = {
     "show_tps",
     "fade_text_effect",
     "show_cli_sessions",
+    "show_claude_code_sessions",
     "show_cron_sessions",
     "show_webhook_sessions",
     "show_previous_messaging_sessions",
@@ -8260,6 +8413,11 @@ _SETTINGS_BOOL_KEYS = {
     "check_for_updates",
     "ignore_agent_updates",
     "whats_new_summary_enabled",
+    "tts_enabled",
+    "tts_auto_read",
+    "voice_mode_button",
+    "voice_continuous",
+    "raw_audio_mode",
     "sound_enabled",
     "rtl",
     "notifications_enabled",
@@ -8294,6 +8452,7 @@ _SETTINGS_BOOL_KEYS = {
 }
 # Language codes are validated as short alphanumeric BCP-47-like tags (e.g. 'en', 'zh', 'fr')
 _SETTINGS_LANG_RE = __import__("re").compile(r"^[a-zA-Z]{2,10}(-[a-zA-Z0-9]{2,8})?$")
+_SETTINGS_TTS_ENGINE_RE = __import__("re").compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 
 _SETTINGS_WRITE_VERSION = 0
 _SETTINGS_WRITE_LOCK = __import__("threading").Lock()
@@ -8312,7 +8471,10 @@ def _coerce_provider_cost_budget(value: Any) -> float | None:
 
 def save_settings(settings: dict) -> dict:
     """Save settings to disk. Returns the merged settings. Ignores unknown keys."""
+    raw_settings = _read_raw_settings_file()
+    persisted_speech_keys = _extract_persisted_speech_keys(raw_settings)
     current = load_settings()
+    applied_speech_keys: set[str] = set()
     if (
         "worklog_details_expanded_default" not in settings
         and "activity_feed_expanded_default" in settings
@@ -8321,6 +8483,12 @@ def save_settings(settings: dict) -> dict:
             "activity_feed_expanded_default"
         )
     settings.pop("activity_feed_expanded_default", None)
+    if (
+        "default_message_mode" not in settings
+        and "busy_input_mode" in settings
+    ):
+        settings["default_message_mode"] = settings.get("busy_input_mode")
+    settings.pop("busy_input_mode", None)
     settings.pop("simplified_tool_calling", None)
     pending_theme = current.get("theme")
     pending_skin = current.get("skin")
@@ -8349,6 +8517,7 @@ def save_settings(settings: dict) -> dict:
             current_dash.update({k: bool(v) for k, v in _dashboard_plugins.items() if isinstance(k, str)})
             current["dashboard_plugins"] = current_dash
     for k, v in settings.items():
+        key_is_speech = k in _SETTINGS_SPEECH_KEYS
         # dashboard_plugins is deep-merged above (not a flat allowlisted scalar).
         if k == "dashboard_plugins":
             continue
@@ -8374,6 +8543,23 @@ def save_settings(settings: dict) -> dict:
                     continue
                 min_value, max_value = _SETTINGS_INT_RANGES[k]
                 if v < min_value or v > max_value:
+                    continue
+            if k in _SETTINGS_FLOAT_RANGES:
+                try:
+                    v = float(v)
+                except (TypeError, ValueError):
+                    continue
+                min_value, max_value = _SETTINGS_FLOAT_RANGES[k]
+                if not math.isfinite(v) or v < min_value or v > max_value:
+                    continue
+            if k == "tts_engine":
+                if not isinstance(v, str):
+                    continue
+                v = v.strip()
+                if not _SETTINGS_TTS_ENGINE_RE.match(v):
+                    continue
+            if k == "tts_voice":
+                if not isinstance(v, str) or len(v) > 200 or "\x00" in v:
                     continue
             # Validate language codes (BCP-47-like: 'en', 'zh', 'fr', 'zh-CN')
             if k == "language" and (
@@ -8414,6 +8600,8 @@ def save_settings(settings: dict) -> dict:
             if k in _SETTINGS_BOOL_KEYS:
                 v = bool(v)
             current[k] = v
+            if key_is_speech:
+                applied_speech_keys.add(k)
     theme_value = pending_theme
     skin_value = pending_skin
     if theme_was_explicit and not skin_was_explicit:
@@ -8425,7 +8613,9 @@ def save_settings(settings: dict) -> dict:
     current["default_workspace"] = str(
         resolve_default_workspace(current.get("default_workspace"))
     )
-    persisted = {k: v for k, v in current.items() if k != "default_model"}
+    effective_persisted_speech_keys = set(persisted_speech_keys)
+    effective_persisted_speech_keys.update(applied_speech_keys)
+    persisted = _settings_payload_for_write(current, effective_persisted_speech_keys)
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS_FILE.write_text(
         json.dumps(persisted, ensure_ascii=False, indent=2),
@@ -8467,8 +8657,17 @@ if _settings_file_exists:
     if _startup_settings.get("default_workspace") != str(DEFAULT_WORKSPACE):
         _startup_settings["default_workspace"] = str(DEFAULT_WORKSPACE)
         try:
+            startup_persisted_speech_keys = _extract_persisted_speech_keys(
+                _read_raw_settings_file()
+            )
             SETTINGS_FILE.write_text(
-                json.dumps(_startup_settings, ensure_ascii=False, indent=2),
+                json.dumps(
+                    _settings_payload_for_write(
+                        _startup_settings, startup_persisted_speech_keys
+                    ),
+                    ensure_ascii=False,
+                    indent=2,
+                ),
                 encoding="utf-8",
             )
         except Exception:

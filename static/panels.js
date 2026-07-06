@@ -464,6 +464,306 @@ function _syncCronScheduleWarning() {
   const warning = $('cronFormScheduleOnceWarning');
   if (!input || !warning) return;
   warning.style.display = _cronScheduleKindForInput(input.value) === 'once' ? '' : 'none';
+  _syncCronSchedulePreview();
+}
+
+// Live preview of the generated cron expression in the preset hint line (the
+// cron-job.org / GitHub-schedule-editor convention) so a cron-literate user sees
+// exactly what the friendly controls produce. Empty on Custom (the raw field is shown).
+function _syncCronSchedulePreview() {
+  const preview = $('cronFormSchedulePreview');
+  const presetEl = $('cronFormSchedulePreset');
+  const scheduleEl = $('cronFormSchedule');
+  if (!preview) return;
+  const presetId = presetEl ? presetEl.value : 'custom';
+  const expr = String((scheduleEl && scheduleEl.value) || '').trim();
+  preview.textContent = (presetId !== 'custom' && expr) ? `${expr} · ` : '';
+}
+
+const CRON_SCHEDULE_PRESETS = [
+  { id: 'hourly', label: 'cron_schedule_preset_hourly', fallback: 'Hourly', fields: ['minute'], defaults: { minute: 0 } },
+  { id: 'daily', label: 'cron_schedule_preset_daily', fallback: 'Daily', fields: ['time'], defaults: { hour: 9, minute: 0 } },
+  { id: 'weekdays', label: 'cron_schedule_preset_weekdays', fallback: 'Weekdays (Mon–Fri)', fields: ['time'], defaults: { hour: 9, minute: 0 } },
+  { id: 'weekly', label: 'cron_schedule_preset_weekly', fallback: 'Weekly', fields: ['weekday', 'time'], defaults: { hour: 9, minute: 0, weekday: 1 } },
+  { id: 'monthly', label: 'cron_schedule_preset_monthly', fallback: 'Monthly', fields: ['monthDay', 'time'], defaults: { hour: 9, minute: 0, monthDay: 1 } },
+  { id: 'custom', label: 'cron_schedule_preset_custom', fallback: 'Custom', fields: [] },
+];
+
+function _cronSchedulePresetOptionHtml() {
+  return CRON_SCHEDULE_PRESETS
+    .map((preset) => `<option value="${preset.id}">${esc(t(preset.label) || preset.fallback)}</option>`)
+    .join('');
+}
+
+function _cronSchedulePresetForId(presetId) {
+  return CRON_SCHEDULE_PRESETS.find((entry) => entry.id === presetId) || null;
+}
+
+function _cronSchedulePresetControlIds() {
+  return {
+    time: 'cronFormScheduleTime',
+    minute: 'cronFormScheduleMinute',
+    weekday: 'cronFormScheduleWeekday',
+    monthDay: 'cronFormScheduleMonthDay',
+  };
+}
+
+// Which visible control wrapper each logical field lives in. `hour`+`minute` for
+// time-based presets share the single #cronFormScheduleTime picker (in the Time
+// field); `minute` alone (Hourly) uses the standalone Minute field.
+function _cronSchedulePresetFieldWrapId(field) {
+  if (field === 'time' || field === 'hour') return 'cronFormScheduleTimeField';
+  if (field === 'minute') return 'cronFormScheduleMinuteField';
+  if (field === 'weekday') return 'cronFormScheduleWeekdayField';
+  if (field === 'monthDay') return 'cronFormScheduleMonthDayField';
+  return '';
+}
+
+function _cronSchedulePresetFieldId(field) {
+  const ids = _cronSchedulePresetControlIds();
+  return ids[field] || '';
+}
+
+function _cronSchedulePresetFieldEl(field) {
+  const id = _cronSchedulePresetFieldId(field);
+  return id ? $(id) : null;
+}
+
+function _cronSchedulePresetBounds(field) {
+  if (field === 'hour') return { min: 0, max: 23 };
+  if (field === 'minute') return { min: 0, max: 59 };
+  if (field === 'weekday') return { min: 0, max: 6 };
+  if (field === 'monthDay') return { min: 1, max: 31 };
+  return { min: 0, max: 999 };
+}
+
+function _cronSchedulePresetNormalizeValue(field, value, fallback) {
+  const bounds = _cronSchedulePresetBounds(field);
+  const parsed = parseInt(String(value ?? '').trim(), 10);
+  const fallbackParsed = parseInt(String(fallback ?? bounds.min).trim(), 10);
+  const safeFallback = Number.isFinite(fallbackParsed) ? fallbackParsed : bounds.min;
+  const n = Number.isFinite(parsed) ? parsed : safeFallback;
+  return String(Math.min(bounds.max, Math.max(bounds.min, n)));
+}
+
+function _cronSchedulePresetValueForField(field, fallback) {
+  // hour/minute for time-based presets come from the single #cronFormScheduleTime
+  // picker ("HH:MM"); the standalone Minute box (Hourly) still reads directly.
+  if (field === 'hour' || field === 'minute') {
+    const timeEl = $('cronFormScheduleTime');
+    const minuteBox = $('cronFormScheduleMinute');
+    // Hourly uses the standalone minute box; if the Time picker isn't the visible
+    // source for minute, prefer the minute box when it's the shown control.
+    if (field === 'minute' && minuteBox && (!timeEl || _cronScheduleMinuteBoxIsActive())) {
+      return _cronSchedulePresetNormalizeValue('minute', minuteBox.value, fallback);
+    }
+    if (timeEl && /^\d{1,2}:\d{2}$/.test(String(timeEl.value || '').trim())) {
+      const [h, m] = String(timeEl.value).trim().split(':');
+      return _cronSchedulePresetNormalizeValue(field, field === 'hour' ? h : m, fallback);
+    }
+    return _cronSchedulePresetNormalizeValue(field, fallback, fallback);
+  }
+  const el = _cronSchedulePresetFieldEl(field);
+  const raw = el ? String(el.value || '').trim() : '';
+  return _cronSchedulePresetNormalizeValue(field, raw, fallback);
+}
+
+// The standalone Minute box is the active minute source only for the Hourly preset
+// (the only preset whose visible fields include a bare 'minute').
+function _cronScheduleMinuteBoxIsActive() {
+  const presetEl = $('cronFormSchedulePreset');
+  return !!(presetEl && presetEl.value === 'hourly');
+}
+
+function _cronSchedulePresetRawFieldInBounds(field, value) {
+  const raw = String(value || '').trim();
+  if (!/^\d+$/.test(raw)) return false;
+  const bounds = _cronSchedulePresetBounds(field);
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= bounds.min && parsed <= bounds.max;
+}
+
+function _cronSchedulePresetApplyValues(values) {
+  // Write hour/minute into the single time picker as zero-padded HH:MM.
+  if (values.hour != null || values.minute != null) {
+    const timeEl = $('cronFormScheduleTime');
+    if (timeEl) {
+      const h = _cronSchedulePresetNormalizeValue('hour', values.hour, values.hour ?? 9);
+      const m = _cronSchedulePresetNormalizeValue('minute', values.minute, values.minute ?? 0);
+      timeEl.value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+  }
+  if (values.minute != null) {
+    const minuteBox = $('cronFormScheduleMinute');
+    if (minuteBox) minuteBox.value = _cronSchedulePresetNormalizeValue('minute', values.minute, values.minute);
+  }
+  ['weekday', 'monthDay'].forEach((field) => {
+    const el = _cronSchedulePresetFieldEl(field);
+    if (!el || values[field] == null) return;
+    el.value = _cronSchedulePresetNormalizeValue(field, values[field], values[field]);
+  });
+}
+
+function _cronSchedulePresetSyncVisibility(presetId) {
+  const wrapper = $('cronFormSchedulePresetParams');
+  const customRow = $('cronFormScheduleCustomRow');
+  const preset = _cronSchedulePresetForId(presetId);
+  const showFields = preset && Array.isArray(preset.fields) ? preset.fields : [];
+  const isCustom = presetId === 'custom';
+  // Preset param controls hide entirely on Custom; the raw cron expression row
+  // shows ONLY on Custom (kept in the DOM as a hidden field otherwise).
+  if (wrapper) wrapper.style.display = isCustom ? 'none' : '';
+  if (customRow) customRow.style.display = isCustom ? '' : 'none';
+  ['time', 'minute', 'weekday', 'monthDay'].forEach((field) => {
+    const fieldWrap = $(_cronSchedulePresetFieldWrapId(field));
+    if (fieldWrap) fieldWrap.style.display = showFields.includes(field) ? '' : 'none';
+  });
+}
+
+function _cronSchedulePresetValuesForSelection(presetId) {
+  const preset = _cronSchedulePresetForId(presetId);
+  const defaults = (preset && preset.defaults) || {};
+  if (presetId === 'hourly') {
+    return { minute: _cronSchedulePresetValueForField('minute', defaults.minute) };
+  }
+  if (presetId === 'daily' || presetId === 'weekdays') {
+    return {
+      hour: _cronSchedulePresetValueForField('hour', defaults.hour),
+      minute: _cronSchedulePresetValueForField('minute', defaults.minute),
+    };
+  }
+  if (presetId === 'weekly') {
+    return {
+      hour: _cronSchedulePresetValueForField('hour', defaults.hour),
+      minute: _cronSchedulePresetValueForField('minute', defaults.minute),
+      weekday: _cronSchedulePresetValueForField('weekday', defaults.weekday),
+    };
+  }
+  if (presetId === 'monthly') {
+    return {
+      hour: _cronSchedulePresetValueForField('hour', defaults.hour),
+      minute: _cronSchedulePresetValueForField('minute', defaults.minute),
+      monthDay: _cronSchedulePresetValueForField('monthDay', defaults.monthDay),
+    };
+  }
+  return {};
+}
+
+function _cronSchedulePresetValueForSelection(presetId, selectedValues) {
+  const values = selectedValues || _cronSchedulePresetValuesForSelection(presetId);
+  if (presetId === 'hourly') return `${values.minute} * * * *`;
+  if (presetId === 'daily') return `${values.minute} ${values.hour} * * *`;
+  if (presetId === 'weekdays') return `${values.minute} ${values.hour} * * 1-5`;
+  if (presetId === 'weekly') return `${values.minute} ${values.hour} * * ${values.weekday}`;
+  if (presetId === 'monthly') return `${values.minute} ${values.hour} ${values.monthDay} * *`;
+  return '';
+}
+
+function _cronSchedulePresetStateForInput(value) {
+  const schedule = String(value || '').trim();
+  if (!schedule) return { presetId: 'custom' };
+  if (/^every\s+1h$/i.test(schedule)) {
+    return { presetId: 'hourly', minute: '0' };
+  }
+  if (schedule.startsWith('@')) return { presetId: 'custom' };
+  const parts = schedule.split(/\s+/);
+  if (parts.length !== 5) return { presetId: 'custom' };
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  if (!_cronSchedulePresetRawFieldInBounds('minute', minute)) return { presetId: 'custom' };
+  if (_cronSchedulePresetRawFieldInBounds('hour', hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    return { presetId: 'daily', minute, hour };
+  }
+  if (_cronSchedulePresetRawFieldInBounds('hour', hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
+    return { presetId: 'weekdays', minute, hour };
+  }
+  if (hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    return { presetId: 'hourly', minute };
+  }
+  if (_cronSchedulePresetRawFieldInBounds('hour', hour) && dayOfMonth === '*' && month === '*' && (_cronSchedulePresetRawFieldInBounds('weekday', dayOfWeek) || dayOfWeek === '7')) {
+    return { presetId: 'weekly', minute, hour, weekday: dayOfWeek === '7' ? '0' : dayOfWeek };
+  }
+  if (_cronSchedulePresetRawFieldInBounds('hour', hour) && _cronSchedulePresetRawFieldInBounds('monthDay', dayOfMonth) && month === '*' && dayOfWeek === '*') {
+    return { presetId: 'monthly', minute, hour, monthDay: dayOfMonth };
+  }
+  return { presetId: 'custom' };
+}
+
+function _cronSchedulePresetIdForValue(value) {
+  return _cronSchedulePresetStateForInput(value).presetId;
+}
+
+function _syncCronSchedulePresetFromInput() {
+  const presetEl = $('cronFormSchedulePreset');
+  const scheduleEl = $('cronFormSchedule');
+  if (!presetEl || !scheduleEl) return;
+  const state = _cronSchedulePresetStateForInput(scheduleEl.value);
+  presetEl.value = state.presetId;
+  _cronSchedulePresetSyncVisibility(state.presetId);
+  if (state.presetId !== 'custom') _cronSchedulePresetApplyValues(state);
+}
+
+function _syncCronSchedulePresetAndWarning() {
+  _syncCronSchedulePresetFromInput();
+  _syncCronScheduleWarning();
+}
+
+function _applyCronSchedulePresetSelection() {
+  const presetEl = $('cronFormSchedulePreset');
+  const scheduleEl = $('cronFormSchedule');
+  if (!presetEl || !scheduleEl) return;
+  const presetId = presetEl.value;
+  if (presetId !== 'custom') {
+    const values = _cronSchedulePresetValuesForSelection(presetId);
+    _cronSchedulePresetApplyValues(values);
+    scheduleEl.value = _cronSchedulePresetValueForSelection(presetId, values);
+    _cronSchedulePresetSyncVisibility(presetId);
+    _syncCronScheduleWarning();
+    return;
+  }
+  _cronSchedulePresetSyncVisibility(presetId);
+  _syncCronScheduleWarning();
+}
+
+// Regenerate the cron expression from the current field values WITHOUT writing the
+// clamped values back into the field the user is editing — so typing into the Minute
+// box (or the time picker) doesn't snap a half-entered value to the default/clamp
+// mid-keystroke. Value clamping still happens on `change`/blur via the full apply.
+function _regenCronScheduleFromFields() {
+  const presetEl = $('cronFormSchedulePreset');
+  const scheduleEl = $('cronFormSchedule');
+  if (!presetEl || !scheduleEl) return;
+  const presetId = presetEl.value;
+  if (presetId === 'custom') return;
+  scheduleEl.value = _cronSchedulePresetValueForSelection(presetId);
+  _syncCronScheduleWarning();
+}
+
+function _initCronSchedulePresetControls() {
+  const presetEl = $('cronFormSchedulePreset');
+  const scheduleEl = $('cronFormSchedule');
+  if (!presetEl || !scheduleEl) return;
+  presetEl.addEventListener('change', _applyCronSchedulePresetSelection);
+  if ($('cronFormSchedulePresetParams')) {
+    ['cronFormScheduleTime', 'cronFormScheduleMinute', 'cronFormScheduleWeekday', 'cronFormScheduleMonthDay'].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      // On `change`/blur, clamp + normalize (writes values back). On `input`
+      // (per-keystroke), only regenerate the expression — never rewrite the field
+      // being typed into, so partial input like clearing Hour to type "14" isn't
+      // snapped to the default (#5554 UX fix).
+      el.addEventListener('change', _applyCronSchedulePresetSelection);
+      el.addEventListener('input', _regenCronScheduleFromFields);
+    });
+  }
+  // On raw-cron `input` (only reachable on Custom, where the raw row is shown),
+  // update ONLY the warning + preview — do NOT re-detect the preset or sync
+  // visibility, or a partial value momentarily matching a preset (e.g. typing
+  // "0 9 * * 1,3" transiently equals Weekly's "0 9 * * 1") would switch the preset
+  // and hide the focused raw field mid-keystroke (#5554). Preset re-detection runs
+  // on initial render and on `change`/blur.
+  scheduleEl.addEventListener('input', _syncCronScheduleWarning);
+  scheduleEl.addEventListener('change', _syncCronSchedulePresetAndWarning);
+  _syncCronSchedulePresetAndWarning();
 }
 
 function _hasUnlimitedRepeat(job) {
@@ -1241,7 +1541,7 @@ function openCronCreate(){
   _cronMode = 'create';
   _cronIsDuplicate = false;
   _cronSelectedSkills = [];
-  _renderCronForm({ name:'', schedule:'', prompt:'', deliver:'local', profile:'', toast_notifications:true, model:'', provider:'', isEdit:false });
+  _renderCronForm({ name:'', schedule:'0 9 * * *', prompt:'', deliver:'local', profile:'', toast_notifications:true, model:'', provider:'', isEdit:false });
   _cronSkillsCache = null;
   api('/api/skills').then(d=>{_cronSkillsCache=d.skills||[]; _bindCronSkillPicker();}).catch(()=>{});
   loadCronProfiles().then(()=>_refreshCronProfileSelect('')).catch(()=>{});
@@ -1312,7 +1612,44 @@ function _renderCronForm({ name, schedule, prompt, deliver, profile, toast_notif
           <input type="text" id="cronFormName" value="${esc(name || '')}" placeholder="${esc(t('cron_name_placeholder') || 'Optional')}" autocomplete="off">
         </div>
         <div class="detail-form-row">
-          <label for="cronFormSchedule">${esc(t('cron_schedule_label') || 'Schedule')}</label>
+          <label for="cronFormSchedulePreset">${esc(t('cron_schedule_preset_label') || 'Schedule')}</label>
+          <div class="cron-schedule-preset-shell">
+            <select id="cronFormSchedulePreset" class="cron-schedule-preset-select">
+              ${_cronSchedulePresetOptionHtml()}
+            </select>
+            <div id="cronFormSchedulePresetParams" class="cron-schedule-preset-params" style="display:none">
+              <div class="cron-schedule-preset-field" id="cronFormScheduleWeekdayField">
+                <span class="cron-schedule-preset-conj" aria-hidden="true">${esc(t('cron_schedule_conj_on') || 'on')}</span>
+                <select id="cronFormScheduleWeekday" aria-label="${esc(t('cron_schedule_weekday_label') || 'Day of week')}">
+                  <option value="0">${esc(t('cron_weekday_sun') || 'Sunday')}</option>
+                  <option value="1" selected>${esc(t('cron_weekday_mon') || 'Monday')}</option>
+                  <option value="2">${esc(t('cron_weekday_tue') || 'Tuesday')}</option>
+                  <option value="3">${esc(t('cron_weekday_wed') || 'Wednesday')}</option>
+                  <option value="4">${esc(t('cron_weekday_thu') || 'Thursday')}</option>
+                  <option value="5">${esc(t('cron_weekday_fri') || 'Friday')}</option>
+                  <option value="6">${esc(t('cron_weekday_sat') || 'Saturday')}</option>
+                </select>
+              </div>
+              <div class="cron-schedule-preset-field" id="cronFormScheduleMonthDayField">
+                <span class="cron-schedule-preset-conj" aria-hidden="true">${esc(t('cron_schedule_conj_on_day') || 'on day')}</span>
+                <select id="cronFormScheduleMonthDay" aria-label="${esc(t('cron_schedule_month_day_label') || 'Day of month')}">
+                  ${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}
+                </select>
+              </div>
+              <div class="cron-schedule-preset-field" id="cronFormScheduleTimeField">
+                <span class="cron-schedule-preset-conj" aria-hidden="true">${esc(t('cron_schedule_conj_at') || 'at')}</span>
+                <input type="time" id="cronFormScheduleTime" value="09:00" step="60" autocomplete="off" aria-label="${esc(t('cron_schedule_time_label') || 'Time')}">
+              </div>
+              <div class="cron-schedule-preset-field" id="cronFormScheduleMinuteField">
+                <span class="cron-schedule-preset-conj" aria-hidden="true">${esc(t('cron_schedule_conj_at_minute') || 'at minute')}</span>
+                <input type="number" id="cronFormScheduleMinute" min="0" max="59" step="1" value="0" autocomplete="off" aria-label="${esc(t('cron_schedule_minute_label') || 'Minute')}">
+              </div>
+              <div class="detail-form-hint cron-schedule-preset-time-hint"><span id="cronFormSchedulePreview" class="cron-schedule-preview"></span>${esc(t('cron_schedule_time_hint') || 'Time is server time; cron runs server-side.')}</div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-form-row" id="cronFormScheduleCustomRow" style="display:none">
+          <label for="cronFormSchedule">${esc(t('cron_schedule_label') || 'Cron expression')}</label>
           <input type="text" id="cronFormSchedule" value="${esc(schedule || '')}" placeholder="0 9 * * *  —  every 1h  —  @daily" autocomplete="off" required>
           <div class="detail-form-hint">${esc(t('cron_schedule_hint') || "Cron expression or shorthand like 'every 1h'.")}</div>
           <div id="cronFormScheduleOnceWarning" class="detail-form-warning cron-once-warning" style="display:none">${esc(t('cron_schedule_once_warning') || "Duration forms like '30m' run once and are removed after running. Use 'every 30m' to keep a recurring job.")}</div>
@@ -1356,12 +1693,7 @@ function _renderCronForm({ name, schedule, prompt, deliver, profile, toast_notif
   _populateCronDeliverOptions(deliver, isEdit);
   _populateCronFormModelSelect(model, provider, isNoAgent);
   if (!isNoAgent) _renderCronSkillTags();
-  const scheduleEl = $('cronFormSchedule');
-  if (scheduleEl) {
-    scheduleEl.addEventListener('input', _syncCronScheduleWarning);
-    scheduleEl.addEventListener('change', _syncCronScheduleWarning);
-    _syncCronScheduleWarning();
-  }
+  _initCronSchedulePresetControls();
   const focusEl = $('cronFormName');
   if (focusEl) focusEl.focus();
 }
@@ -2239,6 +2571,80 @@ async function hardRefreshWebUIClient(){
   } catch(_) {}
   window.location.reload();
 }
+
+function _normalizeWebUIVersion(value){
+  if(!value) return '';
+  const s=String(value).trim();
+  if(!s) return '';
+  // Suppress placeholder / non-version sentinels (case-insensitive) so a real
+  // client version never "mismatches" against a server that couldn't detect its
+  // own version. api/updates.py can emit 'unknown' (git describe failure in a
+  // Docker/CI image); comparing a real version against 'unknown' would FALSELY
+  // fire the stale-client banner. (Codex #5480 gate)
+  const lower=s.toLowerCase();
+  if(lower==='__webui_version__'||lower==='not detected'||lower==='unknown') return '';
+  return s;
+}
+
+function _currentWebUIBundleVersion(){
+  try{
+    const raw=window.__HERMES_WEBUI_BUNDLE_VERSION__;
+    if(!raw) return '';
+    let s=String(raw);
+    try{ s=decodeURIComponent(s.replace(/\+/g,' ')); }catch(_){}
+    return _normalizeWebUIVersion(s);
+  }catch(_){ return ''; }
+}
+
+function _showStaleWebUIClientBanner(clientVersion,serverVersion){
+  const banner=document.getElementById('staleClientBanner');
+  if(!banner) return;
+  const msg=document.getElementById('staleClientMessage');
+  const versions=document.getElementById('staleClientVersions');
+  if(msg) msg.textContent='This tab is running a different WebUI version. Hard refresh to restore full functionality.';
+  if(versions) versions.textContent='Running: '+clientVersion+' → Server: '+serverVersion;
+  banner.style.display='flex';
+}
+
+function checkWebUIVersionSkew(settings){
+  try{
+    if(!settings) return;
+    const client=_currentWebUIBundleVersion();
+    const server=_normalizeWebUIVersion(settings.webui_version);
+    if(!client||!server) return;
+    if(client===server) return;
+    _showStaleWebUIClientBanner(client,server);
+  }catch(_){}
+}
+window.checkWebUIVersionSkew=checkWebUIVersionSkew;
+
+function _startWebUIVersionSkewMonitor(){
+  let _pollTimer=null;
+  function _isBannerVisible(){
+    const banner=document.getElementById('staleClientBanner');
+    return !!(banner&&banner.style.display==='flex');
+  }
+  function _check(){
+    if(_isBannerVisible()) return;
+    Promise.resolve().then(function(){ return api('/api/settings'); }).then(function(s){ checkWebUIVersionSkew(s); }).catch(function(){});
+  }
+  function _startPoll(){
+    if(_pollTimer||document.hidden) return;
+    _pollTimer=setInterval(function(){
+      if(document.hidden){ clearInterval(_pollTimer); _pollTimer=null; return; }
+      if(_isBannerVisible()){ clearInterval(_pollTimer); _pollTimer=null; return; }
+      _check();
+    },60000);
+  }
+  _check();
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden){ _check(); _startPoll(); }
+    else if(_pollTimer){ clearInterval(_pollTimer); _pollTimer=null; }
+  });
+  window.addEventListener('focus',function(){ _check(); });
+  _startPoll();
+}
+_startWebUIVersionSkewMonitor();
 
 function _kanbanLooksLikeStaleClientError(err){
   const msg = String((err && err.message) || err || '').toLowerCase();
@@ -5921,8 +6327,106 @@ async function switchToWorkspace(path,name){
 
 // ── Profile panel + dropdown ──
 let _profilesCache = null;
+let _profileDropdownFetchPromise = null;
+let _profileDropdownCacheLoadedFromStorage = false;
+const PROFILE_DROPDOWN_CACHE_KEY = 'hermes-webui-profile-dropdown-cache-v1';
+const PROFILE_DROPDOWN_CACHE_TTL_MS = 5 * 60 * 1000;
 let _profileSwitchGeneration = 0;
 let _profileDropdownTrigger = null;  // tracks which element triggered the dropdown
+let _profileDropdownOpenGeneration = 0;
+
+function _profileDropdownClearStoredCache(){
+  try{localStorage.removeItem(PROFILE_DROPDOWN_CACHE_KEY);}catch(_){}
+}
+
+function _profileDropdownDataCacheUsable(data){
+  return !!(
+    data &&
+    Array.isArray(data.profiles) &&
+    data.profiles.length &&
+    data.profiles.every(p=>
+      p &&
+      typeof p.name==='string' &&
+      // Renderer-read fields must be safe types: renderProfileDropdown /
+      // renderProfilesPanel call p.model.split('/') guarded only by truthiness,
+      // so a poisoned cached row like {name:"x", model:{}} would pass a
+      // name-only check yet throw synchronously on dropdown open (bricking
+      // profile switching). Reject rows whose model is a non-string truthy value.
+      (p.model==null || typeof p.model==='string')
+    )
+  );
+}
+
+function _profileDropdownCacheUsable(data){
+  return !!(_profileDropdownDataCacheUsable(data) && data.single_profile_mode !== true);
+}
+
+function _profileDropdownReadStoredCache(){
+  if(_profileDropdownCacheLoadedFromStorage) return _profileDropdownCacheUsable(_profilesCache) ? _profilesCache : null;
+  _profileDropdownCacheLoadedFromStorage = true;
+  try{
+    const raw=localStorage.getItem(PROFILE_DROPDOWN_CACHE_KEY);
+    if(!raw) return null;
+    const parsed=JSON.parse(raw);
+    if(!parsed || typeof parsed.ts!=='number' || !parsed.data) { _profileDropdownClearStoredCache(); return null; }
+    if(Date.now()-parsed.ts>PROFILE_DROPDOWN_CACHE_TTL_MS) { _profileDropdownClearStoredCache(); return null; }
+    if(!_profileDropdownCacheUsable(parsed.data)) { _profileDropdownClearStoredCache(); return null; }
+    _profilesCache = parsed.data;
+    return _profilesCache;
+  }catch(_){_profileDropdownClearStoredCache();return null;}
+}
+
+function _profileDropdownWriteStoredCache(data){
+  if(!_profileDropdownCacheUsable(data)) { _profileDropdownClearStoredCache(); return; }
+  try{localStorage.setItem(PROFILE_DROPDOWN_CACHE_KEY, JSON.stringify({ts:Date.now(), data}));}catch(_){}
+}
+
+function _profileDropdownBestCachedData(){
+  if(_profileDropdownCacheUsable(_profilesCache)) return _profilesCache;
+  if(_profileDropdownDataCacheUsable(_profilesCache)) return null;
+  _profilesCache = null;
+  return _profileDropdownReadStoredCache();
+}
+
+function _profileDropdownFetchFresh(){
+  if(_profileDropdownFetchPromise) return _profileDropdownFetchPromise;
+  _profileDropdownFetchPromise = api('/api/profiles', {timeoutToast:false}).then(data=>{
+    if(_profileDropdownDataCacheUsable(data)) _profilesCache = data;
+    _profileDropdownWriteStoredCache(data);
+    return data;
+  }).finally(()=>{ _profileDropdownFetchPromise = null; });
+  return _profileDropdownFetchPromise;
+}
+
+function _warmProfileDropdownCache(){
+  _profileDropdownBestCachedData();
+  _profileDropdownFetchFresh().catch(()=>{});
+}
+
+if(typeof window!=='undefined'){
+  window.addEventListener('load',()=>{
+    setTimeout(()=>{
+      if(typeof document==='undefined'||!document.hidden) _warmProfileDropdownCache();
+    },1200);
+  },{once:true});
+}
+
+function _renderProfileDropdownLoading(){
+  const dd=$('profileDropdown');
+  if(!dd)return;
+  dd.innerHTML=`<div class="profile-opt profile-opt-loading"><div class="profile-opt-name">${esc(t('loading')||'Loading...')}</div></div>`;
+}
+
+function _openProfileDropdownShell(){
+  const dd=$('profileDropdown');
+  if(!dd)return;
+  dd.classList.add('open');
+  _positionProfileDropdown();
+  const chip=$('profileChip');
+  if(chip && _profileDropdownTrigger===chip) chip.classList.add('active');
+  const tbtn=$('titlebarProfileBtn');
+  if(tbtn && _profileDropdownTrigger===tbtn) tbtn.classList.add('active');
+}
 
 async function _profileSwitchPanelLoad(){
   // Cross-profile cron visibility is an active-profile opt-in; never carry it
@@ -5983,6 +6487,7 @@ async function loadProfilesPanel() {
   try {
     const data = await api('/api/profiles');
     _profilesCache = data;
+    _profileDropdownWriteStoredCache(data);
     panel.innerHTML = '';
 
     // Hide "New profile" button in single profile mode
@@ -6022,7 +6527,7 @@ async function loadProfilesPanel() {
       card.className = 'profile-card';
       card.dataset.name = p.name;
       const meta = [];
-      if (p.model) meta.push(p.model.split('/').pop());
+      if (typeof p.model === 'string' && p.model) meta.push(p.model.split('/').pop());
       if (p.provider) meta.push(p.provider);
       if (p.total_skills && p.total_skills > 0) meta.push(t('profile_skill_count', p.total_skills).replace(String(p.total_skills), `${p.enabled_skills} / ${p.total_skills}`));
       const gwDot = p.gateway_running
@@ -6188,10 +6693,11 @@ async function deleteCurrentProfile(){
 }
 
 function renderProfileDropdown(data) {
+  data = data || {};
   const dd = $('profileDropdown');
   if (!dd) return;
   dd.innerHTML = '';
-  const allProfiles = data.profiles || [];
+  const allProfiles = (Array.isArray(data.profiles) ? data.profiles : []).filter(p => p && typeof p.name === 'string');
   const active = (S.activeProfile && allProfiles.some(p => p.name === S.activeProfile))
     ? S.activeProfile
     : (data.active || 'default');
@@ -6200,7 +6706,7 @@ function renderProfileDropdown(data) {
     const opt = document.createElement('div');
     opt.className = 'profile-opt' + (p.name === active ? ' active' : '');
     const meta = [];
-    if (p.model) meta.push(p.model.split('/').pop());
+    if (typeof p.model === 'string' && p.model) meta.push(p.model.split('/').pop());
     if (p.total_skills && p.total_skills > 0) meta.push(t('profile_skill_count', p.total_skills).replace(String(p.total_skills), `${p.enabled_skills} / ${p.total_skills}`));
     const gwDot = `<span class="profile-opt-badge ${p.gateway_running ? 'running' : 'stopped'}"></span>`;
     const checkmark = p.name === active ? ' <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--link)" stroke-width="3" style="vertical-align:-1px"><polyline points="20 6 9 17 4 12"/></svg>' : '';
@@ -6235,24 +6741,39 @@ function toggleProfileDropdown(e) {
   if(typeof closeModelDropdown==='function') closeModelDropdown();
   // Track which element triggered the dropdown for positioning
   _profileDropdownTrigger = (e && e.currentTarget) || $('profileChip');
-  api('/api/profiles').then(data => {
+  const openGen = ++_profileDropdownOpenGeneration;
+  const cached = _profileDropdownBestCachedData();
+
+  if(cached && !cached.single_profile_mode){
+    renderProfileDropdown(cached);
+    _openProfileDropdownShell();
+  }else{
+    _renderProfileDropdownLoading();
+    _openProfileDropdownShell();
+  }
+
+  _profileDropdownFetchFresh().then(data => {
+    if(openGen !== _profileDropdownOpenGeneration) return;
     // In single profile mode, don't show profile dropdown at all
     if (data.single_profile_mode) {
       closeProfileDropdown();
       return;
     }
     renderProfileDropdown(data);
-    dd.classList.add('open');
-    _positionProfileDropdown();
-    // Mark the triggering button as active
-    const chip=$('profileChip');
-    if(chip && _profileDropdownTrigger===chip) chip.classList.add('active');
-    const tbtn=$('titlebarProfileBtn');
-    if(tbtn && _profileDropdownTrigger===tbtn) tbtn.classList.add('active');
-  }).catch(e => { showToast(t('profiles_load_failed')); });
+    _openProfileDropdownShell();
+  }).catch(e => {
+    if(openGen !== _profileDropdownOpenGeneration) return;
+    if(cached && !cached.single_profile_mode){
+      // Keep the cached menu open; the next click/background refresh will retry.
+      return;
+    }
+    closeProfileDropdown();
+    showToast(t('profiles_load_failed'));
+  });
 }
 
 function closeProfileDropdown() {
+  _profileDropdownOpenGeneration++;
   const dd = $('profileDropdown');
   if (dd) dd.classList.remove('open');
   const chip=$('profileChip');
@@ -6267,6 +6788,21 @@ window.addEventListener('resize',()=>{
   const dd=$('profileDropdown');
   if(dd&&dd.classList.contains('open')) _positionProfileDropdown();
 });
+
+function _openProfileSwitchSessionBrowser(){
+  try{
+    const isDesktop = (typeof _isDesktopWidth === 'function') ? _isDesktopWidth() : true;
+    if(isDesktop){
+      if(typeof expandSidebar === 'function') expandSidebar();
+      return;
+    }
+    const sidebar=document.querySelector('.sidebar');
+    if(!sidebar)return;
+    try{if(typeof _syncMobileSidebarPanelFromMainView==='function')_syncMobileSidebarPanelFromMainView();}catch(_){}
+    sidebar.classList.remove('mobile-session-page');
+    sidebar.classList.add('mobile-panel-drawer','mobile-open');
+  }catch(_){}
+}
 
 async function switchToProfile(name) {
   // ── #4671 profile-switch loading-skeleton — FOUR-GUARD CONTRACT ───────────────
@@ -6307,6 +6843,7 @@ async function switchToProfile(name) {
   const _titlebarLabel = $('titlebarProfileLabel');
   const _prevProfileName = S.activeProfile || 'default';
   const _switchGen = ++_profileSwitchGeneration;
+  const _openingExistingSidebarSession = !!(typeof _profileSwitchOpeningExistingSession !== 'undefined' && _profileSwitchOpeningExistingSession);
   if (_chip) { _chip.classList.add('switching'); _chip.disabled = true; }
   if (_titlebarBtn) { _titlebarBtn.classList.add('switching'); _titlebarBtn.disabled = true; }
   // Optimistic name update — shows the target name right away
@@ -6327,14 +6864,22 @@ async function switchToProfile(name) {
   // context change where dismissing those transient affordances is correct.
   if (typeof _renamingSid !== 'undefined' && _renamingSid) _renamingSid = null;
   if (typeof closeSessionActionMenu === 'function') closeSessionActionMenu();
-  // Determine whether the current session has any messages.
-  // A session with messages is "in progress" and belongs to the current profile —
-  // we must not retag it.  We'll start a fresh session for the new profile instead.
-  const sessionInProgress = S.session && (
+  // Determine whether the current session must be replaced instead of being
+  // retagged in place. A session with messages/active runtime belongs to the
+  // current profile. After the profile-switch POST returns, we also treat an
+  // otherwise-empty session whose recorded profile does not match the target
+  // profile as replace-only: uploads send S.session.session_id and the backend
+  // correctly rejects old-profile sessions under the new profile cookie.
+  let sessionInProgress = !!(S.session && (
     (S.messages && S.messages.length > 0) ||
     S.session.active_stream_id ||
     S.session.pending_user_message
-  );
+  ));
+  if (_openingExistingSidebarSession && S.session) {
+    // A cross-profile sidebar click is about to load a concrete existing session.
+    // Do not create or retag a blank intermediary session in the destination profile.
+    sessionInProgress = true;
+  }
   const _workspaceVisibleAtStart = typeof _workspacePanelMode !== 'undefined' && _workspacePanelMode !== 'closed';
 
   // #4671 CORE: the skeleton/embargo/generation setup is INSIDE the try so the
@@ -6367,6 +6912,19 @@ async function switchToProfile(name) {
     if (_switchGen !== _profileSwitchGeneration) return;
     S.activeProfile = data.active || name;
     S.activeProfileIsDefault = !!data.is_default;
+    const targetActiveProfile = S.activeProfile || 'default';
+    let sessionProfileMatchesTarget = true;
+    if (!sessionInProgress && S.session) {
+      const currentSessionProfile = (typeof S.session.profile === 'string' && S.session.profile.trim())
+        ? S.session.profile.trim()
+        : 'default';
+      sessionProfileMatchesTarget = (typeof _profileMatchesActiveProfile === 'function')
+        ? _profileMatchesActiveProfile(currentSessionProfile, targetActiveProfile)
+        : (currentSessionProfile === targetActiveProfile || (currentSessionProfile === 'default' && !!S.activeProfileIsDefault));
+      if (!sessionProfileMatchesTarget) {
+        sessionInProgress = true;
+      }
+    }
     // #4650 review: a profile switch can change agent.reasoning_effort (and other
     // reasoning inputs like base_url) WITHOUT changing the default model/provider,
     // which is all the reasoning-chip cache key tracks. Force exactly one reasoning
@@ -6462,10 +7020,20 @@ async function switchToProfile(name) {
     }
 
     // ── Session ────────────────────────────────────────────────────────────
-    _showAllProfiles = false;
+    // Keep the all-profiles sidebar scope sticky across profile switches. It is
+    // a navigation preference shared by the browser session, not a per-profile flag.
     if (typeof animateNextSessionListRefresh === 'function') animateNextSessionListRefresh();
 
-    if (sessionInProgress) {
+    if (sessionInProgress && _openingExistingSidebarSession) {
+      // The caller will immediately load the clicked session after this profile
+      // cookie switch. Avoid creating/retagging an intermediate blank chat.
+      const workspaceVisible = typeof _workspacePanelMode !== 'undefined' && _workspacePanelMode !== 'closed';
+      if (typeof _setProfileSwitchListEmbargo === 'function') _setProfileSwitchListEmbargo(false);
+      await renderSessionList();
+      if (_switchGen !== _profileSwitchGeneration) return;
+      if (workspaceVisible && typeof clearWorkspaceTreeSkeleton === 'function') clearWorkspaceTreeSkeleton();
+      showToast(t('profile_switched', name));
+    } else if (sessionInProgress) {
       // The current session has messages and belongs to the previous profile.
       // Start a new session for the new profile so nothing gets cross-tagged.
       const workspaceVisible = typeof _workspacePanelMode !== 'undefined' && _workspacePanelMode !== 'closed';
@@ -6485,6 +7053,7 @@ async function switchToProfile(name) {
       // and pop a stale toast. Mirrors the no-messages branch guard below.
       // (@rodboev/greptile review, #4662)
       if (_switchGen !== _profileSwitchGeneration) return;
+      if (typeof _openProfileSwitchSessionBrowser === 'function') _openProfileSwitchSessionBrowser();
       // Safety net: if the new session has no workspace, newSession() won't have
       // painted the file tree — clear the up-front skeleton so it can't strand
       // (#4662 Opus gate). No-op when a real tree already rendered.
@@ -6507,6 +7076,7 @@ async function switchToProfile(name) {
       if (typeof _setProfileSwitchListEmbargo === 'function') _setProfileSwitchListEmbargo(false);
       await renderSessionList();
       if (_switchGen !== _profileSwitchGeneration) return;
+      if (typeof _openProfileSwitchSessionBrowser === 'function') _openProfileSwitchSessionBrowser();
       syncTopbar();
       // Refresh workspace file tree so the right panel shows the new
       // profile's workspace, not the previous one (#1214).
@@ -7880,6 +8450,49 @@ function _retryAppearanceAutosave(){
 
 // ── Phase 2: Preferences autosave (Issue #1003) ───────────────────────
 
+const _SETTINGS_SPEECH_STORAGE_KEYS={
+  tts_enabled:'hermes-tts-enabled',
+  tts_auto_read:'hermes-tts-auto-read',
+  tts_engine:'hermes-tts-engine',
+  tts_voice:'hermes-tts-voice',
+  tts_rate:'hermes-tts-rate',
+  tts_pitch:'hermes-tts-pitch',
+  voice_mode_button:'hermes-voice-mode-button',
+  voice_continuous:'hermes-voice-continuous',
+  voice_silence_ms:'hermes-voice-silence-ms',
+  raw_audio_mode:'hermes-raw-audio-mode',
+};
+let _settingsSpeechPersistedKeys=new Set();
+let _settingsSpeechLocalStorageKeys=new Set();
+let _settingsSpeechChangedKeys=new Set();
+
+function _captureSpeechPreferenceOwnership(settings){
+  _settingsSpeechPersistedKeys=new Set(Array.isArray(settings&&settings.persisted_speech_keys)?settings.persisted_speech_keys:[]);
+  _settingsSpeechLocalStorageKeys=new Set();
+  _settingsSpeechChangedKeys=new Set();
+  Object.entries(_SETTINGS_SPEECH_STORAGE_KEYS).forEach(([settingKey,storageKey])=>{
+    try{if(localStorage.getItem(storageKey)!==null) _settingsSpeechLocalStorageKeys.add(settingKey);}catch(_){}
+  });
+}
+
+function _speechPreferenceIsOwned(settingKey){
+  return _settingsSpeechPersistedKeys.has(settingKey)||_settingsSpeechLocalStorageKeys.has(settingKey)||_settingsSpeechChangedKeys.has(settingKey);
+}
+
+function _markSpeechPreferenceChanged(settingKey){
+  _settingsSpeechChangedKeys.add(settingKey);
+}
+
+function _syncSpeechPreferenceCache(settingKey,value){
+  if(!_speechPreferenceIsOwned(settingKey)) return;
+  const storageKey=_SETTINGS_SPEECH_STORAGE_KEYS[settingKey];
+  if(storageKey) localStorage.setItem(storageKey,String(value));
+}
+
+function _setOwnedSpeechPayload(payload,settingKey,value){
+  if(_speechPreferenceIsOwned(settingKey)) payload[settingKey]=value;
+}
+
 function _preferencesPayloadFromUi(){
   const payload={};
   const sendKeySel=$('settingsSendKey');
@@ -7915,6 +8528,8 @@ function _preferencesPayloadFromUi(){
   if(apiRedactCb) payload.api_redact_enabled=apiRedactCb.checked;
   const showCliCb=$('settingsShowCliSessions');
   if(showCliCb) payload.show_cli_sessions=showCliCb.checked;
+  const showClaudeCodeCb=$('settingsShowClaudeCodeSessions');
+  if(showClaudeCodeCb) payload.show_claude_code_sessions=showClaudeCodeCb.checked;
   const showCronCb=$('settingsShowCronSessions');
   // Gate cron sessions on CLI sessions (the server short-circuits otherwise),
   // identically to the explicit saveSettings() path, so neither save route can
@@ -7944,12 +8559,37 @@ function _preferencesPayloadFromUi(){
   if(pinnedLimitField) payload.pinned_sessions_limit=parseInt(pinnedLimitField.value,10);
   const autoTitleRefreshSel=$('settingsAutoTitleRefresh');
   if(autoTitleRefreshSel) payload.auto_title_refresh_every=parseInt(autoTitleRefreshSel.value,10);
-  const busyInputModeSel=$('settingsBusyInputMode');
-  if(busyInputModeSel) payload.busy_input_mode=busyInputModeSel.value;
+  const defaultMessageModeSel=$('settingsDefaultMessageMode');
+  if(defaultMessageModeSel) payload.default_message_mode=defaultMessageModeSel.value;
   const showBusyPlaceholderHintCb=$('settingsShowBusyPlaceholderHint');
   if(showBusyPlaceholderHintCb) payload.show_busy_placeholder_hint=showBusyPlaceholderHintCb.checked;
   const botNameField=$('settingsBotName');
   if(botNameField) payload.bot_name=botNameField.value;
+  Object.assign(payload,_speechPreferencesPayloadFromUi());
+  return payload;
+}
+
+function _speechPreferencesPayloadFromUi(){
+  const payload={};
+  const ttsEnabledCb=$('settingsTtsEnabled');
+  if(ttsEnabledCb) _setOwnedSpeechPayload(payload,'tts_enabled',ttsEnabledCb.checked);
+  const ttsAutoReadCb=$('settingsTtsAutoRead');
+  if(ttsAutoReadCb) _setOwnedSpeechPayload(payload,'tts_auto_read',ttsAutoReadCb.checked);
+  const ttsEngineSel=$('settingsTtsEngine');
+  if(ttsEngineSel) _setOwnedSpeechPayload(payload,'tts_engine',ttsEngineSel.value||'browser');
+  const ttsVoiceSel=$('settingsTtsVoice');
+  if(ttsVoiceSel) _setOwnedSpeechPayload(payload,'tts_voice',ttsVoiceSel.value||'');
+  const ttsRateSlider=$('settingsTtsRate');
+  if(ttsRateSlider) _setOwnedSpeechPayload(payload,'tts_rate',parseFloat(ttsRateSlider.value));
+  const ttsPitchSlider=$('settingsTtsPitch');
+  if(ttsPitchSlider) _setOwnedSpeechPayload(payload,'tts_pitch',parseFloat(ttsPitchSlider.value));
+  const voiceModeCb=$('settingsVoiceModeEnabled');
+  if(voiceModeCb) _setOwnedSpeechPayload(payload,'voice_mode_button',voiceModeCb.checked);
+  const rawAudioCb=$('settingsRawAudio');
+  _setOwnedSpeechPayload(payload,'raw_audio_mode',rawAudioCb?rawAudioCb.checked:localStorage.getItem('hermes-raw-audio-mode')==='true');
+  _setOwnedSpeechPayload(payload,'voice_continuous',localStorage.getItem('hermes-voice-continuous')==='true');
+  const voiceSilence=parseInt(localStorage.getItem('hermes-voice-silence-ms'),10);
+  _setOwnedSpeechPayload(payload,'voice_silence_ms',(Number.isFinite(voiceSilence)&&voiceSilence>=200)?voiceSilence:1800);
   return payload;
 }
 
@@ -8021,8 +8661,11 @@ async function _autosavePreferencesSettings(payload){
       document.documentElement.dataset.conversationOutline=window._showConversationOutline?'enabled':'disabled';
       if(typeof applyConversationOutlinePreference==='function') applyConversationOutlinePreference();
     }
-    if(payload&&payload.busy_input_mode!==undefined){
-      window._busyInputMode=(typeof _persistBusyInputMode==='function')?_persistBusyInputMode(saved&&saved.busy_input_mode):((saved&&saved.busy_input_mode)||'queue');
+    if(payload&&payload.default_message_mode!==undefined){
+      // #5170 mirror write on autosave, under the #5145 rename: persist the
+      // saved mode so a reload/offline first-send honors it (legacy fallback).
+      const _dmm=(saved&&saved.default_message_mode)||(saved&&saved.busy_input_mode);
+      window._defaultMessageMode=(typeof _persistDefaultMessageMode==='function')?_persistDefaultMessageMode(_dmm):(_dmm||'steer');
       if(typeof _applyBusyComposerPlaceholder==='function') _applyBusyComposerPlaceholder();
     }
     if(payload&&payload.show_busy_placeholder_hint!==undefined){
@@ -8089,6 +8732,7 @@ function _syncSettingsMaxTokensPlaceholder(field, fallbackValue){
 async function loadSettingsPanel(){
   try{
     const settings=await api('/api/settings');
+    checkWebUIVersionSkew(settings);
     // Populate the version badges from the server — keeps them in sync with git
     // tags automatically without any manual release step.
     const webuiBadge = $('settings-webui-version-badge');
@@ -8322,7 +8966,13 @@ async function loadSettingsPanel(){
       }else{
         modelSel.value=_settingsHermesDefaultModelOnOpen;
       }
+      if(typeof closeSettingsModelDropdown==='function') closeSettingsModelDropdown();
+      if(typeof mountSettingsModelPicker==='function') mountSettingsModelPicker();
       modelSel.addEventListener('change',_markSettingsDirty,{once:false});
+      if(!modelSel._settingsChipSyncBound){
+        modelSel._settingsChipSyncBound=true;
+        modelSel.addEventListener('change',()=>{if(typeof syncSettingsModelChip==='function') syncSettingsModelChip();},{once:false});
+      }
     }
     // Auxiliary models — load task assignments and provider/model options
     _bindMainAdvancedOptionsButton();
@@ -8447,12 +9097,23 @@ async function loadSettingsPanel(){
     if(apiRedactCb){apiRedactCb.checked=settings.api_redact_enabled!==false;apiRedactCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const showCliCb=$('settingsShowCliSessions');
     if(showCliCb){showCliCb.checked=settings.show_cli_sessions!==false;showCliCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
+    const showClaudeCodeCb=$('settingsShowClaudeCodeSessions');
+    if(showClaudeCodeCb){
+      showClaudeCodeCb.checked=!!settings.show_claude_code_sessions;
+      showClaudeCodeCb.disabled=showCliCb?!showCliCb.checked:true;
+      showClaudeCodeCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});
+    }
+    if(showCliCb){showCliCb.addEventListener('change',function(){
+      const enabled=!!showCliCb.checked;
+      if(showCronCb) showCronCb.disabled=!enabled;
+      if(showClaudeCodeCb) showClaudeCodeCb.disabled=!enabled;
+      _schedulePreferencesAutosave();
+    },{once:false});}
     const showCronCb=$('settingsShowCronSessions');
     if(showCronCb){
       showCronCb.checked=!!settings.show_cron_sessions;
       showCronCb.disabled=showCliCb?!showCliCb.checked:true;
       showCronCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});
-      if(showCliCb){showCliCb.addEventListener('change',function(){showCronCb.disabled=!showCliCb.checked;},{once:false});}
     }
     const showWebhookCb=$('settingsShowWebhookSessions');
     if(showWebhookCb){
@@ -8487,20 +9148,56 @@ async function loadSettingsPanel(){
         _schedulePreferencesAutosave();
       },{once:false});
     }
-    // TTS settings (localStorage-only, no server round-trip needed)
+    if(typeof window._mirrorSpeechSettingsFromServer==='function') window._mirrorSpeechSettingsFromServer(settings);
+    const persistedSpeechKeys = new Set(
+      Array.isArray(settings && settings.persisted_speech_keys)
+        ? settings.persisted_speech_keys
+        : []
+    );
+    _captureSpeechPreferenceOwnership(settings);
+    const _speechSetting=function(key,storageKey,fallback,kind){
+      const stored=localStorage.getItem(storageKey);
+      if(settings&&persistedSpeechKeys.has(key)) return settings[key];
+      return stored===null?fallback:stored;
+    };
+    const _speechBool=function(key,storageKey,fallback){
+      const value=_speechSetting(key,storageKey,fallback,'bool');
+      return value===true||value==='true';
+    };
+    const rawAudioCb=$('settingsRawAudio');
+    if(rawAudioCb){
+      rawAudioCb.checked=_speechBool('raw_audio_mode','hermes-raw-audio-mode',false);
+      rawAudioCb.onchange=function(){
+        _markSpeechPreferenceChanged('raw_audio_mode');
+        if(typeof window._applyRawAudioModePreference==='function') window._applyRawAudioModePreference(this.checked);
+        else localStorage.setItem('hermes-raw-audio-mode',this.checked?'true':'false');
+        _schedulePreferencesAutosave();
+      };
+    }
+    const voiceContinuous=_speechBool('voice_continuous','hermes-voice-continuous',false);
+    _syncSpeechPreferenceCache('voice_continuous',voiceContinuous?'true':'false');
+    const voiceSilence=parseInt(_speechSetting('voice_silence_ms','hermes-voice-silence-ms',1800),10);
+    _syncSpeechPreferenceCache('voice_silence_ms',Number.isFinite(voiceSilence)&&voiceSilence>=200?String(voiceSilence):'1800');
+    // TTS settings use /api/settings as the durable source and localStorage as the runtime cache.
     const ttsEnabledCb=$('settingsTtsEnabled');
-    if(ttsEnabledCb){ttsEnabledCb.checked=localStorage.getItem('hermes-tts-enabled')==='true';ttsEnabledCb.onchange=function(){localStorage.setItem('hermes-tts-enabled',this.checked?'true':'false');_applyTtsEnabled(this.checked);};}
+    if(ttsEnabledCb){ttsEnabledCb.checked=_speechBool('tts_enabled','hermes-tts-enabled',false);ttsEnabledCb.onchange=function(){_markSpeechPreferenceChanged('tts_enabled');localStorage.setItem('hermes-tts-enabled',this.checked?'true':'false');_applyTtsEnabled(this.checked);_schedulePreferencesAutosave();};}
     const ttsAutoReadCb=$('settingsTtsAutoRead');
-    if(ttsAutoReadCb){ttsAutoReadCb.checked=localStorage.getItem('hermes-tts-auto-read')==='true';ttsAutoReadCb.onchange=function(){localStorage.setItem('hermes-tts-auto-read',this.checked?'true':'false');};}
-    // Voice-mode button visibility (#1488). localStorage-only; no server round-trip.
+    if(ttsAutoReadCb){ttsAutoReadCb.checked=_speechBool('tts_auto_read','hermes-tts-auto-read',false);ttsAutoReadCb.onchange=function(){_markSpeechPreferenceChanged('tts_auto_read');localStorage.setItem('hermes-tts-auto-read',this.checked?'true':'false');_schedulePreferencesAutosave();};}
+    // Voice-mode button visibility (#1488).
     // Toggling re-applies immediately via the boot.js helper so the user sees
     // the audio-waveform button appear/disappear without a reload.
+    // Also recomputes composer footer visibility so the .composer-divider
+    // (which tracks whether all left-group buttons are hidden, see #5451)
+    // stays in sync when #btnVoiceMode appears or disappears here.
     const voiceModeCb=$('settingsVoiceModeEnabled');
     if(voiceModeCb){
-      voiceModeCb.checked=localStorage.getItem('hermes-voice-mode-button')==='true';
+      voiceModeCb.checked=_speechBool('voice_mode_button','hermes-voice-mode-button',false);
       voiceModeCb.onchange=function(){
+        _markSpeechPreferenceChanged('voice_mode_button');
         localStorage.setItem('hermes-voice-mode-button',this.checked?'true':'false');
         if(typeof window._applyVoiceModePref==='function') window._applyVoiceModePref();
+        if(typeof window._applyComposerFooterVisibilitySettings==='function') window._applyComposerFooterVisibilitySettings();
+        _schedulePreferencesAutosave();
       };
     }
     // TTS engine selector
@@ -8518,11 +9215,19 @@ async function loadSettingsPanel(){
           }
         });
       }
-      const saved=localStorage.getItem('hermes-tts-engine')||'browser';
+      const saved=String(_speechSetting('tts_engine','hermes-tts-engine','browser')||'browser');
+      if(!ttsEngineSel.querySelector('option[value="'+saved+'"]')){
+        var savedOpt=document.createElement('option');
+        savedOpt.value=saved; savedOpt.textContent=saved;
+        ttsEngineSel.appendChild(savedOpt);
+      }
       ttsEngineSel.value=saved;
+      _syncSpeechPreferenceCache('tts_engine',saved);
       ttsEngineSel.onchange=function(){
+        _markSpeechPreferenceChanged('tts_engine');
         localStorage.setItem('hermes-tts-engine',this.value);
         window._populateTtsVoices();
+        _schedulePreferencesAutosave();
       };
     }
     // Populate voice selector based on engine
@@ -8530,7 +9235,8 @@ async function loadSettingsPanel(){
     window._populateTtsVoices=function(){
       if(!ttsVoiceSel) return;
       const engine=localStorage.getItem('hermes-tts-engine')||'browser';
-      const current=localStorage.getItem('hermes-tts-voice')||'';
+      const current=String(_speechSetting('tts_voice','hermes-tts-voice','')||'');
+      _syncSpeechPreferenceCache('tts_voice',current);
       if(engine==='elevenlabs'){
         ttsVoiceSel.innerHTML='<option value="">Hermy — ElevenLabs (server-configured)</option>';
       } else if(engine==='openai'){
@@ -8574,24 +9280,26 @@ async function loadSettingsPanel(){
         const engine=localStorage.getItem('hermes-tts-engine')||'browser';
         if(engine==='browser') window._populateTtsVoices();
       },{once:false});
-      ttsVoiceSel.onchange=function(){localStorage.setItem('hermes-tts-voice',this.value);};
+      ttsVoiceSel.onchange=function(){_markSpeechPreferenceChanged('tts_voice');localStorage.setItem('hermes-tts-voice',this.value);_schedulePreferencesAutosave();};
     }
     // TTS rate/pitch sliders
     const ttsRateSlider=$('settingsTtsRate');
     const ttsRateValue=$('settingsTtsRateValue');
     if(ttsRateSlider){
-      const savedRate=localStorage.getItem('hermes-tts-rate');
-      ttsRateSlider.value=savedRate||'1';
+      const savedRate=_speechSetting('tts_rate','hermes-tts-rate',1);
+      ttsRateSlider.value=(savedRate===null||savedRate===undefined)?'1':String(savedRate);
       if(ttsRateValue) ttsRateValue.textContent=parseFloat(ttsRateSlider.value).toFixed(1)+'x';
-      ttsRateSlider.oninput=function(){if(ttsRateValue)ttsRateValue.textContent=parseFloat(this.value).toFixed(1)+'x';localStorage.setItem('hermes-tts-rate',this.value);};
+      _syncSpeechPreferenceCache('tts_rate',ttsRateSlider.value);
+      ttsRateSlider.oninput=function(){_markSpeechPreferenceChanged('tts_rate');if(ttsRateValue)ttsRateValue.textContent=parseFloat(this.value).toFixed(1)+'x';localStorage.setItem('hermes-tts-rate',this.value);_schedulePreferencesAutosave();};
     }
     const ttsPitchSlider=$('settingsTtsPitch');
     const ttsPitchValue=$('settingsTtsPitchValue');
     if(ttsPitchSlider){
-      const savedPitch=localStorage.getItem('hermes-tts-pitch');
-      ttsPitchSlider.value=savedPitch||'1';
+      const savedPitch=_speechSetting('tts_pitch','hermes-tts-pitch',1);
+      ttsPitchSlider.value=(savedPitch===null||savedPitch===undefined)?'1':String(savedPitch);
       if(ttsPitchValue) ttsPitchValue.textContent=parseFloat(ttsPitchSlider.value).toFixed(1);
-      ttsPitchSlider.oninput=function(){if(ttsPitchValue)ttsPitchValue.textContent=parseFloat(this.value).toFixed(1);localStorage.setItem('hermes-tts-pitch',this.value);};
+      _syncSpeechPreferenceCache('tts_pitch',ttsPitchSlider.value);
+      ttsPitchSlider.oninput=function(){_markSpeechPreferenceChanged('tts_pitch');if(ttsPitchValue)ttsPitchValue.textContent=parseFloat(this.value).toFixed(1);localStorage.setItem('hermes-tts-pitch',this.value);_schedulePreferencesAutosave();};
     }
     const notifCb=$('settingsNotificationsEnabled');
     if(notifCb){notifCb.checked=!!settings.notifications_enabled;notifCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
@@ -8607,13 +9315,14 @@ async function loadSettingsPanel(){
       autoTitleRefreshSel.value=['0','5','10','20'].includes(val)?val:'0';
       autoTitleRefreshSel.addEventListener('change',_schedulePreferencesAutosave,{once:false});
     }
-    // Busy input mode
-    const busyInputModeSel=$('settingsBusyInputMode');
-    if(busyInputModeSel){
-      const val=String(settings.busy_input_mode||'queue');
-      busyInputModeSel.value=['queue','interrupt','steer'].includes(val)?val:'queue';
-      window._busyInputMode=(typeof _persistBusyInputMode==='function')?_persistBusyInputMode(busyInputModeSel.value):busyInputModeSel.value;
-      busyInputModeSel.addEventListener('change',_schedulePreferencesAutosave,{once:false});
+    // Default message mode
+    const defaultMessageModeSel=$('settingsDefaultMessageMode');
+    if(defaultMessageModeSel){
+      const val=String(settings.default_message_mode||settings.busy_input_mode||'steer');
+      defaultMessageModeSel.value=['queue','interrupt','steer'].includes(val)?val:'steer';
+      // #5170 mirror write on panel load, under the #5145 rename.
+      window._defaultMessageMode=(typeof _persistDefaultMessageMode==='function')?_persistDefaultMessageMode(defaultMessageModeSel.value):defaultMessageModeSel.value;
+      defaultMessageModeSel.addEventListener('change',_schedulePreferencesAutosave,{once:false});
     }
     const showBusyPlaceholderHintCb=$('settingsShowBusyPlaceholderHint');
     if(showBusyPlaceholderHintCb){
@@ -9790,7 +10499,11 @@ async function _loadPluginPage(path, label) {
 
 // ── Providers panel ─────────────────────────────────────────────────────────
 
-const _providerCardEls = new Map(); // providerId → {card, statusDot, input, saveBtn, removeBtn}
+const _providerCardEls = new Map(); // providerId → entry used by save/remove/test handlers
+const _SELF_HOSTED_DEFAULT_BASE_URLS = Object.freeze({
+  ollama: 'http://localhost:11434/v1',
+  lmstudio: 'http://localhost:1234/v1',
+});
 
 async function _fetchProviderQuotaStatus(force=false){
   const endpoint=force?`/api/provider/quota?refresh=1&ts=${Date.now()}`:'/api/provider/quota';
@@ -9806,7 +10519,7 @@ async function loadProvidersPanel(){
   try{
     const data=await api('/api/providers');
     const quota=await _fetchProviderQuotaStatus(false).catch(e=>({ok:false,status:'unavailable',quota:null,message:e.message||t('provider_quota_unavailable'),client_fetched_at:new Date().toISOString()}));
-    const providers=(data.providers||[]).filter(p=>p.configurable||p.is_oauth||p.is_custom||p.is_plugin_provider);
+    const providers=(data.providers||[]).filter(p=>p.configurable||p.is_oauth||p.is_custom||p.is_plugin_provider||p.is_self_hosted);
     list.innerHTML='';
     _providerCardEls.clear();
     const quotaCard=_buildProviderQuotaCard(quota);
@@ -10282,7 +10995,140 @@ function _buildProviderCard(p){
   }
 
   let input=null;
+  let focusInput=null;
   let saveBtn=null;
+  if(p.is_self_hosted){
+    const defaultBaseUrl=_SELF_HOSTED_DEFAULT_BASE_URLS[p.id];
+    const baseUrlField=document.createElement('div');
+    baseUrlField.className='provider-card-field';
+    const baseUrlLabel=document.createElement('label');
+    baseUrlLabel.className='provider-card-label';
+    baseUrlLabel.textContent='Base URL';
+    baseUrlField.appendChild(baseUrlLabel);
+    const baseUrlRow=document.createElement('div');
+    baseUrlRow.className='provider-card-row';
+    const baseUrlInput=document.createElement('input');
+    baseUrlInput.type='text';
+    baseUrlInput.className='provider-card-input';
+    baseUrlInput.placeholder=defaultBaseUrl||'http://localhost:11434/v1';
+    baseUrlInput.value=(p.base_url||'').trim()||defaultBaseUrl||'';
+    baseUrlInput.autocomplete='off';
+    const testBtn=document.createElement('button');
+    testBtn.type='button';
+    testBtn.className='provider-card-btn provider-card-btn-ghost';
+    testBtn.textContent='Test connection';
+    const probeStatus=document.createElement('div');
+    probeStatus.className='provider-card-hint';
+    baseUrlRow.appendChild(baseUrlInput);
+    baseUrlRow.appendChild(testBtn);
+    baseUrlField.appendChild(baseUrlRow);
+    baseUrlField.appendChild(probeStatus);
+
+    const keyField=document.createElement('div');
+    keyField.className='provider-card-field';
+    const keyLabel=document.createElement('label');
+    keyLabel.className='provider-card-label';
+    keyLabel.textContent='API key (optional)';
+    keyField.appendChild(keyLabel);
+    const keyRow=document.createElement('div');
+    keyRow.className='provider-card-row';
+    const keyInput=document.createElement('input');
+    keyInput.type='password';
+    keyInput.className='provider-card-input';
+    keyInput.autocomplete='off';
+    keyInput.placeholder='Optional';
+    keyRow.appendChild(keyInput);
+    keyField.appendChild(keyRow);
+
+    const modelField=document.createElement('div');
+    modelField.className='provider-card-field';
+    const modelLabel=document.createElement('label');
+    modelLabel.className='provider-card-label';
+    modelLabel.textContent=t('providers_status_model')||'Model';
+    modelField.appendChild(modelLabel);
+    const modelRow=document.createElement('div');
+    modelRow.className='provider-card-row';
+    const modelInput=document.createElement('input');
+    modelInput.type='text';
+    modelInput.className='provider-card-input';
+    modelInput.autocomplete='off';
+    modelInput.placeholder='model id';
+    const modelDatalist=document.createElement('datalist');
+    const modelListId='providerModelList-'+p.id;
+    modelDatalist.id=modelListId;
+    modelInput.setAttribute('list',modelListId);
+    const setModelChoices=(models)=>{
+      modelDatalist.innerHTML='';
+      const choices=Array.isArray(models)?models:[];
+      for(const model of choices){
+        const modelId=model&&model.id?model.id:model;
+        const option=document.createElement('option');
+        option.value=modelId;
+        modelDatalist.appendChild(option);
+      }
+    };
+    const initialModelChoices=Array.isArray(p.models)?p.models:[];
+    setModelChoices(initialModelChoices);
+
+    const saveRow=document.createElement('div');
+    saveRow.className='provider-card-row';
+    saveRow.style.marginTop='6px';
+    saveBtn=document.createElement('button');
+    saveBtn.type='button';
+    saveBtn.className='provider-card-btn provider-card-btn-primary';
+    saveBtn.textContent=t('providers_save');
+    saveBtn.onclick=()=>_saveSelfHostedProvider(p.id);
+    saveBtn.disabled=true;
+    saveRow.appendChild(saveBtn);
+    if(p.has_key){
+      const removeBtn=document.createElement('button');
+      removeBtn.type='button';
+      removeBtn.className='provider-card-btn provider-card-btn-danger';
+      removeBtn.textContent=t('providers_remove');
+      removeBtn.onclick=()=>_removeProviderKey(p.id);
+      saveRow.appendChild(removeBtn);
+    }
+    modelRow.appendChild(modelInput);
+    modelField.appendChild(modelRow);
+    body.appendChild(baseUrlField);
+    body.appendChild(keyField);
+    body.appendChild(modelField);
+    body.appendChild(saveRow);
+    body.appendChild(modelDatalist);
+    card.appendChild(body);
+
+    const checkSaveEnabled=()=>{
+      const hasUrl=baseUrlInput.value.trim().length>0;
+      const hasModel=modelInput.value.trim().length>0;
+      saveBtn.disabled=!(hasUrl&&hasModel);
+    };
+    baseUrlInput.addEventListener('input',checkSaveEnabled);
+    modelInput.addEventListener('input',checkSaveEnabled);
+    checkSaveEnabled();
+
+    _providerCardEls.set(p.id,{
+      card,
+      baseUrlInput,
+      apiKeyInput:keyInput,
+      modelInput,
+      modelDatalist,
+      saveBtn,
+      testBtn,
+      probeStatus,
+      isSelfHosted:true,
+      setModelChoices,
+      updateSaveState:checkSaveEnabled,
+    });
+    focusInput=modelInput;
+    testBtn.onclick=()=>_testSelfHostedConnection(p.id);
+    header.addEventListener('click',e=>{
+      if(e.target.closest('.provider-card-body')) return;
+      card.classList.toggle('open');
+      if(card.classList.contains('open')) setTimeout(()=>focusInput&&focusInput.focus(),0);
+    });
+    return card;
+  }
+
   if(p.configurable){
     const field=document.createElement('div');
     field.className='provider-card-field';
@@ -10326,6 +11172,8 @@ function _buildProviderCard(p){
     }
     field.appendChild(row);
     body.appendChild(field);
+    focusInput=input;
+
   }else{
     const hint=document.createElement('div');
     hint.className='provider-card-hint';
@@ -10395,7 +11243,7 @@ function _buildProviderCard(p){
     // Don't toggle when clicking inside body (defensive; body isn't inside header)
     if(e.target.closest('.provider-card-body')) return;
     card.classList.toggle('open');
-    if(card.classList.contains('open')) setTimeout(()=>input.focus(),0);
+    if(card.classList.contains('open')) setTimeout(()=>focusInput&&focusInput.focus(),0);
   });
   return card;
 }
@@ -10467,6 +11315,108 @@ async function _removeProviderKey(providerId){
       showToast('Error: '+e.message);
     }
     if(els.saveBtn){els.saveBtn.disabled=false;els.saveBtn.textContent=t('providers_save');}
+  }
+}
+
+async function _testSelfHostedConnection(providerId){
+  const els=_providerCardEls.get(providerId);
+  if(!els||!els.isSelfHosted) return;
+  const baseUrl=(els.baseUrlInput.value||'').trim();
+  const apiKey=(els.apiKeyInput.value||'').trim();
+  if(!baseUrl){
+    showToast('Base URL is required');
+    return;
+  }
+
+  const testBtn=els.testBtn;
+  if(!testBtn) return;
+  const prevLabel=testBtn.textContent;
+  testBtn.disabled=true;
+  testBtn.textContent='Testing...';
+  if(els.probeStatus){
+    els.probeStatus.style.color='var(--muted)';
+    els.probeStatus.textContent='Testing connection...';
+  }
+
+  try{
+    const res=await api('/api/onboarding/probe',{
+      method:'POST',
+      body:JSON.stringify({provider:providerId,base_url:baseUrl,api_key:apiKey||undefined}),
+    });
+    if(res&&res.ok){
+      const models=Array.isArray(res.models)?res.models:[];
+      if(els.setModelChoices){
+        els.setModelChoices(models);
+      }
+      if(els.probeStatus){
+        const count=models.length;
+        els.probeStatus.style.color='var(--ok)';
+        els.probeStatus.textContent=`Connected. ${count} model(s) available.`;
+      }
+      if(!els.modelInput.value&&models.length&&models[0]){
+        els.modelInput.value=models[0].id||models[0];
+      }
+      if(els.updateSaveState){
+        els.updateSaveState();
+      }
+    }else{
+      const err=(res&&res.error)||'unreachable';
+      const detail=(res&&res.detail)?` (${res.detail})`:'';
+      if(els.probeStatus){
+        els.probeStatus.style.color='var(--accent)';
+        els.probeStatus.textContent=`${err}${detail}`;
+      }
+      showToast(`Connection test failed: ${err}`);
+    }
+  }catch(e){
+    if(els.probeStatus){
+      els.probeStatus.style.color='var(--accent)';
+      els.probeStatus.textContent=e&&e.message?e.message:'Connection test failed';
+    }
+    showToast('Connection test failed: '+(e&&e.message||'request error'));
+  }finally{
+    testBtn.disabled=false;
+    testBtn.textContent=prevLabel;
+  }
+}
+
+async function _saveSelfHostedProvider(providerId){
+  const els=_providerCardEls.get(providerId);
+  if(!els||!els.isSelfHosted) return;
+  const baseUrl=(els.baseUrlInput.value||'').trim();
+  const key=(els.apiKeyInput.value||'').trim();
+  const model=(els.modelInput.value||'').trim();
+  if(!baseUrl){
+    showToast('Base URL is required');
+    return;
+  }
+  if(!model){
+    showToast('Model is required');
+    return;
+  }
+  if(!els.saveBtn) return;
+  const saveBtn=els.saveBtn;
+  const prevLabel=saveBtn.textContent;
+  saveBtn.disabled=true;
+  saveBtn.textContent='Saving...';
+  try{
+    const payload={provider:providerId,base_url:baseUrl,model:model};
+    if(key) payload.api_key=key;
+    const res=await api('/api/providers/self-hosted',{method:'POST',body:JSON.stringify(payload)});
+    if(res&&res.ok){
+      showToast(`${res.provider} configured`);
+      if(els.apiKeyInput) els.apiKeyInput.value='';
+      _refreshModelDropdownsAfterProviderChange();
+      await loadProvidersPanel();
+    }else{
+      showToast(res&&res.error||'Failed to save provider');
+      saveBtn.disabled=false;
+      saveBtn.textContent=prevLabel;
+    }
+  }catch(e){
+    showToast('Error: '+(e&&e.message||'Failed to save provider'));
+    saveBtn.disabled=false;
+    saveBtn.textContent=prevLabel;
   }
 }
 
@@ -10693,9 +11643,11 @@ function _applySavedSettingsUi(saved, body, opts){
   window._sessionJumpButtonsEnabled=!!body.session_jump_buttons;
   if(typeof _applySessionNavigationPrefs==='function') _applySessionNavigationPrefs();
   window._sidebarDensity=sidebarDensity==='detailed'?'detailed':'compact';
-  window._busyInputMode=(typeof _persistBusyInputMode==='function')
-    ? _persistBusyInputMode(body.busy_input_mode)
-    : (body.busy_input_mode||'queue');
+  // #5170 mirror write in _applySavedSettingsUi, under the #5145 rename:
+  // persist so a reload/offline first-send honors the resolved mode.
+  window._defaultMessageMode=(typeof _persistDefaultMessageMode==='function')
+    ? _persistDefaultMessageMode(body.default_message_mode||body.busy_input_mode)
+    : (body.default_message_mode||body.busy_input_mode||'steer');
   window._sessionEndlessScrollEnabled=!!body.session_endless_scroll;
   window._autoScrollFollow=body.auto_scroll_follow!==false;
   window._largeTextPasteAsAttachment=body.large_text_paste_as_attachment!==false;
@@ -11257,6 +12209,7 @@ async function saveSettings(andClose){
   const showTps=!!($('settingsShowTps')||{}).checked;
   const fadeTextEffect=!!($('settingsFadeTextEffect')||{}).checked;
   const showCliSessions=!!($('settingsShowCliSessions')||{}).checked;
+  const showClaudeCodeSessions=!!($('settingsShowClaudeCodeSessions')||{}).checked;
   const showCronSessions=!!($('settingsShowCronSessions')||{}).checked;
   const showWebhookSessions=!!($('settingsShowWebhookSessions')||{}).checked;
   const showPreviousMessagingSessions=!!($('settingsShowPreviousMessagingSessions')||{}).checked;
@@ -11267,9 +12220,10 @@ async function saveSettings(andClose){
   const fontSize=($('settingsFontSize')||{}).value||localStorage.getItem('hermes-font-size')||'default';
   const language=($('settingsLanguage')||{}).value||'en';
   const sidebarDensity=($('settingsSidebarDensity')||{}).value==='detailed'?'detailed':'compact';
-  const busyInputMode=($('settingsBusyInputMode')||{}).value||'queue';
+  const defaultMessageMode=($('settingsDefaultMessageMode')||{}).value||'steer';
   const showBusyPlaceholderHint=!!($('settingsShowBusyPlaceholderHint')||{}).checked;
   const body={};
+  Object.assign(body,_speechPreferencesPayloadFromUi());
 
   if(sendKey) body.send_key=sendKey;
   body.theme=theme;
@@ -11304,6 +12258,8 @@ async function saveSettings(andClose){
   body.workspace_todos_tab=!!window._workspaceTodosTab;
   body.api_redact_enabled=!!($('settingsApiRedact')||{}).checked;
   body.show_cli_sessions=showCliSessions;
+  // Persist the opt-out child independently; the read path applies the parent gate.
+  body.show_claude_code_sessions=showClaudeCodeSessions;
   // Cron and webhook sessions are gated on CLI sessions (server short-circuits otherwise);
   // mirror the autosave path so the explicit Save Settings button persists them too. (#3514)
   body.show_cron_sessions=showCliSessions&&showCronSessions;
@@ -11319,7 +12275,7 @@ async function saveSettings(andClose){
   body.notifications_enabled=!!($('settingsNotificationsEnabled')||{}).checked;
   body.show_thinking=window._showThinking!==false;
   body.sidebar_density=sidebarDensity;
-  body.busy_input_mode=busyInputMode;
+  body.default_message_mode=defaultMessageMode;
   body.auto_title_refresh_every=(($('settingsAutoTitleRefresh')||{}).value||'0');
   const botName=(($('settingsBotName')||{}).value||'').trim();
   body.bot_name=botName||'Hermes';

@@ -7628,7 +7628,7 @@ def get_available_models_for_session_visit() -> dict:
 
 
 def _maybe_log_slow_stages(
-    logger_obj: "_logging.Logger",
+    logger_obj: "logging.Logger",
     stagelog: "list[tuple[str, float]]",
     threshold_ms: float,
     tag: str,

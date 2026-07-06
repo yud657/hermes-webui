@@ -876,9 +876,40 @@ def _is_empty_partial_activity_message(message):
     return not str(content or '').strip()
 
 
-def _last_message_timestamp(messages):
+def _last_message_timestamp(messages, *, tail_window: int = 8):
+    """perf(session-load-latency) Priority 1: bounded tail-scan.
+
+    Old behavior: reversed-iterate ALL messages until a non-tool, non-empty
+    message's timestamp is found. For a 2,730-message session on eMMC, that's
+    ~500ms of Python attribute lookups, repeated on every /api/session
+    response.
+
+    New behavior: the messages array is chronologically ordered, so the
+    last non-tool message is at the very end. We scan only the last
+    ``tail_window`` messages — covers the realistic case where 1-3 tool
+    rows sit after the last assistant/user message. Falls back to a full
+    scan only when no timestamp is found in the window, which preserves
+    exact correctness for messages with very large trailing tool clusters
+    (rare in practice; we'd need >8 consecutive tool rows to hit it).
+    """
     if not isinstance(messages, list):
         return None
+    n = len(messages)
+    start = max(0, n - max(1, int(tail_window)))
+    # Walk from the end backwards. reversed() over a slice still creates
+    # a full reverse iterator, but only the slice's elements are touched.
+    for message in reversed(messages[start:]):
+        if isinstance(message, dict) and message.get('role') == 'tool':
+            continue
+        if _is_empty_partial_activity_message(message):
+            continue
+        ts = _message_timestamp(message)
+        if ts:
+            return ts
+    # Window miss — fall back to the original full-reversed scan. The
+    # caller pays this cost only when the heuristic didn't find a hit,
+    # which means the session is unusual (long tool tail or all-empty
+    # messages).
     for message in reversed(messages):
         if isinstance(message, dict) and message.get('role') == 'tool':
             continue

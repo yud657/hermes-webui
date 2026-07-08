@@ -8543,6 +8543,8 @@ function _preferencesPayloadFromUi(){
   if(syncCb) payload.sync_to_insights=syncCb.checked;
   const updateCb=$('settingsCheckUpdates');
   if(updateCb) payload.check_for_updates=updateCb.checked;
+  const updateChannelSel=$('settingsUpdateChannel');
+  if(updateChannelSel) payload.update_channel=updateChannelSel.value;
   const ignoreAgentUpdatesCb=$('settingsIgnoreAgentUpdates');
   if(ignoreAgentUpdatesCb) payload.ignore_agent_updates=ignoreAgentUpdatesCb.checked;
   const whatsNewSummaryCb=$('settingsWhatsNewSummary');
@@ -8735,9 +8737,21 @@ async function loadSettingsPanel(){
     checkWebUIVersionSkew(settings);
     // Populate the version badges from the server — keeps them in sync with git
     // tags automatically without any manual release step.
+    //
+    // The DISPLAY badge uses update_channel_version (a channel-scoped
+    // `git describe --match`), which is SEPARATE from settings.webui_version.
+    // webui_version is load-bearing for asset cache-busting / SW cache / stale-
+    // client skew detection and must stay channel-neutral — never render it as
+    // the channel badge. See api/updates.channel_version_badge().
     const webuiBadge = $('settings-webui-version-badge');
     if(webuiBadge){
-      webuiBadge.textContent = `WebUI: ${settings.webui_version || 'not detected'}`;
+      const chanVer = settings.update_channel_version || settings.webui_version || 'not detected';
+      const chan = settings.update_channel==='experimental' ? 'experimental' : 'stable';
+      // Only annotate the channel when on experimental — stable is the implicit
+      // default and needs no extra chrome.
+      webuiBadge.textContent = chan==='experimental'
+        ? `WebUI: ${chanVer} · Experimental`
+        : `WebUI: ${chanVer}`;
     }
     const agentBadge = $('settings-agent-version-badge');
     if(agentBadge){
@@ -9128,6 +9142,23 @@ async function loadSettingsPanel(){
     if(syncCb){syncCb.checked=!!settings.sync_to_insights;syncCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const updateCb=$('settingsCheckUpdates');
     if(updateCb){updateCb.checked=settings.check_for_updates!==false;updateCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
+    const updateChannelSel=$('settingsUpdateChannel');
+    if(updateChannelSel){
+      updateChannelSel.value=settings.update_channel==='experimental'?'experimental':'stable';
+      updateChannelSel.addEventListener('change',function(){
+        // Persist the channel, then invalidate the cached update check and
+        // re-check so the banner reflects the newly-selected channel. Changing
+        // the channel changes WHAT is offered, never WHAT is installed — the
+        // update banner still gates the actual apply behind "Update Now".
+        _schedulePreferencesAutosave();
+        if(typeof checkUpdatesNow==='function'){
+          // Small delay so the autosave PUT lands before the forced re-check
+          // reads the new channel server-side.
+          setTimeout(function(){try{checkUpdatesNow();}catch(e){}},400);
+        }
+        if(typeof _syncUpdateChannelBadge==='function') _syncUpdateChannelBadge(updateChannelSel.value);
+      },{once:false});
+    }
     const ignoreAgentUpdatesCb=$('settingsIgnoreAgentUpdates');
     if(ignoreAgentUpdatesCb){ignoreAgentUpdatesCb.checked=!!settings.ignore_agent_updates;ignoreAgentUpdatesCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const whatsNewSummaryCb=$('settingsWhatsNewSummary');
@@ -11703,6 +11734,20 @@ function _applySavedSettingsUi(saved, body, opts){
   if(typeof renderSessionList==='function') renderSessionList();
 }
 
+// Instant client-side badge feedback when the update channel is toggled, before
+// the server round-trip that authoritatively re-renders the badge from
+// update_channel_version. Keeps the "· Experimental" suffix in sync immediately.
+function _syncUpdateChannelBadge(channel){
+  try{
+    const badge=$('settings-webui-version-badge');
+    if(!badge) return;
+    let base=badge.textContent||'';
+    // Strip any existing " · Experimental" suffix, then re-append if needed.
+    base=base.replace(/\s·\sExperimental\s*$/,'');
+    badge.textContent = channel==='experimental' ? (base+' · Experimental') : base;
+  }catch(e){}
+}
+
 async function checkUpdatesNow(){
   const btn=$('btnCheckUpdatesNow');
   const label=$('checkUpdatesLabel');
@@ -12268,6 +12313,7 @@ async function saveSettings(andClose){
   body.pinned_sessions_limit=pinnedSessionsLimit;
   body.sync_to_insights=!!($('settingsSyncInsights')||{}).checked;
   body.check_for_updates=!!($('settingsCheckUpdates')||{}).checked;
+  body.update_channel=($('settingsUpdateChannel')||{}).value==='experimental'?'experimental':'stable';
   body.ignore_agent_updates=!!($('settingsIgnoreAgentUpdates')||{}).checked;
   body.whats_new_summary_enabled=!!($('settingsWhatsNewSummary')||{}).checked;
   body.sound_enabled=!!($('settingsSoundEnabled')||{}).checked;

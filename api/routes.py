@@ -11628,6 +11628,16 @@ def handle_get(handler, parsed) -> bool:
             settings["agent_version"] = AGENT_VERSION
         except Exception:
             pass
+        # Channel-scoped display badge — SEPARATE from webui_version (which is
+        # load-bearing for asset cache-busting / SW cache / skew detection and
+        # must stay channel-neutral). update_channel_version is display-only.
+        try:
+            from api.updates import channel_version_badge, _read_update_channel
+            channel = _read_update_channel()
+            settings["update_channel"] = channel
+            settings["update_channel_version"] = channel_version_badge(channel)
+        except Exception:
+            pass
         return j(handler, settings)
 
     if parsed.path == "/api/transcribe/capability":
@@ -13072,9 +13082,10 @@ def handle_post(handler, parsed) -> bool:
             return j(handler, {"disabled": True})
         include_agent_updates = not bool(settings.get("ignore_agent_updates"))
         force = bool(body.get("force", False))
+        channel = settings.get("update_channel")
         from api.updates import check_for_updates
 
-        return j(handler, check_for_updates(force=force, include_agent=include_agent_updates))
+        return j(handler, check_for_updates(force=force, include_agent=include_agent_updates, channel=channel))
 
     if parsed.path == "/api/extensions/toggle":
         from api.extensions import ExtensionToggleError, set_extension_user_enabled

@@ -136,6 +136,18 @@ class _StaleCredentialPoolEmptyAgent(_MockAgent):
         raise RuntimeError("All 0 credential(s) exhausted for test-provider")
 
 
+class _SuccessfulAgent(_MockAgent):
+    def run_conversation(self, **kwargs):
+        history = list(kwargs.get("conversation_history") or [])
+        return {
+            "messages": history
+            + [
+                {"role": "user", "content": kwargs.get("persist_user_message", "")},
+                {"role": "assistant", "content": "Stream reply"},
+            ]
+        }
+
+
 class _FakeCredentialPoolEntry:
     def __init__(self, payload):
         self._payload = dict(payload)
@@ -1588,6 +1600,78 @@ def test_gateway_late_cancel_preserves_existing_pause_for_webui_recovery(tmp_pat
         "try recovery",
         "Gateway recovery reply",
     ]
+    queued_events = [item[0] for item in list(stream_queue.queue)]
+    assert "cancel" in queued_events
+    assert "done" not in queued_events
+
+
+def test_streaming_late_cancel_after_pause_clear_save_persists_restored_pause(tmp_path, monkeypatch):
+    stream_id = "streaming-pause-clear-save-cancel"
+    session_id = "streaming_pause_clear_save_cancel"
+    stream_queue = queue.Queue()
+    config.STREAMS[stream_id] = stream_queue
+
+    previous_pause = {
+        "paused": True,
+        "model": "test-model",
+        "provider": "test-provider",
+        "classification": "credential_pool_empty",
+        "first_paused_at": 1.0,
+        "last_visible_error_at": 1.0,
+        "visible_error_count": 1,
+        "suppressed_count": 3,
+        "credential_state_fingerprint": "fingerprint-before",
+    }
+    previous_messages = [{"role": "user", "content": "before", "timestamp": 1.0}]
+    session = Session(
+        session_id=session_id,
+        workspace=str(tmp_path),
+        model="test-model",
+        model_provider="test-provider",
+        messages=list(previous_messages),
+        context_messages=list(previous_messages),
+        active_stream_id=stream_id,
+        pending_user_message="wake up",
+        pending_user_source="process_wakeup",
+        process_wakeup_pause=dict(previous_pause),
+    )
+    session.save()
+    models.SESSIONS[session_id] = session
+
+    original_save = Session.save
+    save_calls = {"cleared_pause": 0, "restored_pause": 0}
+
+    def _save_and_cancel_after_pause_clear(self, *args, **kwargs):
+        result = original_save(self, *args, **kwargs)
+        if getattr(self, "session_id", None) != session_id:
+            return result
+        pause = dict(getattr(self, "process_wakeup_pause", {}) or {})
+        if not pause and save_calls["cleared_pause"] == 0:
+            save_calls["cleared_pause"] += 1
+            config.CANCEL_FLAGS[stream_id].set()
+        elif pause == previous_pause and config.CANCEL_FLAGS[stream_id].is_set():
+            save_calls["restored_pause"] += 1
+        return result
+
+    monkeypatch.setattr(Session, "save", _save_and_cancel_after_pause_clear)
+
+    with mock.patch.object(streaming, "_get_ai_agent", return_value=_SuccessfulAgent), \
+         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+         mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
+        streaming._run_agent_streaming(
+            session_id=session.session_id,
+            msg_text=session.pending_user_message,
+            model="test-model",
+            model_provider="test-provider",
+            workspace=str(tmp_path),
+            stream_id=stream_id,
+        )
+
+    assert save_calls["cleared_pause"] == 1
+    assert save_calls["restored_pause"] >= 1
+    saved = Session.load(session_id)
+    assert saved is not None
+    assert saved.process_wakeup_pause == previous_pause
     queued_events = [item[0] for item in list(stream_queue.queue)]
     assert "cancel" in queued_events
     assert "done" not in queued_events

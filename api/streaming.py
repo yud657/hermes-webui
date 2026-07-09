@@ -9516,6 +9516,10 @@ def _run_agent_streaming(
             if clear_process_wakeup_pause(s, reason='run_completed'):
                 if cancel_event.is_set():
                     s.process_wakeup_pause = dict(_process_wakeup_pause_before_clear)
+                    try:
+                        s.save(touch_updated_at=False)
+                    except Exception:
+                        logger.debug("Failed to persist restored process wakeup pause", exc_info=True)
                     _finalize_cancelled_turn(s, ephemeral=False)
                     try:
                         append_turn_journal_event_for_stream(

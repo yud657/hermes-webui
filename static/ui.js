@@ -526,6 +526,7 @@ const MESSAGE_VIRTUAL_THRESHOLD_ROWS=80;
 const MESSAGE_VIRTUAL_BUFFER_PX=900;
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHTS={
   user:120,
+  process_wakeup:96,
   assistant:160,
   tool_call:400,
   default:140,
@@ -598,6 +599,7 @@ function _clearMessageVirtualHeightCache(){
   clearTimeout(_messageVirtualScrollSettleTimer);
   _messageVirtualScrollSettleTimer=0;
   _messageVirtualDeferredMeasurement=null;
+  if(typeof _clearUserRowIntrinsicHeightCache==='function') _clearUserRowIntrinsicHeightCache();
 }
 function _resetMessageRenderWindow(sid){
   _messageRenderWindowSid=sid||null;
@@ -615,7 +617,7 @@ function _cancelMessageVirtualizedRender(){
 }
 function _messageIsRenderable(m){
   if(!m||!m.role||m.role==='tool') return false;
-  if(m._source === 'process_wakeup') return false;
+  if(m._source === 'process_wakeup') return !!(msgContent(m)||m.attachments?.length);
   if(_isContextCompactionMessage(m)||_isPreservedCompressionTaskListMessage(m)) return false;
   if(_isRecoveryControlMessage(m)) return false;
   const hasTc=Array.isArray(m.tool_calls)&&m.tool_calls.length>0;
@@ -810,6 +812,7 @@ function _syncMessageVirtualHeightCache(visWithIdx){
 function _messageVirtualRoleForEntry(entry){
   const m=entry&&entry.m;
   if(!m) return 'default';
+  if(m._source === 'process_wakeup') return 'process_wakeup';
   if(m.role==='user') return 'user';
   if(m.role==='assistant'){
     if((Array.isArray(m.tool_calls)&&m.tool_calls.length>0)||
@@ -953,6 +956,11 @@ function _captureMessageViewportAnchor(){
         key:row&&row.dataset?String(row.dataset.messageAnchorKey||''):'',
         topOffset:rect.top-containerRect.top,
         topPadBefore,
+        // Snapshot the scroll height at capture so a later realign can detect that
+        // content grew between capture and restore — the streaming case where the
+        // anchor's topOffset is stale and realigning to it would yank a still reader
+        // backward (issue #5637).
+        scrollHeightAtCapture:container.scrollHeight,
       };
     }
   }
@@ -977,6 +985,67 @@ function _captureMessageViewportAnchor(){
 function _browserOverflowAnchorActive(el){
   if(!el) return false;
   try{ return getComputedStyle(el).overflowAnchor==='auto'; }catch(_){ return false; }
+}
+// iOS/iPadOS WebKit detection for the issue #5637 stale-anchor hold gate. CSS
+// overflow-anchor is INERT on iOS WebKit (see static/style.css — the mobile
+// content-visibility block deliberately does NOT set overflow-anchor:none because
+// it is a no-op on iOS and, on Android, re-opens the #4856/#5338 jump-to-top
+// regression). So `overflow-anchor:auto` computes on `.messages` on iOS but the
+// engine never actually holds the viewport there. The stale-anchor refusal relies
+// on that engine to hold the reader, so it is only safe on Android (working
+// overflow-anchor), NOT iOS — refusing on iOS leaves a scrolled-up reader unheld,
+// the same class as the desktop regression, one platform over.
+// Detection covers classic iPhone/iPod/iPad UAs AND iPadOS 13+, which reports a
+// desktop 'MacIntel' platform but is distinguishable by touch support (a real Mac
+// has maxTouchPoints 0). Excludes MSStream (old IE on Windows Phone false-matched
+// 'like iPhone').
+function _isIOSWebKit(){
+  try{
+    const nav=(typeof navigator!=='undefined')?navigator:null;
+    if(!nav) return false;
+    if(nav.MSStream) return false;
+    const ua=String(nav.userAgent||'');
+    if(/iP(ad|hone|od)/.test(ua)) return true;
+    // iPadOS 13+ masquerades as macOS; a Mac has no touch, an iPad does.
+    if(nav.platform==='MacIntel' && Number(nav.maxTouchPoints)>1) return true;
+  }catch(_){}
+  return false;
+}
+// Stable "native overflow-anchor holds this viewport" predicate for the issue
+// #5637 stale-anchor hold gate. The two stale-anchor refusals below assume the
+// browser's native overflow-anchor layer will hold the viewport once the JS
+// restore is refused. That is only true where the engine ACTUALLY compensates:
+//   - desktop (hover+fine-pointer): CSS keeps `.messages` at overflow-anchor:none
+//     -> engine off -> refusing leaves nothing to hold the reader. Excluded via
+//     matchMedia('(pointer:coarse)') being false.
+//   - iOS WebKit: overflow-anchor is INERT (see _isIOSWebKit) even though it
+//     computes to `auto` -> engine never holds -> refusing strands a scrolled-up
+//     reader. Excluded via _isIOSWebKit().
+//   - Android touch: overflow-anchor:auto AND the engine works -> refusing is safe,
+//     native anchoring holds. This is the ONLY platform the refusal targets.
+// We must NOT decide this with `_browserOverflowAnchorActive(#messages)` alone,
+// because `_restoreMessageViewportAnchor` temporarily writes an inline
+// `overflowAnchor:'none'` on #messages for its own scroll write and only restores
+// it on the next frame; when the realign fires every live tick that inline 'none'
+// persists across ticks, so a computed-value probe would read 'none' mid-realign
+// and wrongly classify a touch device as "desktop", letting the stale realign
+// through. A matchMedia('(pointer:coarse)') test reflects the input device and
+// cannot be mutated by that inline override, so it stays steady mid-realign;
+// desktop (fine pointer) stays false. Fall back to the computed-anchor probe when
+// matchMedia is unavailable.
+function _isTouchLikeMessageViewport(el){
+  // iOS WebKit is touch (pointer:coarse) but overflow-anchor is inert there, so the
+  // refusal's premise fails — treat it like desktop (keep the semantic realign).
+  if(_isIOSWebKit()) return false;
+  try{
+    if(typeof matchMedia==='function' && matchMedia('(pointer:coarse)').matches) return true;
+  }catch(_){}
+  // Best-effort fallback for the (today essentially non-existent) no-matchMedia
+  // environment: the computed-anchor probe can transiently read 'none' during a
+  // realign burst (see comment above), so on such a touch device this could
+  // re-admit the original yank. matchMedia('(pointer:coarse)') is universally
+  // supported in every browser this UI targets, so the primary path is what runs.
+  return _browserOverflowAnchorActive(el);
 }
 function _suppressBrowserOverflowAnchor(container){
   if(!container||!container.style) return null;
@@ -1029,6 +1098,37 @@ function _restoreMessageViewportAnchor(anchor, rawIdxDelta){
   const containerRect=container.getBoundingClientRect();
   const rect=row.getBoundingClientRect();
   const targetTop=Number(anchor.topOffset)||0;
+  // Streaming stale-anchor guard (issue #5637). During a live stream, content grows
+  // ABOVE the viewport between anchor capture and this restore, so the anchor's
+  // captured topOffset is stale and the realign delta becomes a spurious few-hundred-px
+  // value that yanks a still reader backward. Detect it by content growth + absence of
+  // real input intent — NOT by a scrollTop diff, because on an overflow-anchor:auto
+  // container the browser itself moves scrollTop to compensate the growth (so a still
+  // reader's scrollTop is not stationary). _recentMessage*ScrollIntent reflects genuine
+  // touch/wheel/key input, which the browser's anchor layer never writes. If content
+  // grew since capture AND there is no recent input intent AND the realign would move
+  // scrollTop non-trivially, refuse it and let the browser overflow-anchor hold. An
+  // actively scrolling reader (recent intent) keeps the legitimate realign; legacy
+  // snapshots without the captured geometry keep prior behavior.
+  //
+  // Desktop guard (issue #5637 gate cert): the refusal is only safe where the
+  // browser's native overflow-anchor layer can actually hold the viewport, i.e.
+  // touch viewports where `.messages` computes to `overflow-anchor:auto`. On
+  // hover+fine-pointer desktops `.messages` is `overflow-anchor:none`, so refusing
+  // the realign would leave NOTHING to hold the reader after above-viewport growth
+  // — the very yank this fixes on mobile, reintroduced on desktop. Gate the refusal
+  // on `_isTouchLikeMessageViewport` so desktop keeps its semantic scrollTop realign.
+  const _realignDelta=(rect.top-containerRect.top)-targetTop;
+  const _shAtCap=Number(anchor.scrollHeightAtCapture);
+  if(Number.isFinite(_shAtCap)){
+    const _grewSinceCapture=(container.scrollHeight-_shAtCap)>4;
+    const _activeIntent=(typeof _recentMessageScrollIntent==='function' && _recentMessageScrollIntent())
+      || (typeof _recentMessageTouchScrollIntent==='function' && _recentMessageTouchScrollIntent());
+    const _touchHold=(typeof _isTouchLikeMessageViewport==='function' && _isTouchLikeMessageViewport(container));
+    if(_touchHold&&_grewSinceCapture&&!_activeIntent&&Math.abs(_realignDelta)>8){
+      return false;
+    }
+  }
   _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
   // Mobile-only jump fix: the resting overflow-anchor on .messages is `auto` on
   // touch devices (CSS media query keeps it `none` only for hover+fine-pointer
@@ -1161,6 +1261,76 @@ function _messageViewportIntersectsRenderedRow(){
   }
   return false;
 }
+// #5637/#5638 follow-up — kill the content-visibility scrollHeight collapse at its
+// source. A virtualization wipe-and-rebuild recreates user rows as FRESH elements, which
+// discards content-visibility:auto's last-remembered size, so an off-screen user row
+// falls back to the flat `contain-intrinsic-size: auto 96px` estimate in the stylesheet.
+// A tall user row (e.g. a long paste) then collapses scrollHeight by (realHeight-96px)
+// the instant it's rebuilt off-screen, and the browser either force-clamps scrollTop
+// (dTop≈dH layer-1 jump) or re-anchors to a far row (dTop≫dH browser re-anchor jump) —
+// both mobile jump-back classes trace to this one collapse. Remember each user row's
+// height keyed by its STABLE session-relative index so a rebuild reserves the real
+// height, not 96px. Measured height (exact) wins; before a row is ever measured, a
+// content-length estimate reserves the bulk so the fresh-element frame doesn't collapse
+// either. Refreshed every measure pass, so edits self-heal. Desktop rests at
+// content-visibility:visible (intrinsic-size ignored) → inert there, zero behavior change.
+const _userRowIntrinsicHeightBySessionIdx=Object.create(null);
+// Cleared on session switch alongside _messageVirtualHeightCache (both are
+// per-session measured-height caches keyed by session-relative index). Without this,
+// keys collide across sessions — _messageSessionIndexForRawIdx = _messageSessionIndexBase()
+// + rawIdx and the base is 0 for the common non-offset session — so a new session's
+// off-screen user rows would inherit the previous session's remembered heights and
+// inflate scrollHeight until each is re-measured. Delete keys in place to keep the
+// const binding stable for any closure that captured it.
+function _clearUserRowIntrinsicHeightCache(){
+  for(const k in _userRowIntrinsicHeightBySessionIdx) delete _userRowIntrinsicHeightBySessionIdx[k];
+}
+function _rememberUserRowIntrinsicHeight(sessionMsgIdx, height){
+  const key=Number(sessionMsgIdx);
+  if(!Number.isFinite(key)||!(height>0)) return;
+  _userRowIntrinsicHeightBySessionIdx[key]=Math.round(height);
+}
+function _estimateUserRowIntrinsicHeight(rawText){
+  const t=String(rawText||'');
+  if(!t) return 96;
+  // ~48 half-width chars/line at the mobile user-bubble width (≈90% of a phone viewport),
+  // ~22px per line + ~24px row chrome; floored at the stylesheet's 96px so a short row never
+  // reserves LESS than today (estimate can only add reserved height for tall rows, never
+  // regress). CJK / full-width characters occupy ~2 columns each, so a Chinese/Japanese/
+  // Korean paste wraps at ~24 chars/line — counting them as 1 badly UNDER-estimates the
+  // height (a 3k-char CJK paste is ~2x taller than the naive length/48 guess). Weight wide
+  // characters as 2 columns so the fresh-row reserve is close to reality even for a row the
+  // reader has never scrolled into view (content-visibility:auto reports only the reserve
+  // for a never-painted row, so a good estimate is the only backstop there). Uses a Unicode
+  // range test (no \p{} — keep the RegExp engine-portable across the supported browsers).
+  const explicitLines=(t.match(/\n/g)||[]).length+1;
+  let columns=0;
+  for(let i=0;i<t.length;i++){
+    const c=t.charCodeAt(i);
+    // CJK Unified + Ext-A, Hiragana/Katakana, Hangul, CJK symbols/punctuation, full-width forms.
+    const wide=(c>=0x1100&&c<=0x115F)||(c>=0x2E80&&c<=0xA4CF)||(c>=0xAC00&&c<=0xD7A3)||
+               (c>=0xF900&&c<=0xFAFF)||(c>=0xFE30&&c<=0xFE4F)||(c>=0xFF00&&c<=0xFF60)||(c>=0xFFE0&&c<=0xFFE6);
+    columns+=wide?2:1;
+  }
+  const wrapLines=Math.ceil(columns/48);
+  const lines=Math.max(explicitLines, wrapLines);
+  return Math.max(96, Math.round(lines*22+24));
+}
+function _applyUserRowIntrinsicHeight(row, rawText){
+  if(!row||!row.style||!row.dataset) return;
+  const key=Number(row.dataset.sessionMsgIdx);
+  const remembered=Number.isFinite(key)?Number(_userRowIntrinsicHeightBySessionIdx[key])||0:0;
+  const estimate=_estimateUserRowIntrinsicHeight(rawText!=null?rawText:row.dataset.rawText);
+  // Reserve the LARGER of the remembered measurement and the content estimate. A remembered
+  // height can be a PARTIAL paint: a user row taller than the viewport that only ever had its
+  // top slice scrolled through content-visibility:auto reports just the painted portion, not
+  // its full height — persisting that would under-reserve and let scrollHeight collapse on the
+  // next rebuild (the jump-back). Taking the max means a good estimate floors the reserve even
+  // when the measurement under-read, while a full measurement (row shorter than the viewport,
+  // fully painted) still wins when it exceeds the estimate.
+  const h=Math.max(remembered, estimate);
+  if(h>0) row.style.containIntrinsicSize='auto '+Math.round(h)+'px';
+}
 function _measureMessageVirtualRow(inner, entry){
   if(!inner||!entry) return 0;
   const primary=inner.querySelector(`[data-msg-idx="${entry.rawIdx}"]`);
@@ -1174,6 +1344,16 @@ function _measureMessageVirtualRow(inner, entry){
       totalHeight+=Math.max(0, sibling.getBoundingClientRect().height||0);
       sibling=sibling.nextElementSibling;
     }
+  }
+  // Persist the measured height so a later wipe-and-rebuild of this user row reserves its
+  // real off-screen height instead of collapsing to the 96px estimate (the collapse that
+  // clamps/re-anchors the viewport — #5637/#5638 mobile jump-back, both classes). The
+  // typeof guard keeps _measureMessageVirtualRow runnable in the node test harnesses that
+  // extract it without this helper (they stub every collaborator by name).
+  if(totalHeight>0 && primary.dataset && primary.dataset.role==='user'
+     && typeof _rememberUserRowIntrinsicHeight==='function'){
+    _rememberUserRowIntrinsicHeight(primary.dataset.sessionMsgIdx, totalHeight);
+    primary.style.containIntrinsicSize='auto '+Math.round(totalHeight)+'px';
   }
   return totalHeight;
 }
@@ -1204,6 +1384,70 @@ function _updateMessageVirtualMeasurements(renderVisWithIdx, renderVisibleIdxs, 
     _scheduleMessageVirtualMeasurementRefresh(virtualWindow);
   }else{
     _markMessageVirtualMeasurementsSettled(virtualWindow);
+  }
+}
+// #5638 follow-up — the non-virtualized transcript path (the #4325 opt-out, where
+// _virtualizeTranscript===false renders every row with no windowing) never runs the
+// virtualized measure pass above, so a user row's real height is never remembered.
+// content-visibility:auto on user rows then collapses a freshly-rebuilt off-screen tall
+// user row to its flat contain-intrinsic-size estimate on every renderMessages() rebuild
+// (each streaming frame does inner.innerHTML='' then rebuilds all rows as FRESH elements
+// that have never painted at full size). scrollHeight shrinks by (realHeight-estimate),
+// the browser force-clamps scrollTop, and the viewport jumps backward — the desktop/mobile
+// jump-back, with JS=none because the clamp is the browser's own.
+//
+// The reliable moment to read a user row's REAL height is JUST BEFORE the wipe: the old
+// rows are still in the DOM, laid out at full height (content-visibility:auto reports the
+// true rect height once an element has painted, at any scroll position — verified: a tall
+// off-screen user row still measures its real height pre-wipe). A POST-render read is
+// unreliable because a freshly-rebuilt off-screen row reports its collapsed reserve, not
+// its real size, so it would persist the wrong (small) value. Capture pre-wipe, keyed by
+// the stable session-relative index, so the rebuild's _applyUserRowIntrinsicHeight reserves
+// the real off-screen height and scrollHeight stays stable across the rebuild.
+// Desktop rests at content-visibility:visible (intrinsic-size ignored) → inert there.
+function _rememberRenderedUserRowIntrinsicHeights(){
+  const container=$('messages');
+  const inner=$('msgInner');
+  if(!container||!inner) return;
+  const rows=inner.querySelectorAll('.msg-row[data-role="user"][data-msg-idx]');
+  if(!rows.length) return;
+  const cRect=container.getBoundingClientRect();
+  // Only trust a row that is currently WITHIN (or straddling) the viewport: such a row has
+  // been painted at full size, so getBoundingClientRect().height is its REAL height. A row
+  // that content-visibility:auto is skipping (fully off-screen and never painted this
+  // session) reports only its contain-intrinsic-size reserve — persisting THAT would poison
+  // the remembered height with the collapsed value and defeat the estimate backstop for a
+  // never-seen row. The viewport intersection test is the reliable "has this row painted?"
+  // signal (an off-screen row that WAS painted earlier keeps its real height too, but we
+  // don't need it here — it either was captured on a prior in-view pass or the estimate
+  // covers it). Small margin so a row just above/below the fold still counts as painted.
+  const margin=Math.max(0, cRect.height||0);
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||!row.dataset||!row.style) continue;
+    const r=row.getBoundingClientRect();
+    const measured=Math.max(0, r.height||0);
+    if(!(measured>0)) continue;
+    // In-viewport (with a one-screen margin) ⇒ painted ⇒ height is trustworthy — but only
+    // for a row that FITS the viewport. A row taller than the viewport only ever paints the
+    // intersecting slice under content-visibility:auto, so its measured height is a PARTIAL
+    // value, not the full row. Floor every persisted height at the content estimate so a
+    // partial paint can never lower the reserve below a reasonable full-row guess; a full
+    // paint (short row) still wins when it exceeds the estimate.
+    const inView=(r.bottom>=cRect.top-margin)&&(r.top<=cRect.bottom+margin);
+    if(!inView) continue;
+    const estimate=(typeof _estimateUserRowIntrinsicHeight==='function')
+      ? _estimateUserRowIntrinsicHeight(row.dataset.rawText) : 0;
+    const h=Math.max(measured, estimate);
+    if(!(h>0)) continue;
+    const key=Number(row.dataset.sessionMsgIdx);
+    const remembered=Number.isFinite(key)?Number(_userRowIntrinsicHeightBySessionIdx[key])||0:0;
+    // Keep the tallest reserve seen — a row mid-collapse (rebuild transient) can report a
+    // shrunken size; never let that overwrite a good taller remembered value.
+    if(h>=remembered && typeof _rememberUserRowIntrinsicHeight==='function'){
+      _rememberUserRowIntrinsicHeight(row.dataset.sessionMsgIdx, h);
+      row.style.containIntrinsicSize='auto '+Math.round(h)+'px';
+    }
   }
 }
 function _scheduleMessageVirtualizedRender(force){
@@ -1551,6 +1795,14 @@ function _applyDashboardStatus(status){
 }
 async function refreshDashboardStatus(force=false){
   const now=Date.now();
+  // Skip the interval-driven poll while the tab is hidden: the 60s interval
+  // equals the cache TTL, so every background tick was a real /api/dashboard/status
+  // fetch that never hit the cache — a needless wakeup on a tab nobody is
+  // looking at (battery/CPU, #2476). Forced calls (settings save, init, the
+  // visibilitychange catch-up) still run. A visible tab keeps its live status.
+  if(!force&&typeof document!=='undefined'&&document.hidden){
+    return _dashboardStatusCache;
+  }
   if(!force&&_dashboardStatusCache&&(now-_dashboardStatusFetchedAt)<DASHBOARD_STATUS_TTL_MS){
     _applyDashboardStatus(_dashboardStatusCache);
     return _dashboardStatusCache;
@@ -1616,6 +1868,13 @@ function _initDashboardLinkProbe(){
   loadDashboardSettings();
   refreshDashboardStatus(true);
   setInterval(refreshDashboardStatus,DASHBOARD_STATUS_TTL_MS);
+  // Catch up once when the tab becomes visible again, since the interval poll
+  // was skipped while hidden and its cache is now stale.
+  if(typeof document!=='undefined'&&typeof document.addEventListener==='function'){
+    document.addEventListener('visibilitychange',()=>{
+      if(!document.hidden) refreshDashboardStatus(true);
+    });
+  }
 }
 if(document.readyState==='complete'){
   _initDashboardLinkProbe();
@@ -2415,7 +2674,24 @@ function _modelStateForSelect(sel, modelId){
   if(!value) return {model:'',model_provider:null};
   const explicitProvider=_providerFromModelValue(value);
   if(explicitProvider) return {model:value,model_provider:explicitProvider};
-  const opt=sel&&sel.selectedOptions&&sel.selectedOptions[0];
+  // Resolve the provider from the option whose VALUE matches the requested
+  // model — never blindly from sel.selectedOptions[0] (#5567). During a profile
+  // /tab switch or a model-list rebuild the dropdown transiently still has the
+  // PREVIOUS profile's default option selected (e.g. an ollama model), so reading
+  // selectedOptions[0] would stamp that foreign provider onto a model it doesn't
+  // own — which is then persisted into the session's model_provider and re-sent
+  // on every turn, bricking it with a "Provider 'X'…no API key" error for a
+  // provider the session never used.
+  let opt=null;
+  const selected=sel&&sel.selectedOptions&&sel.selectedOptions[0];
+  // Prefer the currently-selected option ONLY when it actually is the requested
+  // model — this preserves the user's exact pick in the same-value/different-
+  // provider collision case (two providers offering the same model id).
+  if(selected&&String(selected.value||'')===value){
+    opt=selected;
+  }else if(sel&&sel.options){
+    opt=Array.from(sel.options).find(o=>String(o.value||'')===value)||null;
+  }
   const provider=String(_getOptionProviderId(opt)||'').trim();
   return {model:value,model_provider:(provider&&provider!=='default')?provider:null};
 }
@@ -2571,6 +2847,65 @@ function _clearPendingSessionModel(sessionId){
   const sid=String(sessionId||'').trim();
   if(!sid) return;
   try{sessionStorage.removeItem(_pendingSessionModelKey(sid));}catch(_){}
+}
+// #5924: the recovery-send deliberate-pick signal. Returns {model, model_provider}
+// ONLY when the active session's own model is a genuine non-default pick vs the
+// profile default — the same signal send()'s persistent-pick path (_isCrossProviderPick)
+// uses, generalized to same-provider non-default picks too. Used by the recovery
+// paths (cmdRetry / submitEdit) to decide whether to re-arm the single-shot
+// explicit-pick marker: the marker is consumed by the failed send before we reach
+// recovery, so we can't read it back, and comparing _chatPayloadModel() to itself
+// either false-negatives (an already-applied pick looks unchanged) or false-positives
+// (provider inference manufactures a "change"). A non-default session model is the
+// durable, inference-free evidence of a real pick. Returns null (no re-arm → the
+// server's compatible-model resolution runs) when the session is on the default.
+function _deliberateSessionModelPick(sessionId){
+  if(!S.session||S.session.session_id!==sessionId) return null;
+  const model=String(S.session.model||'').trim();
+  if(!model) return null;
+  // Require SESSION-OWNED provider evidence — a stored model_provider on the
+  // session itself. Do NOT infer a provider from the model string: an
+  // unreachable/renamed model like "@removed:mistral-large" with no stored
+  // provider must NOT count as a deliberate pick (round-2/3 false-positive).
+  const provider=S.session.model_provider?String(S.session.model_provider).trim():'';
+  if(!provider) return null;
+  // Require a KNOWN profile default to compare against. If we don't know the
+  // default (empty window._defaultModel), we can't prove this is a non-default
+  // pick, so fail closed → no re-arm (server compatible-model resolution runs).
+  const defaultModel=(typeof window!=='undefined'&&window._defaultModel)?String(window._defaultModel):'';
+  const activeProvider=(typeof window!=='undefined'&&window._activeProvider)?String(window._activeProvider):'';
+  if(!defaultModel||!activeProvider) return null;
+  // Non-default = a different model OR a different provider than the profile
+  // default. A session sitting exactly on the profile default is NOT a pick.
+  const isDefault=(model===defaultModel)&&(provider===activeProvider);
+  if(isDefault) return null;
+  return {model, model_provider:provider};
+}
+// #5924: re-arm the single-shot explicit-pick marker from a recovery pick, but
+// ONLY if it's still safe at fire time. Guards the SILENT same-session race where
+// the user changes the model DURING the recovery's awaits: (1) the session must
+// still be the captured one; (2) the session's CURRENT model/provider must still
+// equal the captured pick (a mid-flight change means the pick is stale — skip);
+// (3) never clobber a NEWER pending marker (an onchange during the await already
+// wrote the authoritative one). Returns true if it re-armed.
+function _reArmRecoveryPick(sessionId, pick){
+  if(!pick||!pick.model) return false;
+  if(!S.session||S.session.session_id!==sessionId) return false;
+  // Current session state must still match the captured pick (no mid-flight change).
+  if(String(S.session.model||'')!==String(pick.model||'')
+     ||String(S.session.model_provider||'')!==String(pick.model_provider||'')) return false;
+  // Do not overwrite a newer marker written by an onchange during the await.
+  if(typeof _readPendingSessionModel==='function'){
+    const existing=_readPendingSessionModel(sessionId);
+    if(existing&&existing.model
+       &&(String(existing.model)!==String(pick.model)
+          ||String(existing.model_provider||'')!==String(pick.model_provider||''))) return false;
+  }
+  if(typeof _rememberPendingSessionModel==='function'){
+    _rememberPendingSessionModel(sessionId, pick.model, pick.model_provider);
+    return true;
+  }
+  return false;
 }
 function _applyPendingSessionModelForSession(sessionId){
   if(!S.session||S.session.session_id!==sessionId) return false;
@@ -2864,6 +3199,11 @@ async function populateModelDropdown(opts={}){
         const opt=document.createElement('option');
         opt.value=m.id;
         opt.textContent=m.label;
+        if(m && (m.supports_fast_tier === true || String(m.supports_fast_tier).toLowerCase()==='true')){
+          opt.dataset.fast='1';
+        }else if(m && (m.supports_fast_tier === false || String(m.supports_fast_tier).toLowerCase()==='false')){
+          opt.dataset.fast='0';
+        }
         og.appendChild(opt);
         _dynamicModelLabels[m.id]=m.label||m.id;
       }
@@ -2962,6 +3302,11 @@ function _addLiveModelsToSelect(provider, models, sel){
     opt.textContent=m.label||m.id;
     opt.title='Live model — fetched from provider';
     opt.dataset.provider=provider;
+    if(m && (m.supports_fast_tier === true || String(m.supports_fast_tier).toLowerCase()==='true')){
+      opt.dataset.fast='1';
+    }else if(m && (m.supports_fast_tier === false || String(m.supports_fast_tier).toLowerCase()==='false')){
+      opt.dataset.fast='0';
+    }
     providerGroup.appendChild(opt);
     _dynamicModelLabels[mid]=m.label||m.id;
     added++;
@@ -3485,6 +3830,15 @@ function renderModelDropdown(){
     }
     return 500;
   };
+  const _selectedModelState=(typeof _modelStateForSelect==='function')?_modelStateForSelect(sel,sel.value):{model:sel&&sel.value||'',model_provider:null};
+  const _modelProviderForSelectedBadge=(m)=>{
+    const _provider=String((m&&m.providerId)||(m&&m.badge&&m.badge.provider)||((typeof _providerFromModelValue==='function')?_providerFromModelValue(m&&m.value):'')||'').trim();
+    return (_provider&&_provider!=='default')?_provider:null;
+  };
+  const _isSelectedModelRow=(m)=>String((m&&m.value)||'')===String((_selectedModelState&&_selectedModelState.model)||(sel&&sel.value)||'')&&String(_modelProviderForSelectedBadge(m)||'')===String((_selectedModelState&&_selectedModelState.model_provider)||'');
+  const _selectedModelBadge=(m)=>_isSelectedModelRow(m)
+    ?`<span class="model-opt-badge model-opt-badge--selected">${esc(t('model_badge_selected')||'Selected')}</span>`
+    :'';
   const _renderProviderEndpointHint=(entry,parent)=>{
     if(!entry||!entry.label||!entry.modelsEndpointError) return;
     const hint=document.createElement('div');
@@ -3494,13 +3848,13 @@ function renderModelDropdown(){
   };
   // Build a single model-option row (mirrors the main render loop's row markup),
   // used both by the main render and by the in-place overflow reveal below.
-  const _buildModelRow=(m,sel,withProviderChip)=>{
+  const _buildModelRow=(m,withProviderChip)=>{
     const row=document.createElement('div');
-    row.className='model-opt'+(m.value===sel.value?' active':'');
+    row.className='model-opt'+(_isSelectedModelRow(m)?' active':'');
     const badgeHtml=m.badge?`<span class="model-opt-badge model-opt-badge--${esc(m.badge.role||'configured')}">${esc(m.badge.label||'Configured')}</span>`:'';
     const _plainGroup=m.group?String(m.group).replace(/\s*\(\d+\s+of\s+\d+\)\s*$/,''):'';
     const providerChip=(_plainGroup&&withProviderChip)?`<span class="model-opt-provider">${esc(_plainGroup)}</span>`:'';
-    row.innerHTML=`<div class="model-opt-top"><span class="model-opt-name">${esc(m.name)}</span>${badgeHtml}${providerChip}</div><span class="model-opt-id">${esc(m.id)}</span>`;
+    row.innerHTML=`<div class="model-opt-top"><span class="model-opt-name">${esc(m.name)}</span>${badgeHtml}${_selectedModelBadge(m)}${providerChip}</div><span class="model-opt-id">${esc(m.id)}</span>`;
     row.onclick=()=>selectFromDropdown(m.value,m.providerId||(m.badge&&m.badge.provider)||null);
     return row;
   };
@@ -3554,7 +3908,7 @@ function renderModelDropdown(){
       for(const m of extraModels){
         if(!m||!m.id) continue;
         if(_alreadyShown.has(esc(m.id))) continue;
-        const row=_buildModelRow({value:m.id,name:m.label||m.id,id:m.id,group:_plainLabel,groupKey,providerId:(og.dataset&&og.dataset.provider)||''},sel,false);
+        const row=_buildModelRow({value:m.id,name:m.label||m.id,id:m.id,group:_plainLabel,groupKey,providerId:(og.dataset&&og.dataset.provider)||''},false);
         wrap.insertBefore(row,moreEl);
         if(!firstNewRow) firstNewRow=row;
       }
@@ -3609,17 +3963,17 @@ function renderModelDropdown(){
   const _selectedGroupKey=(()=>{
     const _selVal=String((sel&&sel.value)||'');
     if(!_selVal) return null;
-    const _hit=_modelData.find(m=>m&&!m.endpointErrorOnly&&String(m.value||'')===_selVal);
+    const _hit=_modelData.find(m=>m&&!m.endpointErrorOnly&&_isSelectedModelRow(m)) || _modelData.find(m=>m&&!m.endpointErrorOnly&&String(m.value||'')===_selVal);
     return _hit?_hit.groupKey:null;
   })();
-  const _makeModelRow=(m,sel,shouldRenderHeading)=>{
+  const _makeModelRow=(m,shouldRenderHeading)=>{
     const row=document.createElement('div');
-    row.className='model-opt'+(m.value===sel.value?' active':'');
+    row.className='model-opt'+(_isSelectedModelRow(m)?' active':'');
     const badgeHtml=m.badge?`<span class="model-opt-badge model-opt-badge--${esc(m.badge.role||'configured')}">${esc(m.badge.label||'Configured')}</span>`:'';
     const _plainGroup=m.group?String(m.group).replace(/\s*\(\d+\s+of\s+\d+\)\s*$/,''):'';
     const _underOwnHeading=shouldRenderHeading&&!!(m.groupKey&&_groupWrappers[m.groupKey]);
     const providerChip=(_plainGroup&&!_underOwnHeading)?`<span class="model-opt-provider">${esc(_plainGroup)}</span>`:'';
-    row.innerHTML=`<div class="model-opt-top"><span class="model-opt-name">${esc(m.name)}</span>${badgeHtml}${providerChip}</div><span class="model-opt-id">${esc(m.id)}</span>`;
+    row.innerHTML=`<div class="model-opt-top"><span class="model-opt-name">${esc(m.name)}</span>${badgeHtml}${_selectedModelBadge(m)}${providerChip}</div><span class="model-opt-id">${esc(m.id)}</span>`;
     row.onclick=()=>selectFromDropdown(m.value,m.providerId||(m.badge&&m.badge.provider)||null);
     return row;
   };
@@ -3704,7 +4058,7 @@ function renderModelDropdown(){
       }
       for(const m of configuredModels){
         const row=document.createElement('div');
-        row.className='model-opt'+(m.value===sel.value?' active':'');
+        row.className='model-opt'+(_isSelectedModelRow(m)?' active':'');
         let badgeLabel = '';
         let modelName = m.name;
         if (m.badge) {
@@ -3718,7 +4072,7 @@ function renderModelDropdown(){
           }
         }
         const badgeHtml=m.badge?`<span class="model-opt-badge model-opt-badge--${esc(m.badge.role||'configured')}">${esc(badgeLabel)}</span>`:'';
-        row.innerHTML=`<div class="model-opt-top"><span class="model-opt-name">${esc(modelName)}</span>${badgeHtml}</div><span class="model-opt-id">${esc(m.id)}</span>`;
+        row.innerHTML=`<div class="model-opt-top"><span class="model-opt-name">${esc(modelName)}</span>${badgeHtml}${_selectedModelBadge(m)}</div><span class="model-opt-id">${esc(m.id)}</span>`;
         row.onclick=()=>selectFromDropdown(m.value,(m.badge&&m.badge.provider)||m.providerId||null);
         dd.appendChild(row);
       }
@@ -3819,16 +4173,16 @@ function renderModelDropdown(){
               });
               wrapper.appendChild(subHeading);
               wrapper.appendChild(subWrapper);
-              for(const m of pfxRows) subWrapper.appendChild(_makeModelRow(m,sel,shouldRenderHeading));
+              for(const m of pfxRows) subWrapper.appendChild(_makeModelRow(m,shouldRenderHeading));
             } else {
-              for(const m of pfxRows) wrapper.appendChild(_makeModelRow(m,sel,shouldRenderHeading));
+              for(const m of pfxRows) wrapper.appendChild(_makeModelRow(m,shouldRenderHeading));
             }
           }
         } else {
-          for(const m of groupRows) wrapper.appendChild(_makeModelRow(m,sel,shouldRenderHeading));
+          for(const m of groupRows) wrapper.appendChild(_makeModelRow(m,shouldRenderHeading));
         }
       } else {
-        for(const m of groupRows) dd.appendChild(_makeModelRow(m,sel,shouldRenderHeading));
+        for(const m of groupRows) dd.appendChild(_makeModelRow(m,shouldRenderHeading));
       }
       if(!term&&hiddenCount){
         const showAll=document.createElement('div');
@@ -3957,6 +4311,8 @@ async function toggleModelDropdown(){
   renderModelDropdown();
   dd.classList.add('open');
   _positionModelDropdown();
+  const activeRow=dd.querySelector('.model-opt.active');
+  if(activeRow&&typeof activeRow.scrollIntoView==='function') activeRow.scrollIntoView({block:'nearest'});
   chip.classList.add('active');
   const mobileAction=$('composerMobileModelAction');
   if(mobileAction) mobileAction.classList.add('active');
@@ -4171,6 +4527,7 @@ if(document.readyState==='loading'){
 // ── Reasoning effort chip ────────────────────────────────────────────────────
 let _currentReasoningEffort=null;
 let _currentReasoningEffortsSupported=null;
+let _profileTransitionReasoningContext=null;
 
 function _normalizeReasoningEffort(eff){
   return String(eff||'').trim().toLowerCase();
@@ -4184,10 +4541,19 @@ function _formatReasoningEffortLabel(effort){
   if(effort==='medium') return 'Medium';
   if(effort==='high') return 'High';
   if(effort==='xhigh') return 'XHigh';
+  if(effort==='max') return 'Max';
   return effort.charAt(0).toUpperCase()+effort.slice(1);
 }
 
 function _reasoningEffortContext(){
+  const transition=_profileTransitionReasoningContext;
+  const session=S&&S.session;
+  if(transition&&(!session||session.profile!==transition.profile)){
+    const ctx={};
+    if(transition.model) ctx.model=transition.model;
+    if(transition.provider) ctx.provider=transition.provider;
+    return ctx;
+  }
   const sel=$('modelSelect');
   const model=(S&&S.session&&S.session.model)||(sel&&sel.value)||'';
   let provider=(S&&S.session&&S.session.model_provider)||'';
@@ -4277,11 +4643,11 @@ let _lastReasoningFetchKey=null;
 // a different agent.reasoning_effort) — #4650 review.
 let _reasoningFetchSeq=0;
 
-function fetchReasoningChip(){
+function fetchReasoningChip(keyOverride){
   // Set the cache key OPTIMISTICALLY before the request so rapid routine syncs
   // while this GET is in flight short-circuit instead of re-dispatching (that
   // in-flight window is exactly where the #4650 storm lived).
-  const key=_reasoningEffortQuery();
+  const key=keyOverride===undefined?_reasoningEffortQuery():keyOverride;
   const seq=++_reasoningFetchSeq;
   _lastReasoningFetchKey=key;
   api('/api/reasoning'+key).then(function(st){
@@ -4297,6 +4663,23 @@ function fetchReasoningChip(){
     _lastReasoningFetchKey=null;
     _applyReasoningChip('', {supported_efforts:[]});
   });
+}
+
+function refreshProfileTransitionReasoningChip(model, provider){
+  _profileTransitionReasoningContext={profile:(S&&S.activeProfile)||'default',model,provider};
+  _currentReasoningEffort=null;
+  _currentReasoningEffortsSupported=null;
+  _lastReasoningFetchKey=null;
+  ++_reasoningFetchSeq;
+  _applyReasoningChip('', {supported_efforts:[]});
+  const params=new URLSearchParams();
+  if(model) params.set('model',model);
+  if(provider) params.set('provider',provider);
+  fetchReasoningChip(params.size?'?'+params.toString():undefined);
+}
+
+function clearProfileTransitionReasoningContext(){
+  _profileTransitionReasoningContext=null;
 }
 
 function syncReasoningChip(){
@@ -5396,6 +5779,131 @@ function _activityClockLabel(ts){
   if(!Number.isFinite(stamp)||stamp<=0)return'';
   try{return new Date(stamp*1000).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});}catch(_){return'';}
 }
+// Full date+time label for the worklog event-time tooltip (title attr). Guards the
+// same valid-Date range as _timestampSeconds so a bad epoch never yields "Invalid
+// Date" in the tooltip. (#5739)
+function _activityFullClockLabel(ts){
+  const stamp=Number(ts);
+  if(!Number.isFinite(stamp)||stamp<=0||stamp>8.64e12)return'';
+  try{
+    const d=new Date(stamp*1000);
+    if(isNaN(d.getTime()))return'';
+    return d.toLocaleString([], {year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  }catch(_){return'';}
+}
+function _timestampSeconds(value){
+  if(value===undefined||value===null||value==='') return null;
+  if(value instanceof Date){
+    const stamp=value.getTime()/1000;
+    return (Number.isFinite(stamp)&&stamp>0&&Math.abs(stamp)<=8.64e12)?stamp:null;
+  }
+  const numeric=Number(value);
+  if(Number.isFinite(numeric)&&numeric>0){
+    const stamp=numeric>1e12?numeric/1000:numeric;
+    // Reject epochs outside JavaScript's valid Date range (±8.64e15 ms = ±8.64e12 s);
+    // otherwise new Date(stamp*1000) yields "Invalid Date" and renders literally
+    // (e.g. a garbage numeric timestamp like 1e20 passes finite/>0). (#5739 gate.)
+    return (Number.isFinite(stamp)&&stamp>0&&stamp<=8.64e12)?stamp:null;
+  }
+  if(typeof value==='string'){
+    const text=value.trim();
+    if(!text||/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(text)) return null;
+    const parsed=Date.parse(text);
+    if(Number.isFinite(parsed)&&parsed>0){
+      const stamp=parsed/1000;
+      return stamp<=8.64e12?stamp:null;
+    }
+  }
+  return null;
+}
+function _firstValidTimestampSeconds(...values){
+  for(const value of values){
+    const stamp=_timestampSeconds(value);
+    if(stamp) return stamp;
+  }
+  return null;
+}
+function _transparentEventTimestampSeconds(row, opts){
+  opts=opts||{};
+  for(const key of ['ts','timestamp','created_at']){
+    const stamp=_timestampSeconds(opts[key]);
+    if(stamp) return stamp;
+  }
+  const toolCall=opts.toolCall||row&&row._tcData||null;
+  if(toolCall&&typeof toolCall==='object'){
+    for(const key of ['ts','timestamp','created_at','started_at','completed_at']){
+      const stamp=_timestampSeconds(toolCall[key]);
+      if(stamp) return stamp;
+    }
+  }
+  if(row&&typeof row.getAttribute==='function'){
+    for(const key of ['data-event-at','data-activity-at']){
+      const stamp=_timestampSeconds(row.getAttribute(key));
+      if(stamp) return stamp;
+    }
+  }
+  if(opts.live===true) return _activityNowSeconds();
+  return null;
+}
+function _syncTransparentEventTimestamp(row, header, opts){
+  if(!row||!header) return null;
+  opts=opts||{};
+  const live=opts.live===true||row.getAttribute&&(
+    row.getAttribute('data-live-tid')==='1'||
+    row.getAttribute('data-live-thinking')==='1'||
+    row.getAttribute('data-live-assistant')==='1'||
+    row.getAttribute('data-live-stream-owned')==='1'
+  );
+  const explicitTs=_firstValidTimestampSeconds(opts.ts, opts.timestamp, opts.created_at);
+  const toolCall=opts.toolCall||row&&row._tcData||null;
+  const toolTs=toolCall&&typeof toolCall==='object'
+    ? _firstValidTimestampSeconds(
+      toolCall.ts,
+      toolCall.timestamp,
+      toolCall.created_at,
+      toolCall.started_at,
+      toolCall.completed_at
+    )
+    : null;
+  const attrTs=row&&typeof row.getAttribute==='function'
+    ? _firstValidTimestampSeconds(
+      row.getAttribute('data-event-at'),
+      row.getAttribute('data-activity-at')
+    )
+    : null;
+  const ts=explicitTs||toolTs||attrTs||(live?_activityNowSeconds():null);
+  const label=ts?_activityClockLabel(ts):'';
+  let timeEl=header.querySelector('.transparent-event-time');
+  if(!label){
+    if(timeEl) timeEl.remove();
+    row.removeAttribute('data-event-at');
+    row.removeAttribute('data-event-at-source');
+    return null;
+  }
+  const source=explicitTs||toolTs||attrTs?'event':'live';
+  if(!timeEl){
+    timeEl=document.createElement('span');
+    timeEl.className='transparent-event-time';
+  }
+  timeEl.textContent=label;
+  // Full date+time tooltip: the bare clock label is date-ambiguous when a settled
+  // session is reviewed days later (or a run crosses midnight), and timing is the
+  // whole point of this label. (#5739 Fable UX fix.)
+  const fullLabel=_activityFullClockLabel(ts);
+  if(fullLabel) timeEl.setAttribute('title',fullLabel); else timeEl.removeAttribute('title');
+  timeEl.setAttribute('data-event-at',String(ts));
+  timeEl.setAttribute('data-event-at-source',source);
+  row.setAttribute('data-event-at',String(ts));
+  row.setAttribute('data-event-at-source',source);
+  const anchor=header.querySelector('.transparent-event-status,.thinking-card-btn-row,.tool-card-toggle,.thinking-card-toggle');
+  if(timeEl.parentNode!==header){
+    if(anchor&&anchor.parentNode===header) header.insertBefore(timeEl,anchor);
+    else header.appendChild(timeEl);
+  }else if(anchor&&timeEl.nextSibling!==anchor){
+    header.insertBefore(timeEl,anchor);
+  }
+  return timeEl;
+}
 function _activityStatusNode({kind='info',label='',detail='',status='done',ts=null,id=''}){
   const row=document.createElement('div');
   row.className=`agent-activity-status agent-activity-status-${kind} agent-activity-status-${status}`;
@@ -5588,6 +6096,9 @@ function _mergeUsageForCtxIndicator(latest, fallback){
       merged[field]=fallbackObj[field];
     }
   }
+  if(!Object.hasOwn(latestObj,'post_compression_context_tokens_estimate')&&fallbackObj.post_compression_context_tokens_estimate!=null){
+    merged.post_compression_context_tokens_estimate=fallbackObj.post_compression_context_tokens_estimate;
+  }
   return merged;
 }
 
@@ -5608,7 +6119,10 @@ function _syncCtxIndicator(usage){
   // nonsense percentage (often >100%) on long sessions.  When we have no
   // last-prompt data we render "·" + "tokens used" via the !hasPromptTok
   // branch below — honest "no data" instead of misleading "890% used".
+  const postCompressionEstimate=Number(usage.post_compression_context_tokens_estimate)||0;
+  const hasPostCompressionEstimate=postCompressionEstimate>0;
   const promptTok=usage.last_prompt_tokens||0;
+  const contextPromptTok=hasPostCompressionEstimate?postCompressionEstimate:promptTok;
   const totalTok=(usage.input_tokens||0)+(usage.output_tokens||0);
   const cacheReadTok=usage.cache_read_tokens||0;
   const cacheWriteTok=usage.cache_write_tokens||0;
@@ -5628,8 +6142,9 @@ function _syncCtxIndicator(usage){
     wrap.removeAttribute('aria-hidden');
     wrap.style.display='';
   }
-  const hasPromptTok=!!promptTok;
-  const rawPct=hasPromptTok?Math.round((promptTok/ctxWindow)*100):0;
+  let hasPromptTok=!!promptTok;
+  if(hasPostCompressionEstimate) hasPromptTok=true;
+  const rawPct=hasPromptTok?Math.round((contextPromptTok/ctxWindow)*100):0;
   const pct=Math.min(100,rawPct);
   const overflowed=rawPct>100;
   const ring=$('ctxRingValue');
@@ -5657,13 +6172,14 @@ function _syncCtxIndicator(usage){
   _setCtxCompressButton(compressBtn,compressText);
   const cacheHitPct=usage.cache_hit_percent;
   const cacheText=cacheHitPct!=null?t('usage_cache_hit_detail',cacheHitPct,_fmtTokens(cacheReadTok),_fmtTokens(cacheWriteTok)):'';
-  let label=hasPromptTok?`Context window ${pct}% used`:`${_fmtTokens(totalTok)} tokens used`;
+  const contextLabel=hasPostCompressionEstimate?'Estimated next model context':'Context window';
+  let label=hasPromptTok?`${contextLabel} ${pct}% used`:`${_fmtTokens(totalTok)} tokens used`;
   if(!hasExplicitCtx&&hasPromptTok) label+=' (est. 128K)';
   if(cost) label+=` \u00b7 $${cost<0.01?cost.toFixed(4):cost.toFixed(2)}`;
   if(cacheText) label+=` \u00b7 ${cacheText}`;
   el.setAttribute('aria-label',label);
-  const usageText=hasPromptTok?(overflowed?`${rawPct}% used (context exceeded)`:`${pct}% used (${100-pct}% left)`):`${_fmtTokens(totalTok)} tokens used`;
-  const tokensText=hasPromptTok?`${_fmtTokens(promptTok)} / ${_fmtTokens(ctxWindow)} tokens used`:`In: ${_fmtTokens(usage.input_tokens||0)} \u00b7 Out: ${_fmtTokens(usage.output_tokens||0)}`;
+  const usageText=hasPromptTok?(overflowed?`${contextLabel}: ${rawPct}% used (context exceeded)`:`${contextLabel}: ${pct}% used (${100-pct}% left)`):`${_fmtTokens(totalTok)} tokens used`;
+  const tokensText=hasPromptTok?`${contextLabel}: ${_fmtTokens(contextPromptTok)} / ${_fmtTokens(ctxWindow)} tokens used`:`In: ${_fmtTokens(usage.input_tokens||0)} \u00b7 Out: ${_fmtTokens(usage.output_tokens||0)}`;
   if(usageLine) usageLine.textContent=usageText;
   if(tokensLine) tokensLine.textContent=tokensText;
   const threshold=usage.threshold_tokens||0;
@@ -8691,12 +9207,17 @@ async function refreshSession() {
 }
 // ── Update banner ──
 function _formatUpdateTargetStatus(label,info){
-  if(!info||info.no_git||!(info.behind>0)) return null;
+  const manualNoGit=!!(info&&info.no_git&&info.manual_update&&info.behind>0);
+  if(!info||(info.no_git&&!manualNoGit)||!(info.behind>0)) return null;
   const release=(info.release_based&&info.latest_version)
     ?` (${info.current_version||'unknown'} -> ${info.latest_version})`
     :(info.branch?` (${info.branch})`:'');
   const noun=info.release_based?'release':'update';
   return `${label}${release}: ${info.behind} ${noun}${info.behind>1?'s':''}`;
+}
+function _formatManualUpdateInstruction(info){
+  if(!(info&&info.no_git&&info.manual_update&&info.behind>0)) return null;
+  return t('settings_update_manual_docker','docker pull ghcr.io/nesquena/hermes-webui:latest');
 }
 function _formatUpdateCheckError(label,info){
   if(!info||!info.error) return null;
@@ -9004,6 +9525,21 @@ function _showUpdateBanner(data){
   if(webuiPart) parts.push(webuiPart);
   if(agentPart) parts.push(agentPart);
   window._updateData=data;
+  const btnApply=$('btnApplyUpdate');
+  if(btnApply){
+    const webuiManual=!!(data&&data.webui&&data.webui.manual_update&&data.webui.behind>0);
+    const webuiUpdatable=!!(data&&data.webui&&data.webui.behind>0&&!webuiManual);
+    const agentUpdatable=!!(data&&data.agent&&data.agent.behind>0);
+    const hasApplyTargets=webuiUpdatable||agentUpdatable;
+    btnApply.disabled=!hasApplyTargets;
+    btnApply.style.display=hasApplyTargets?'':'none';
+    if(webuiManual){
+      const forceBtn=$('btnForceUpdate');
+      if(forceBtn){forceBtn.disabled=true;forceBtn.style.display='none';forceBtn.dataset.target='';}
+      const clearLockBtn=$('btnClearUpdateLock');
+      if(clearLockBtn){clearLockBtn.disabled=true;clearLockBtn.style.display='none';clearLockBtn.dataset.target='';}
+    }
+  }
   if(!parts.length){
     _renderUpdateWhatsNewLinks(data);
     const staleBanner=$('updateBanner');
@@ -9011,11 +9547,21 @@ function _showUpdateBanner(data){
     return;
   }
   const msg=$('updateMsg');
-  if(msg) msg.textContent='\u2B06 '+parts.join(', ')+' available';
+  if(msg){
+    const manualInstruction=_formatManualUpdateInstruction(data&&data.webui);
+    msg.textContent='\u2B06 '+parts.join(', ')+' available'+(manualInstruction?' · '+manualInstruction:'');
+  }
   const banner=$('updateBanner');
   if(banner) banner.classList.add('visible');
   const summaryMode=window._whatsNewSummaryEnabled===true?'summary':'diff';
   _renderUpdateWhatsNewLinks(data,{mode:summaryMode});
+}
+function _i18nUpdateText(key, fallback){
+  if(typeof t==='function'){
+    const val=t(key);
+    if(val&&val!==key) return val;
+  }
+  return fallback;
 }
 function dismissUpdate(){
   const b=$('updateBanner');if(b)b.classList.remove('visible');
@@ -9028,24 +9574,25 @@ function _isUpdateApplyNetworkError(error){
 }
 function _formatUpdateApplyExceptionMessage(error){
   if(_isUpdateApplyNetworkError(error)){
-    return 'Update failed: could not reach the WebUI server. It may have restarted or the connection was interrupted. Please wait a few seconds, reload the page, then check the server if it still does not come back.';
+    return _i18nUpdateText('update_failed_network','Update failed: could not reach the WebUI server. It may have restarted or the connection was interrupted. Please wait a few seconds, reload the page, then check the server if it still does not come back.');
   }
   const message=(error&&error.message)||String(error||'unknown error');
-  return 'Update failed: '+message;
+  return _i18nUpdateText('update_failed_prefix','Update failed: ')+message;
 }
 async function applyUpdates(){
   if(window._updateApplyInFlight) return;
   window._updateApplyInFlight=true;
+  const updateText=(key,fallback)=>(typeof _i18nUpdateText==='function'?_i18nUpdateText(key,fallback):fallback);
   const btn=$('btnApplyUpdate');
   const resetApplyButton=(delayMs)=>{
     const reset=()=>{
       window._updateApplyInFlight=false;
-      if(btn){btn.disabled=false;btn.textContent='Update Now';}
+      if(btn){btn.disabled=false;btn.textContent=updateText('update_now','Update Now');}
     };
     if(delayMs>0) setTimeout(reset,delayMs);
     else reset();
   };
-  if(btn){btn.disabled=true;btn.textContent='Updating\u2026';}
+  if(btn){btn.disabled=true;btn.textContent=updateText('update_updating','Updating\u2026');}
   const errEl=$('updateError');
   if(errEl){errEl.style.display='none';errEl.textContent='';}
   // Hide any leftover force-update button from a prior conflict so a fresh
@@ -9054,9 +9601,9 @@ async function applyUpdates(){
   if(forceBtnReset){forceBtnReset.style.display='none';forceBtnReset.dataset.target='';}
   const targets=[];
   if(window._updateData?.agent?.behind>0) targets.push('agent');
-  if(window._updateData?.webui?.behind>0) targets.push('webui');
+  if(window._updateData?.webui?.behind>0&&!window._updateData?.webui?.manual_update) targets.push('webui');
   if(!targets.length){
-    const msg='No update target selected. Refresh update status and retry.';
+    const msg=updateText('update_no_target','No update target selected. Refresh update status and retry.');
     if(errEl){errEl.textContent=msg;errEl.style.display='block';}
     else showToast(msg,5000,'error');
     resetApplyButton(0);
@@ -9066,7 +9613,15 @@ async function applyUpdates(){
     const stashConflictMessages=[];
     const baselineServerIdentity = await _readHealthServerIdentity();
     for(const target of targets){
-      const res=await api('/api/updates/apply',{method:'POST',body:JSON.stringify({target}),timeoutMs:120000});
+      // Send the channel the CHECK reported for this target (what was actually
+      // offered in the banner), not a fresh settings read — otherwise a channel
+      // switch whose debounced autosave hasn't landed yet races apply, which
+      // would then read the OLD saved channel (Codex gate). webui carries the
+      // channel; agent is channel-neutral server-side so omitting it is fine.
+      const _applyBody={target};
+      const _ch=window._updateData?.[target]?.channel;
+      if(_ch==='stable'||_ch==='experimental') _applyBody.channel=_ch;
+      const res=await api('/api/updates/apply',{method:'POST',body:JSON.stringify(_applyBody),timeoutMs:120000});
       if(!res.ok){
         _showUpdateError(target,res);
         resetApplyButton(0);
@@ -9099,10 +9654,127 @@ function _showUpdateError(target,res){
   } else {
     showToast(msg);
   }
-  // Show "Force update" button when the error is recoverable by a hard reset
+  // Show "Force update" button ONLY for errors recoverable by a destructive
+  // hard reset. Lock-only failures are routed to a separate non-destructive
+  // "Clear lock and retry update" button (BRICK-2 fix for PR #5688: a lock
+  // error should never invoke apply_force_update, which would discard local
+  // modifications).
   if(forceBtn&&(res.conflict||res.diverged)){
     forceBtn.dataset.target=target;
     forceBtn.style.display='inline-block';
+  }
+  // Show "Clear lock and retry update" when the only failure was a stale
+  // git lock. This calls the new non-destructive /api/updates/clear_lock
+  // endpoint, which probes the lock for a holder and refuses if held.
+  const clearLockBtn=$('btnClearUpdateLock');
+  if(clearLockBtn&&res.lock_conflict){
+    clearLockBtn.dataset.target=target;
+    clearLockBtn.style.display='inline-block';
+  }
+}
+async function applyClearUpdateLock(btn){
+  if(window._clearLockInFlight) return;
+  const target=btn.dataset.target;
+  if(!target) return;
+  window._clearLockInFlight=true;
+  btn.disabled=true;
+  const originalLabel=btn.textContent;
+  btn.textContent='Checking lock…';
+  try{
+    const res=await api('/api/updates/clear_lock',{method:'POST',body:JSON.stringify({target}),timeoutMs:60000});
+    if(res.ok){
+      sessionStorage.removeItem('hermes-update-checked');
+      sessionStorage.removeItem('hermes-update-dismissed');
+      showToast('Update applied — restarting…');
+      _waitForServerThenReload({});
+    } else if(res.lock_held){
+      // v2.2: server returns manual-instruction. Show the exact `rm`
+      // command + a one-click "I've removed it, retry update" affordance
+      // that POSTs the same endpoint a second time (now that the user
+      // has presumably removed the lock, the server's success branch
+      // runs the normal non-destructive apply).
+      _renderLockManualInstruction(target, res);
+    } else {
+      const msg='Could not check the lock: '+(res.message||'unknown error');
+      const errEl=$('updateError');
+      if(errEl){errEl.textContent=msg;errEl.style.display='block';}
+      else showToast(msg);
+    }
+  }catch(e){
+    const msg='Lock-check request failed: '+((e&&e.message)||String(e));
+    const errEl=$('updateError');
+    if(errEl){errEl.textContent=msg;errEl.style.display='block';}
+    else showToast(msg);
+  }finally{
+    window._clearLockInFlight=false;
+    btn.disabled=false;
+    btn.textContent=originalLabel;
+  }
+}
+function _renderLockManualInstruction(target, res){
+  // Replace the inline `updateError` text with a richer block that shows
+  // the exact manual command and offers a one-click retry button. The
+  // "retry" handler re-invokes `applyClearUpdateLock`; this time, with
+  // the lock gone, the server's success branch runs the normal apply.
+  const cmd = res.manual_command || ('rm -f ' + (res.well_known_lock_path || '.git/index.lock'));
+  const errEl=$('updateError');
+  if(!errEl){
+    showToast('Lock present. Run: '+cmd);
+    return;
+  }
+  errEl.style.display='block';
+  errEl.innerHTML='';
+  const intro=document.createElement('div');
+  intro.style.marginBottom='6px';
+  intro.textContent='A stale .git/index.lock is present. The server cannot remove it safely — please run this command on the host:';
+  errEl.appendChild(intro);
+  const code=document.createElement('pre');
+  code.style.background='rgba(0,0,0,0.05)';
+  code.style.padding='6px';
+  code.style.margin='4px 0';
+  code.style.fontFamily='ui-monospace,monospace';
+  code.style.borderRadius='4px';
+  code.style.whiteSpace='pre-wrap';
+  code.style.wordBreak='break-all';
+  code.textContent=cmd;
+  errEl.appendChild(code);
+  const actions=document.createElement('div');
+  actions.style.display='flex';
+  actions.style.gap='8px';
+  actions.style.flexWrap='wrap';
+  const copyBtn=document.createElement('button');
+  copyBtn.type='button';
+  copyBtn.className='update-btn';
+  copyBtn.textContent='Copy command';
+  copyBtn.onclick=async()=>{
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(cmd);
+        copyBtn.textContent='Copied';
+        setTimeout(()=>{ copyBtn.textContent='Copy command'; }, 1500);
+      } else {
+        copyBtn.textContent='Clipboard unavailable';
+      }
+    } catch(_){
+      copyBtn.textContent='Copy failed';
+    }
+  };
+  actions.appendChild(copyBtn);
+  const retryBtn=document.createElement('button');
+  retryBtn.type='button';
+  retryBtn.className='update-btn update-primary';
+  retryBtn.textContent="I've removed the lock — retry update";
+  retryBtn.dataset.target=target;
+  retryBtn.onclick=()=>{ applyClearUpdateLock(retryBtn); };
+  actions.appendChild(retryBtn);
+  errEl.appendChild(actions);
+  if(Array.isArray(res.other_locks)&&res.other_locks.length){
+    const other=document.createElement('div');
+    other.style.marginTop='6px';
+    other.style.fontSize='11px';
+    other.style.opacity='0.85';
+    other.textContent='Other lock files also present: '+res.other_locks.join(', ');
+    errEl.appendChild(other);
   }
 }
 function _normalizeHealthServerIdentity(rawIdentity){
@@ -9151,7 +9823,7 @@ async function forceUpdate(btn){
   if(errEl){errEl.style.display='none';}
   try{
     const baselineServerIdentity = await _readHealthServerIdentity();
-    const res=await api('/api/updates/force',{method:'POST',body:JSON.stringify({target}),timeoutMs:120000});
+    const res=await api('/api/updates/force',{method:'POST',body:JSON.stringify((()=>{const b={target};const _ch=window._updateData?.[target]?.channel;if(_ch==='stable'||_ch==='experimental')b.channel=_ch;return b;})()),timeoutMs:120000});
     if(!res.ok){
       if(errEl){errEl.textContent='Force update failed: '+(res.message||'unknown error');errEl.style.display='block';}
       btn.disabled=false;btn.textContent='Force update';
@@ -9297,7 +9969,11 @@ function _pendingCurrentTailUserMessage(messages){
   for(let i=list.length-1;i>=0;i--){
     const msg=list[i];
     if(!msg) continue;
-    if(String(msg.role||'')==='user') return msg;
+    if(String(msg.role||'')==='user'){
+      // Compaction rows are synthetic user-role markers, not submitted turns.
+      if(typeof _isContextCompactionMessage==='function'&&_isContextCompactionMessage(msg)) continue;
+      return msg;
+    }
     if(msg._live||String(msg.role||'')==='tool') continue;
     return null;
   }
@@ -9877,6 +10553,16 @@ function _worklogDetailScrollableBody(el){
 }
 function _setWorklogDetailDisclosureOpen(el, open){
   if(!el||!el.classList) return;
+  // #5966 (Codex F2 r2): restoring an OPEN state on a settled Transparent Stream
+  // tool row whose detail was deferred must MATERIALIZE the body first, or the
+  // card restores open-but-empty after an in-session renderMessages() rebuild
+  // (e.g. the next send re-defers it, then this toggles .open with no content).
+  if(open){
+    const drow=(el.matches&&el.matches('.transparent-event-row[data-transparent-detail-deferred="1"]'))
+      ? el
+      : (el.closest&&el.closest('.transparent-event-row[data-transparent-detail-deferred="1"]'));
+    if(drow&&typeof _materializeTransparentToolDetail==='function') _materializeTransparentToolDetail(drow);
+  }
   el.classList.toggle('open', !!open);
   if(el.matches&&el.matches('.tool-group[data-tool-worklog-tool-group="1"],.tool-worklog-tool-group')){
     el.classList.toggle('tool-worklog-tool-group-collapsed', !open);
@@ -9951,17 +10637,23 @@ function _thinkingActivityNode(text, open, disclosureKey){
 }
 function chatActivityMode(){
   if(typeof window==='undefined') return 'compact_worklog';
-  return window._chatActivityDisplayMode || (window._transparentStream ? 'transparent_stream' : 'compact_worklog') || 'compact_worklog';
+  const mode=window._chatActivityDisplayMode;
+  if(mode==='compact_worklog'||mode==='transparent_stream'||mode==='hide_all_activity') return mode;
+  return window._transparentStream ? 'transparent_stream' : 'compact_worklog';
 }
 function isTransparentStream(){
   return chatActivityMode()==='transparent_stream';
 }
+function isFinalAnswerOnlyMode(){
+  return chatActivityMode()==='hide_all_activity';
+}
 function isCompactWorklogMode(){
-  return isSimplifiedToolCalling()&&!isTransparentStream();
+  return isSimplifiedToolCalling()&&chatActivityMode()==='compact_worklog';
 }
 if(typeof window!=='undefined'){
   window.chatActivityMode=chatActivityMode;
   window.isTransparentStream=isTransparentStream;
+  window.isFinalAnswerOnlyMode=isFinalAnswerOnlyMode;
   window.isCompactWorklogMode=isCompactWorklogMode;
 }
 function _toolShortName(name){
@@ -10138,11 +10830,116 @@ function _setTransparentDetailMode(tab, mode){
 function _setTransparentCardOpen(card, open){
   if(!card) return;
   const expanded=!!open;
-  card.classList.toggle('open',expanded);
   const row=card.closest&&card.closest('.transparent-event-row');
+  // #5966: a settled tool row whose detail body was deferred at render must
+  // materialize it the first time it's opened (before we flip .open so the
+  // detail exists for the same paint). No-op on live/already-materialized rows.
+  if(expanded&&row&&row.getAttribute('data-transparent-detail-deferred')==='1'){
+    _materializeTransparentToolDetail(row);
+  }
+  card.classList.toggle('open',expanded);
   if(row) row.setAttribute('data-expanded',expanded?'1':'0');
   const header=card.querySelector('.tool-card-header,.thinking-card-header');
   if(header) header.setAttribute('aria-expanded',expanded?'true':'false');
+}
+// #5966: build the deferred `.tool-card-detail` for a settled transparent tool
+// row on first expand — the lazy counterpart of the eager build in
+// _decorateTransparentEventRow. Recovers the tool call from the in-memory stash
+// or, after a _sessionHtmlCache innerHTML round-trip drops the JS property, from
+// the row's data-anchor-row-id → S.messages scene (the #5839 recovery pattern).
+// Idempotent: clears the deferred flag and runs anchor-suppressed post-processing
+// (Prism / copy buttons / KaTeX / Mermaid / trees) on just the new subtree so an
+// expanded deferred row is byte-identical to the eager path.
+// #5966: does this tool call have a detail body worth deferring? Mirrors
+// buildToolCard's `hasDetail` (snippet OR args, gated by _toolCardAllowsDetail)
+// so we only mark a row deferred/expandable when there's genuinely something to
+// build — a detail-less tool row keeps its `tool-card-no-detail` (no chevron).
+function _transparentToolRowHasDetail(tc){
+  if(!tc||typeof tc!=='object') return false;
+  const hasRaw=!!tc.snippet||(tc.args&&typeof tc.args==='object'&&Object.keys(tc.args).length>0);
+  if(!hasRaw) return false;
+  if(typeof _toolActionKind==='function'&&typeof _toolCardAllowsDetail==='function'){
+    try{ return !!_toolCardAllowsDetail(_toolActionKind(tc), tc); }catch(_){ return true; }
+  }
+  return true;
+}
+function _materializeTransparentToolDetail(row){
+  if(!row||row.getAttribute('data-transparent-detail-deferred')!=='1') return false;
+  const card=row.querySelector('.tool-card');
+  if(!card){ row.removeAttribute('data-transparent-detail-deferred'); return false; }
+  let tc=row._deferredToolCall;
+  if(!tc){
+    tc=_transparentToolCallFromRowDataset(row);
+  }
+  if(!tc){ row.removeAttribute('data-transparent-detail-deferred'); return false; }
+  const status=String(row.getAttribute('data-event-status')||_transparentToolStatus(tc,true));
+  row.removeAttribute('data-transparent-detail-deferred');
+  row._deferredToolCall=null;
+  if(!card.querySelector('.tool-card-detail')){
+    // Codex F1(r2): rebuild through the CANONICAL buildToolCard() detail path, not
+    // the thinner _transparentToolDetailHtml() — the latter drops diff coloring,
+    // "Show diff/Show more", and canonical shell-command detail that buildToolCard
+    // produces, so an expanded deferred row must transplant buildToolCard's own
+    // `.tool-card-detail` to stay byte-identical to the eager path.
+    let sourceDetail=null;
+    try{
+      const rebuilt=buildToolCard(tc);
+      sourceDetail=rebuilt&&rebuilt.querySelector('.tool-card-detail');
+    }catch(_){ sourceDetail=null; }
+    if(sourceDetail){
+      card.appendChild(sourceDetail);   // move the canonical detail node onto the live card
+    }else{
+      // Fallback (e.g. buildToolCard unavailable): the lighter detail is better than none.
+      card.insertAdjacentHTML('beforeend',_transparentToolDetailHtml(tc,status));
+    }
+    const detail=card.querySelector('.tool-card-detail');
+    if(detail&&!detail.querySelector('.transparent-detail-modes')){
+      const modes=document.createElement('div');
+      modes.className='transparent-detail-modes';
+      modes.setAttribute('role','tablist');
+      modes.innerHTML=`<span class="transparent-detail-mode active" role="tab" tabindex="0" data-mode="full" onclick="_setTransparentDetailMode(this,'full')">Full</span><span class="transparent-detail-mode" role="tab" tabindex="0" data-mode="output" onclick="_setTransparentDetailMode(this,'output')">Output</span>`;
+      const firstChild=detail.firstChild;
+      if(firstChild&&firstChild.parentNode===detail) detail.insertBefore(modes, firstChild);
+      else detail.appendChild(modes);
+      detail.setAttribute('data-transparent-detail-mode','full');
+    }
+    // Match the eager path's post-processing so highlight/copy/KaTeX/Mermaid land.
+    if(typeof _postProcessWithAnchorSuppression==='function'){
+      requestAnimationFrame(()=>{ try{ _postProcessWithAnchorSuppression(card); }catch(_){ } });
+    }
+  }
+  return true;
+}
+// Recover a tool call for a deferred row whose _deferredToolCall JS property was
+// dropped by an innerHTML cache round-trip: walk data-anchor-row-id back to the
+// owning message's anchor scene and rebuild the tool call from the matching row.
+function _transparentToolCallFromRowDataset(row){
+  try{
+    const rowId=row.getAttribute('data-anchor-row-id')||'';
+    // #5966 (Codex F2): resolve the OWNER message by its stamped index, not the
+    // turn's first assistant segment — a multi-segment turn's scene is owned by a
+    // later segment, so the first-segment lookup recovered the wrong (or no) scene.
+    const ownerIdxAttr=row.getAttribute('data-anchor-owner-idx');
+    let msg=null;
+    if(ownerIdxAttr!==null&&ownerIdxAttr!==''){
+      const oi=Number(ownerIdxAttr);
+      if(Number.isFinite(oi)) msg=S.messages[oi];
+    }
+    if(!msg){
+      // Fallback: find the assistant segment in this turn that actually owns a scene.
+      const turn=row.closest&&row.closest('.assistant-turn');
+      const segs=turn?Array.from(turn.querySelectorAll('.assistant-segment[data-msg-idx]')):[];
+      for(const seg of segs){
+        const i=Number(seg.getAttribute('data-msg-idx'));
+        if(Number.isFinite(i)&&S.messages[i]&&S.messages[i]._anchor_activity_scene){ msg=S.messages[i]; break; }
+      }
+    }
+    const scene=msg&&msg._anchor_activity_scene;
+    if(!scene||!rowId) return null;
+    const rows=_anchorSceneRowsForRendering(scene,{settled:true})||[];
+    const match=rows.find(r=>String(r.row_id||r.local_id||'')===rowId&&String(r.role||'')==='tool');
+    return match?_anchorSceneToolCallFromRow(match,{settled:true}):null;
+  }catch(_){ return null; }
 }
 function _wireTransparentHeaderToggle(header){
   if(!header) return;
@@ -10186,7 +10983,13 @@ function _syncTransparentEventControls(turn){
   const blocks=_assistantTurnBlocks(turn);
   if(!blocks) return;
   const rows=Array.from(blocks.querySelectorAll(':scope > .transparent-event-row,[data-transparent-event-row="1"]'));
-  const toolCount=rows.filter(row=>row.getAttribute('data-event-type')==='tool').length;
+  const mountedToolCount=rows.filter(row=>row.getAttribute('data-event-type')==='tool').length;
+  // #5966: when this turn's earlier steps are capped (some prefix rows are not
+  // mounted yet), the true tool count is stashed on the turn so the "Trace: N
+  // tools" label reflects the whole run, not just what's currently in the DOM.
+  // Falls back to the mounted count for uncapped turns and the live path.
+  const stashedTotal=Number(turn.getAttribute('data-transparent-total-tool-count'));
+  const toolCount=(Number.isFinite(stashedTotal)&&stashedTotal>mountedToolCount)?stashedTotal:mountedToolCount;
   let bar=blocks.querySelector(':scope > .transparent-event-controls');
   if(!rows.length){
     if(bar) bar.remove();
@@ -10267,6 +11070,34 @@ function _rehydrateTransparentStreamDom(root){
     }
     if(card) _setTransparentCardOpen(card,card.classList.contains('open'));
   });
+  // #5966: re-wire the "Show earlier steps" affordance. Its click handler was
+  // added via addEventListener and is lost when the session HTML-cache restores
+  // innerHTML; the DOM + data-earlier-count survive, so rebind by walking back to
+  // the owning message/segment. _revealTransparentEarlierSteps recovers the rows
+  // from the scene, so no JS-property stash is needed.
+  root.querySelectorAll('.transparent-earlier-steps[data-anchor-earlier-steps="1"]').forEach(el=>{
+    if(el.getAttribute('data-earlier-rewired')==='1') return;
+    el.setAttribute('data-earlier-rewired','1');
+    // #5966 (Codex F2): rebind to the OWNER message by stamped index (multi-segment
+    // turns own the scene on a later segment, not the first).
+    const turn=el.closest&&el.closest('.assistant-turn');
+    const ownerIdxAttr=el.getAttribute('data-anchor-owner-idx');
+    let idx=(ownerIdxAttr!==null&&ownerIdxAttr!=='')?Number(ownerIdxAttr):NaN;
+    let msg=Number.isFinite(idx)?S.messages[idx]:null;
+    let seg=(turn&&Number.isFinite(idx))?turn.querySelector('.assistant-segment[data-msg-idx="'+idx+'"]'):null;
+    if(!msg||!msg._anchor_activity_scene||!seg){
+      // Fallback: the scene-owning segment in this turn.
+      const segs=turn?Array.from(turn.querySelectorAll('.assistant-segment[data-msg-idx]')):[];
+      for(const s of segs){
+        const i=Number(s.getAttribute('data-msg-idx'));
+        if(Number.isFinite(i)&&S.messages[i]&&S.messages[i]._anchor_activity_scene){ idx=i; msg=S.messages[i]; seg=s; break; }
+      }
+    }
+    if(!msg||!seg){ return; }
+    const handler=()=>_revealTransparentEarlierSteps(msg,seg,idx,el);
+    el.addEventListener('click',handler);
+    el.addEventListener('keydown',(ev)=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); el.click(); } });
+  });
 }
 function _decorateTransparentEventRow(row, opts){
   if(!row) return row;
@@ -10341,7 +11172,32 @@ function _decorateTransparentEventRow(row, opts){
         }
       }
       let detail=row.querySelector('.tool-card-detail');
-      if(!detail&&card){
+      // #5966: on a SETTLED, COLLAPSED tool row, defer the heavy `.tool-card-detail`
+      // body (full tool input/output HTML + Prism/KaTeX/Mermaid post-processing)
+      // until first expand. A reasoning-heavy history can carry thousands of settled
+      // tool rows; eagerly materializing every detail at load is the Transparent-
+      // Stream analogue of the #5860 compact-worklog freeze. NOTE buildToolCard
+      // PRE-BUILDS `.tool-card-detail` whenever the tool has args/output (hasDetail),
+      // so we must strip that prebuilt body too — a `!detail` guard would skip
+      // exactly the heavy rows we need to defer (Codex gate F1). The header (name,
+      // preview, status, chevron) stays; a deferred row looks identical collapsed.
+      // _materializeTransparentToolDetail() rebuilds on expand from the stashed tool
+      // call, or from data-anchor-row-id → owner message scene after the
+      // _sessionHtmlCache innerHTML round-trip drops the JS stash (#5839 class).
+      // Live and already-open rows keep their detail (about to be read).
+      const _deferDetail=card&&opts.settled===true&&!card.classList.contains('open')&&_transparentToolRowHasDetail(tc);
+      if(_deferDetail){
+        if(detail){ detail.remove(); detail=null; }   // drop any buildToolCard prebuilt body
+        if(!header.querySelector('.tool-card-toggle')){
+          const toggle=document.createElement('span');
+          toggle.className='tool-card-toggle';
+          toggle.innerHTML=li('chevron-right',12);
+          header.appendChild(toggle);
+        }
+        card.classList.remove('tool-card-no-detail');  // it DOES have detail (deferred)
+        row._deferredToolCall=tc;
+        row.setAttribute('data-transparent-detail-deferred','1');
+      }else if(!detail&&card){
         card.insertAdjacentHTML('beforeend',_transparentToolDetailHtml(tc,status));
         detail=row.querySelector('.tool-card-detail');
         if(!header.querySelector('.tool-card-toggle')){
@@ -10362,6 +11218,7 @@ function _decorateTransparentEventRow(row, opts){
         else detail.appendChild(modes);
         detail.setAttribute('data-transparent-detail-mode','full');
       }
+      if(typeof _syncTransparentEventTimestamp==='function') _syncTransparentEventTimestamp(row, header, {toolCall:tc, ts:opts.ts, live:opts.live===true});
       _wireTransparentHeaderToggle(header);
       _attachCopyButton(header);
     }
@@ -10402,6 +11259,7 @@ function _decorateTransparentEventRow(row, opts){
       }else if(preview){
         preview.remove();
       }
+      if(typeof _syncTransparentEventTimestamp==='function') _syncTransparentEventTimestamp(row, header, {ts:opts.ts, live:opts.live===true});
       _wireTransparentHeaderToggle(header);
       _attachCopyButton(header);
     }
@@ -10446,6 +11304,14 @@ function _attachProgressBar(row, opts){
 }
 function _setTransparentRowsExpanded(root, expanded){
   const scope=root||document;
+  // #5966: "Expand all" must include a capped turn's hidden earlier steps —
+  // reveal them first so expansion genuinely opens the whole run. (Collapse-all
+  // leaves the cap as-is; it only closes what's mounted.)
+  if(expanded){
+    scope.querySelectorAll('.transparent-earlier-steps[data-anchor-earlier-steps="1"]').forEach(el=>{
+      if(typeof el.click==='function') el.click();
+    });
+  }
   scope.querySelectorAll('.transparent-event-row .tool-card,.transparent-event-row .thinking-card').forEach(card=>{
     _setTransparentCardOpen(card,!!expanded);
   });
@@ -10617,12 +11483,77 @@ function _onLiveActivityToggle(group){
   if(group.getAttribute('data-live-tool-call-group')!=='1') return;
   _liveActivityUserExpanded = !group.classList.contains('tool-call-group-collapsed');
 }
+function _materializeDeferredWorklogRows(group){
+  // #5839: build the row DOM for a settled worklog whose rows were deferred at
+  // render time (collapsed). Idempotent — clears the marker so it runs once.
+  if(!group||group.getAttribute('data-worklog-rows-deferred')!=='1') return false;
+  let rows=group._deferredWorklogRows;
+  // The JS-property stash is dropped when the transcript is restored from the
+  // HTML cache (innerHTML round-trip). Recover the rows from the owning message
+  // via the disclosure key (anchor-scene:<rawIdx>) so a post-restore expand
+  // still fills the worklog. (#5839)
+  if((!rows||!rows.length)&&typeof _deferredWorklogRowsFromGroup==='function'){
+    rows=_deferredWorklogRowsFromGroup(group);
+  }
+  group.removeAttribute('data-worklog-rows-deferred');
+  group._deferredWorklogRows=null;
+  if(!rows||!rows.length) return false;
+  const ok=_renderAnchorSceneRowsIntoWorklog(group,rows,{settled:true});
+  if(!ok) return false;
+  // #5839 fix: the eager render path post-processes its rows (syntax highlight,
+  // copy buttons, mermaid, katex, structured trees) and restores detail-disclosure
+  // state; a lazily-materialized group must do the same or expanded rows render
+  // un-enhanced and any captured open/scroll state is lost. Post-process on the
+  // next frame (matching the eager rebuild paths), then re-apply the disclosure
+  // state stashed with the group at defer time.
+  const disclosure=group._deferredWorklogDisclosure;
+  group._deferredWorklogDisclosure=null;
+  if(typeof _postProcessWithAnchorSuppression==='function'
+     && typeof requestAnimationFrame==='function'){
+    requestAnimationFrame(()=>{
+      _postProcessWithAnchorSuppression(group);
+      if(disclosure&&disclosure.size&&typeof _restoreWorklogDetailDisclosureState==='function'){
+        _restoreWorklogDetailDisclosureState(group, disclosure);
+      }
+    });
+  }else if(disclosure&&disclosure.size&&typeof _restoreWorklogDetailDisclosureState==='function'){
+    _restoreWorklogDetailDisclosureState(group, disclosure);
+  }
+  return true;
+}
+function _deferredWorklogRowsFromGroup(group){
+  // Recover a settled worklog's rows from S.messages using the group's
+  // disclosure key `anchor-scene:<rawIdx>`. Used after an HTML-cache restore
+  // where the _deferredWorklogRows JS property was dropped. (#5839)
+  const key=group&&group.getAttribute&&group.getAttribute('data-activity-disclosure-key');
+  const m=key&&/^anchor-scene:(\d+)$/.exec(key);
+  if(!m) return null;
+  const msg=S.messages&&S.messages[Number(m[1])];
+  const scene=msg&&msg._anchor_activity_scene;
+  if(!scene) return null;
+  return _anchorSceneRowsForRendering(scene,{settled:true});
+}
+function _rehydrateDeferredWorklogsFromCache(root){
+  // After restoring a transcript from _sessionHtmlCache, deferred settled
+  // worklogs carry data-worklog-rows-deferred="1" but lost their stashed rows
+  // (JS properties don't survive innerHTML). Re-stash from the owning message so
+  // the first expand materializes correctly. (#5839)
+  if(!root||!root.querySelectorAll) return;
+  root.querySelectorAll('[data-worklog-rows-deferred="1"]').forEach(group=>{
+    if(group._deferredWorklogRows&&group._deferredWorklogRows.length) return;
+    const rows=_deferredWorklogRowsFromGroup(group);
+    if(rows&&rows.length) group._deferredWorklogRows=rows;
+    else group.removeAttribute('data-worklog-rows-deferred'); // nothing to defer
+  });
+}
 function _toggleActivityGroup(summary){
   const group=summary&&summary.closest?summary.closest('.agent-activity-group,.tool-call-group'):null;
   if(!group) return;
   const collapsed=group.classList.toggle('tool-call-group-collapsed');
   group.classList.toggle('open',!collapsed);
   summary.setAttribute('aria-expanded',String(!collapsed));
+  // #5839: materialize deferred settled rows on first expand (lazy render).
+  if(!collapsed) _materializeDeferredWorklogRows(group);
   _writeActivityDisclosureState(group.getAttribute('data-activity-disclosure-key'), !collapsed);
   if(typeof _onLiveActivityToggle==='function') _onLiveActivityToggle(group);
 }
@@ -10988,6 +11919,22 @@ function _anchorSceneIsSettledSuccessfulCompression(row, settled){
 function _anchorSceneToolCallFromRow(row, opts){
   const tool=(row&&row.tool&&typeof row.tool==='object')?row.tool:{};
   const payload=(row&&row.payload&&typeof row.payload==='object')?row.payload:{};
+  const timestampSeconds=typeof _timestampSeconds==='function'?_timestampSeconds:function(value){
+    const stamp=Number(value);
+    return Number.isFinite(stamp)&&stamp>0?(stamp>1e12?stamp/1000:stamp):null;
+  };
+  const firstValidTimestampSeconds=typeof _firstValidTimestampSeconds==='function'
+    ? _firstValidTimestampSeconds
+    : function(...values){
+        for(const value of values){
+          const stamp=timestampSeconds(value);
+          if(stamp) return stamp;
+        }
+        return null;
+      };
+  const rowTs=typeof _anchorSceneRowTimestampSeconds==='function'
+    ? _anchorSceneRowTimestampSeconds(row)
+    : firstValidTimestampSeconds(row&&row.created_at, row&&row.timestamp, row&&row.ts, row&&row.started_at, row&&row.completed_at);
   const id=tool.id||row.tool_call_id||payload.tid||payload.id||payload.tool_call_id||payload.tool_use_id||payload.call_id||'';
   const settled=!!(opts&&opts.settled);
   return {
@@ -11002,10 +11949,33 @@ function _anchorSceneToolCallFromRow(row, opts){
     done:settled?true:(tool.done!==null&&tool.done!==undefined?tool.done:(row.status!=='running'&&row.status!=='pending')),
     is_error:!!(tool.is_error||payload.is_error||row.status==='error'||row.status==='failed'),
     duration:tool.duration||payload.duration||payload.duration_seconds,
-    started_at:tool.started_at||payload.started_at,
+    started_at:firstValidTimestampSeconds(tool.started_at, payload.started_at, rowTs),
+    created_at:firstValidTimestampSeconds(tool.created_at, payload.created_at, rowTs),
+    timestamp:firstValidTimestampSeconds(tool.timestamp, payload.timestamp, rowTs),
+    ts:firstValidTimestampSeconds(
+      tool.ts,
+      payload.ts,
+      tool.timestamp,
+      payload.timestamp,
+      tool.created_at,
+      payload.created_at,
+      rowTs
+    ),
     tid:id,
     id,
   };
+}
+function _anchorSceneRowTimestampSeconds(row){
+  if(!row) return null;
+  const timestampSeconds=typeof _timestampSeconds==='function'?_timestampSeconds:function(value){
+    const stamp=Number(value);
+    return Number.isFinite(stamp)&&stamp>0?(stamp>1e12?stamp/1000:stamp):null;
+  };
+  for(const key of ['created_at','timestamp','ts','started_at','completed_at']){
+    const stamp=timestampSeconds(row[key]);
+    if(stamp) return stamp;
+  }
+  return null;
 }
 function _anchorSceneNodeForRow(row, opts){
   const settled=!!(opts&&opts.settled);
@@ -11085,6 +12055,7 @@ function _anchorSceneTransparentNodeForRow(row, opts){
   const live=!!(opts&&opts.live);
   if(!row) return null;
   let node=null;
+  const eventTs=typeof _anchorSceneRowTimestampSeconds==='function'?_anchorSceneRowTimestampSeconds(row):null;
   const meta={
     segmentSeq:row.segment_seq||row.segmentSeq||'',
     burstId:row.activity_burst_id||row.burst_id||row.burstId||'',
@@ -11102,6 +12073,7 @@ function _anchorSceneTransparentNodeForRow(row, opts){
     const text=String(row.text||'').trim();
     if(!text) return null;
     const finalAnswer=String((opts&&opts.finalAnswer)||'').trim();
+    if(opts&&opts.liveTokenFinalPrefixEligible&&_anchorSceneLiveTokenFinalPrefix(row,text,finalAnswer)) return null;
     if(finalAnswer&&_anchorSceneProseMatchesFinalAnswer(text,finalAnswer)) return null;
     node=_anchorSceneNodeForRow(row,{settled});
     if(!node) return null;
@@ -11114,7 +12086,9 @@ function _anchorSceneTransparentNodeForRow(row, opts){
       type:'thinking',
       text,
       preview:text,
+      ts:eventTs,
       ...meta,
+      live,
     });
   }else if(row.role==='tool'){
     const toolCall=_anchorSceneToolCallFromRow(row,{settled});
@@ -11123,13 +12097,17 @@ function _anchorSceneTransparentNodeForRow(row, opts){
       name:toolCall&&toolCall.name,
       status:_transparentToolStatus(toolCall,settled),
       toolCall,
+      ts:eventTs,
       ...meta,
+      live,
+      settled,
     });
   }else{
     node=_anchorSceneNodeForRow(row,{settled});
     node=_decorateTransparentEventRow(node,{
       type:String(row.role||'activity'),
       ...meta,
+      live,
     });
   }
   if(!node) return null;
@@ -11143,6 +12121,18 @@ function _anchorSceneTransparentNodeForRow(row, opts){
   if(opts&&opts.sessionId) node.setAttribute('data-session-id',String(opts.sessionId));
   if(live) node.setAttribute('data-live-stream-owned','1');
   return node;
+}
+function _anchorSceneLiveTokenFinalPrefix(row, proseText, finalAnswer){
+  if(!row||row.role!=='prose'||row.kind!=='process_prose') return false;
+  if(String(row.source_event_type||'')!=='token') return false;
+  if(!String(row.local_id||'').startsWith('live-prose:')) return false;
+  const norm=(s)=>String(s||'').replace(/\s+/g,' ').trim().toLowerCase();
+  const rowKey=norm(proseText), finalKey=norm(finalAnswer);
+  return !!(rowKey&&finalKey&&rowKey.length<finalKey.length&&finalKey.startsWith(rowKey));
+}
+function _anchorSceneLastNonTerminalWorkRowIndex(rows){
+  if(!Array.isArray(rows)) return -1;
+  return rows.reduce((last,row,idx)=>(row&&row.role==='tool')?idx:last,-1);
 }
 // Whitespace-insensitive compare so a scene prose row that IS the final answer
 // (possibly re-wrapped) is recognized and not duplicated against the segment.
@@ -11318,10 +12308,25 @@ function _prepareLiveAnchorScrollRebuildGuard(scrollSnapshot){
 }
 function renderLiveAnchorActivityScene(streamId, scene, opts){
   opts=opts||{};
-  if(typeof isTransparentStream==='function'&&isTransparentStream()){
+  const requestedMode=opts.mode;
+  const activeMode=chatActivityMode();
+  // The USER's active activity-display mode is authoritative for what gets
+  // painted. `requestedMode` (opts.mode) is only a fallback hint from callers
+  // that hardcode {mode:'compact_worklog'} (appendLiveToolCard / ensureLiveWorklogShell
+  // / appendLiveCompressionCard, etc.) — it must NEVER override the active mode, or a
+  // transparent_stream turn gets a compact grouped-worklog frame forced onto it. That
+  // regressed #5942 (grouped↔individual alternating) + #5943 (per-tick row rebuild /
+  // flicker) when #5746's requestedMode-precedence landed: the good build always
+  // checked isTransparentStream() FIRST and ignored the hint. Restore active-mode-wins:
+  // honor requestedMode ONLY when there is no usable active mode.
+  const knownMode=(m)=>m==='compact_worklog'||m==='transparent_stream'||m==='hide_all_activity';
+  const sceneMode=knownMode(activeMode)?activeMode:(knownMode(requestedMode)?requestedMode:activeMode);
+  if(sceneMode==='hide_all_activity') return false;
+  if(sceneMode==='transparent_stream'){
     return _renderLiveAnchorActivitySceneTransparent(streamId,scene,opts);
   }
-  if(typeof isCompactWorklogMode==='function'&&!isCompactWorklogMode()) return false;
+  if(typeof isSimplifiedToolCalling==='function'&&!isSimplifiedToolCalling()) return false;
+  if(sceneMode!=='compact_worklog') return false;
   if(!S.session||!S.activeStreamId) return false;
   if(opts.sessionId&&S.session.session_id!==opts.sessionId) return false;
   if(streamId&&S.activeStreamId!==streamId) return false;
@@ -11444,6 +12449,7 @@ function _renderLiveAnchorActivitySceneTransparent(streamId, scene, opts){
   const liveFooter=blocks.querySelector('#liveRunStatus');
   const renderedRows=[];
   for(const row of rows){
+    const rowEventTs=typeof _anchorSceneRowTimestampSeconds==='function'?_anchorSceneRowTimestampSeconds(row):null;
     const node=_anchorSceneTransparentNodeForRow(row,{
       live:true,
       settled:false,
@@ -11454,7 +12460,9 @@ function _renderLiveAnchorActivitySceneTransparent(streamId, scene, opts){
     const key = _transparentLiveRowKey(node, activeStreamId);
     const existing = key ? preserveByKey.get(key) : null;
     const renderedNode = existing && _transparentLiveRowsCompatible(existing, node)
-      ? _refreshTransparentLiveRow(existing, node)
+      ? _refreshTransparentLiveRow(existing, node, {
+        preserveEventAt:!rowEventTs&&existing.getAttribute?existing.getAttribute('data-event-at'):null,
+      })
       : node;
     if(existing) preserveByKey.delete(key);
     if(!renderedNode) continue;
@@ -11577,7 +12585,19 @@ function _refreshTransparentThinkingLiveRow(existing, node){
   const nodePreview = node.querySelector('.transparent-event-thinking-preview');
   const previewText = nodePreview ? String(nodePreview.textContent || '') : nextText;
   if(typeof _decorateTransparentEventRow === 'function'){
-    _decorateTransparentEventRow(existing,{type:'thinking',text:nextText,preview:previewText});
+    const nodeStampSource = node.getAttribute ? String(node.getAttribute('data-event-at-source') || '') : '';
+    const existingStamp = existing.getAttribute ? existing.getAttribute('data-event-at') : null;
+    const nodeStamp = node.getAttribute ? node.getAttribute('data-event-at') : null;
+    const nextStamp = nodeStampSource === 'event'
+      ? (nodeStamp || existingStamp)
+      : (existingStamp || nodeStamp);
+    _decorateTransparentEventRow(existing,{
+      type:'thinking',
+      text:nextText,
+      preview:previewText,
+      ts:nextStamp||undefined,
+      live:true,
+    });
   }
   return true;
 }
@@ -11656,7 +12676,8 @@ function _refreshTransparentFadeProseRow(existing, node, preservedState){
   return existing;
 }
 
-function _refreshTransparentLiveRow(existing, node){
+function _refreshTransparentLiveRow(existing, node, opts){
+  opts=opts||{};
   if(!existing || !node || !existing.getAttribute) return node;
   if(existing===node) return existing;
   const preservedState = _transparentLiveRowInteractiveState(existing);
@@ -11688,12 +12709,20 @@ function _refreshTransparentLiveRow(existing, node){
   const htmlChanged = existing.innerHTML !== newHtml;
   if(htmlChanged) existing.innerHTML = newHtml;
   _rehydrateTransparentLiveRow(existing, node, preservedState);
+  if(opts.preserveEventAt){
+    const header = existing.querySelector ? existing.querySelector('.tool-card-header,.thinking-card-header') : null;
+    if(header) _syncTransparentEventTimestamp(existing, header, {ts:opts.preserveEventAt, live:false});
+  }
   return existing;
 }
 function _renderLiveAnchorActivitySceneForStream(streamId, sessionId, opts){
-  const mode=(typeof isTransparentStream==='function'&&isTransparentStream())
-    ? 'transparent_stream'
-    : ((opts&&opts.mode)||'compact_worklog');
+  const requestedMode=opts&&opts.mode;
+  const activeMode=chatActivityMode();
+  const mode=activeMode==='hide_all_activity'
+    ? 'hide_all_activity'
+    : (requestedMode==='compact_worklog'||requestedMode==='transparent_stream'||requestedMode==='hide_all_activity'
+    ? requestedMode
+    : activeMode);
   const scene=_projectLiveAnchorActivitySceneForStream(streamId,mode);
   if(!scene) return false;
   return renderLiveAnchorActivityScene(streamId,scene,{...(opts||{}),sessionId});
@@ -11733,6 +12762,23 @@ function _anchorSceneSceneHasWorklogWorthyRows(scene){
   }
   return false;
 }
+// #5941: an errored/failed turn's terminal_state. A turn that ended in a
+// provider/agent failure but which DID produce assistant content (tool calls,
+// reasoning) still folds that content into a collapsed worklog above the error
+// card — so the user reads a lone error bubble as "nothing came back", even
+// though the real response is one click away. These are the terminal states
+// that must keep the produced content VISIBLE by default. `completed` (normal
+// turn) and null are deliberately excluded, and `cancelled`/`interrupted`
+// (user-initiated stops with their own dedicated cards + #5224 transcript
+// preservation) are left to their existing behavior — this is scoped to the
+// error/failure family the report is about.
+const _ANCHOR_SCENE_ERRORED_TERMINAL_STATES=new Set([
+  'error','no_response','degraded','connection_lost','tool_limit_reached','compression_exhausted',
+]);
+function _anchorSceneHasErroredTerminalState(scene){
+  const state=String(scene&&scene.terminal_state||'').trim().toLowerCase();
+  return _ANCHOR_SCENE_ERRORED_TERMINAL_STATES.has(state);
+}
 function _renderSettledAnchorSceneTransparentForMessage(message, segment, rawIdx){
   if(!message||!message._anchor_activity_scene||!segment) return false;
   if(!_anchorSceneSceneHasWorklogWorthyRows(message._anchor_activity_scene)) return false;
@@ -11741,6 +12787,7 @@ function _renderSettledAnchorSceneTransparentForMessage(message, segment, rawIdx
   const scene=message._anchor_activity_scene;
   const rows=_anchorSceneRowsForRendering(scene,{settled:true});
   if(!rows.length) return false;
+  const lastNonTerminalWorkRowIndex=_anchorSceneLastNonTerminalWorkRowIndex(rows);
   // The assistant segment owns the final answer; pass it so intermediate prose
   // rows render but the final-answer-duplicate prose row is suppressed.
   const finalAnswer=String(
@@ -11750,6 +12797,7 @@ function _renderSettledAnchorSceneTransparentForMessage(message, segment, rawIdx
     || ''
   );
   blocks.querySelectorAll('[data-anchor-settled-scene-row="1"],.transparent-event-row[data-anchor-scene-row="1"]').forEach(el=>el.remove());
+  blocks.querySelectorAll('.transparent-earlier-steps[data-anchor-earlier-steps="1"]').forEach(el=>el.remove());
   blocks.querySelectorAll('.assistant-segment[data-msg-idx]').forEach(node=>{
     const idx=Number(node.getAttribute('data-msg-idx'));
     if(Number.isFinite(idx)&&idx<rawIdx){
@@ -11758,19 +12806,189 @@ function _renderSettledAnchorSceneTransparentForMessage(message, segment, rawIdx
       node.hidden=true;
     }
   });
-  let wrote=false;
-  for(const row of rows){
-    const node=_anchorSceneTransparentNodeForRow(row,{settled:true,finalAnswer});
-    if(!node) continue;
+  // #5966: per-turn row cap. A reasoning-heavy settled turn can carry hundreds of
+  // activity rows; rendering them all inline is the node-count half of the
+  // Transparent-Stream memory blowup (detail-deferral above handles per-row
+  // weight). Render only the last _TRANSPARENT_SETTLED_ROW_CAP rows and, when the
+  // turn exceeds cap + slack, prepend a single "Show earlier steps (N)" affordance
+  // that materializes the omitted prefix in place on click. Two exemptions keep
+  // behavior identical where a cap would be wrong or unhelpful:
+  //   • the JUST-SETTLED turn (its stream id matches the keep-open token) renders
+  //     in full — capping it at STREAM_DONE would shrink the transcript and cause
+  //     the backward-jump the keep-open token exists to prevent;
+  //   • a turn already revealed this session (data flag) stays fully rendered
+  //     across ordinary rebuilds / virtualize-out+in cycles.
+  const turnEl=segment.closest('.assistant-turn');
+  const streamId=String(message._anchor_stream_id||scene.stream_id||(scene.identity&&scene.identity.stream_id)||'');
+  const justSettled=_shouldKeepSettledWorklogOpenForStreamSettle(streamId);
+  // #5966 (Codex F3): revealed-state is authoritative from the persistent set
+  // (survives cache round-trip / rebuild / switch-away), with the DOM flag as a
+  // same-render fast path.
+  const revealKey=_transparentRevealKey(S.session&&S.session.session_id, rawIdx);
+  const alreadyRevealed=_transparentRevealedTurns.has(revealKey)
+    || !!(turnEl&&turnEl.getAttribute('data-transparent-earlier-revealed')==='1');
+  const cap=_TRANSPARENT_SETTLED_ROW_CAP;
+  const slack=_TRANSPARENT_SETTLED_ROW_CAP_SLACK;
+  let startIdx=0;
+  if(!justSettled&&!alreadyRevealed&&rows.length>cap+slack){
+    startIdx=rows.length-cap;
+  }
+  // Stash the TRUE tool-row count so "Trace: N tools" reflects the whole run even
+  // while the prefix is capped; cleared on full reveal. (uncapped → remove it.)
+  if(turnEl){
+    if(startIdx>0){
+      const totalTools=rows.filter(r=>String(r.role||'')==='tool').length;
+      turnEl.setAttribute('data-transparent-total-tool-count',String(totalTools));
+    }else{
+      turnEl.removeAttribute('data-transparent-total-tool-count');
+    }
+  }
+  const renderRowAt=(idx)=>{
+    const row=rows[idx];
+    const node=_anchorSceneTransparentNodeForRow(row,{settled:true,finalAnswer,liveTokenFinalPrefixEligible:idx>lastNonTerminalWorkRowIndex});
+    if(!node) return null;
+    // #5966 (Codex F2): stamp the OWNER message index so cache-round-trip recovery
+    // resolves the correct scene in a multi-segment turn (the scene owner is often
+    // NOT the turn's first assistant segment).
+    node.setAttribute('data-anchor-owner-idx',String(rawIdx));
     if(segment.parentElement===blocks) blocks.insertBefore(node,segment);
     else blocks.appendChild(node);
+    return node;
+  };
+  let wrote=false;
+  // The "Show earlier steps" affordance sits ABOVE the retained rows (chronology:
+  // the hidden steps came first). Insert it before rendering the retained tail so
+  // it lands at the top of this turn's activity run.
+  if(startIdx>0){
+    const earlier=_buildTransparentEarlierStepsAffordance(startIdx);
+    earlier.setAttribute('data-anchor-owner-idx',String(rawIdx));
+    if(segment.parentElement===blocks) blocks.insertBefore(earlier,segment);
+    else blocks.appendChild(earlier);
+    // Reveal handler: materialize the omitted prefix in place, holding the reader's
+    // viewport on the clicked affordance (insert grows content ABOVE it).
+    earlier.addEventListener('click',()=>{
+      _revealTransparentEarlierSteps(message,segment,rawIdx,earlier);
+    });
     wrote=true;
+  }
+  for(let idx=startIdx;idx<rows.length;idx+=1){
+    if(renderRowAt(idx)) wrote=true;
   }
   if(wrote){
     const turn=segment.closest('.assistant-turn');
     if(turn) _syncTransparentEventControls(turn);
   }
   return wrote;
+}
+// #5966 tunables. Cap chosen so a normal multi-tool turn (a handful to a couple
+// dozen rows) is NEVER capped — only genuinely long reasoning runs are. Slack
+// prevents a "Show 3 earlier steps" stub: only cap when the omitted prefix is
+// worth its own row.
+const _TRANSPARENT_SETTLED_ROW_CAP=30;
+const _TRANSPARENT_SETTLED_ROW_CAP_SLACK=10;
+// t() returns the key name itself for an unknown key, so `t(k)||literal` doesn't
+// fall back. This resolves via t() only when the key is genuinely defined,
+// otherwise uses the English literal — keeping the label correct before the
+// locale keys are present in every bundle. (Fable UX i18n fast-follow.)
+function _tOrDefault(key, literal, ...args){
+  try{
+    if(typeof t==='function'){
+      const v=t(key, ...args);
+      if(v && v!==key) return v;
+    }
+  }catch(_){ }
+  return literal;
+}
+// A clean, in-flow affordance styled on the existing "Load earlier messages"
+// pill (same visual language, so it reads as native). Shows the exact hidden
+// count; the pill is the click target with a leading up-chevron.
+function _buildTransparentEarlierStepsAffordance(hiddenCount){
+  const el=document.createElement('div');
+  el.className='transparent-earlier-steps';
+  el.setAttribute('data-anchor-earlier-steps','1');
+  el.setAttribute('data-anchor-scene-row','1');
+  el.setAttribute('data-anchor-settled-scene-row','1');
+  el.setAttribute('role','button');
+  el.setAttribute('tabindex','0');
+  el.setAttribute('data-earlier-count',String(hiddenCount));
+  // i18n with English fallback, matching the sibling "Expand all"/"Collapse all"
+  // controls' t() pattern. Keys live in the en locale (i18n.js); t() falls back to
+  // en for other locales and to the key name if absent — so guard with a literal.
+  const label=hiddenCount===1
+    ? _tOrDefault('show_earlier_step_one','Show 1 earlier step')
+    : _tOrDefault('show_earlier_steps','Show '+hiddenCount+' earlier steps',hiddenCount);
+  el.setAttribute('aria-label',label);
+  el.innerHTML=`<span class="transparent-earlier-steps-chevron">${li('chevron-up',13)}</span><span class="transparent-earlier-steps-label">${esc(label)}</span>`;
+  el.addEventListener('keydown',(ev)=>{
+    if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); el.click(); }
+  });
+  return el;
+}
+// Materialize the omitted prefix rows for a capped settled transparent turn,
+// preserving the reader's viewport position (rows are inserted ABOVE the clicked
+// affordance, so without compensation the content below would jump down).
+function _revealTransparentEarlierSteps(message, segment, rawIdx, affordanceEl){
+  const turnEl=segment.closest('.assistant-turn');
+  // #5966 (Codex F3): record the reveal in the PERSISTENT set (survives rebuild /
+  // switch-away / cache round-trip) and invalidate this session's cached HTML so
+  // the stored markup isn't re-served stale-capped.
+  const revealKey=_transparentRevealKey(S.session&&S.session.session_id, rawIdx);
+  _transparentRevealedTurns.add(revealKey);
+  try{
+    const sid=S.session&&S.session.session_id;
+    if(sid&&_sessionHtmlCache&&typeof _sessionHtmlCache.delete==='function') _sessionHtmlCache.delete(sid);
+  }catch(_){ }
+  if(turnEl){
+    turnEl.setAttribute('data-transparent-earlier-revealed','1');
+    // Full run now mounted → drop the capped-count stash so the Trace label
+    // recomputes from the (now complete) DOM.
+    turnEl.removeAttribute('data-transparent-total-tool-count');
+  }
+  const msgsEl=$('messages');
+  const prevScrollTop=msgsEl?msgsEl.scrollTop:0;
+  const prevScrollHeight=msgsEl?msgsEl.scrollHeight:0;
+  const scene=message&&message._anchor_activity_scene;
+  const blocks=_assistantTurnBlocks(turnEl);
+  if(!scene||!blocks){ if(affordanceEl) affordanceEl.remove(); return; }
+  const rows=_anchorSceneRowsForRendering(scene,{settled:true})||[];
+  const lastNonTerminalWorkRowIndex=_anchorSceneLastNonTerminalWorkRowIndex(rows);
+  const finalAnswer=String(
+    (scene&&typeof scene.final_answer==='string'&&scene.final_answer)
+    || _assistantAnchorSceneFinalAnswerText(message)
+    || (typeof msgContent==='function'?msgContent(message):'')
+    || ''
+  );
+  // The affordance's data-count tells us how many prefix rows to build (the rows
+  // rendered on the initial pass are the tail after that index).
+  const hidden=Number(affordanceEl&&affordanceEl.getAttribute('data-earlier-count'))||0;
+  const stopIdx=hidden>0?hidden:_computeTransparentHiddenPrefixCount(rows);
+  const frag=document.createDocumentFragment();
+  for(let idx=0;idx<stopIdx;idx+=1){
+    const node=_anchorSceneTransparentNodeForRow(rows[idx],{settled:true,finalAnswer,liveTokenFinalPrefixEligible:idx>lastNonTerminalWorkRowIndex});
+    if(node){ node.setAttribute('data-earlier-revealed','1'); frag.appendChild(node); }
+  }
+  // Insert the prefix where the affordance sits, then drop the affordance.
+  if(affordanceEl&&affordanceEl.parentElement===blocks){
+    blocks.insertBefore(frag,affordanceEl);
+    affordanceEl.remove();
+  }else{
+    blocks.appendChild(frag);
+  }
+  if(turnEl) _syncTransparentEventControls(turnEl);
+  // Hold the reader's position: rows landed above the old affordance point, so
+  // add the height delta to scrollTop (the app's own load-earlier idiom).
+  if(msgsEl){
+    const delta=msgsEl.scrollHeight-prevScrollHeight;
+    msgsEl.scrollTop=prevScrollTop+delta;
+  }
+}
+// The initial capped render omits rows[0 .. rows.length-cap-1]; recompute that
+// prefix length from the current scene so the reveal is exact even if the count
+// attribute is missing (cache round-trip).
+function _computeTransparentHiddenPrefixCount(rows){
+  const cap=_TRANSPARENT_SETTLED_ROW_CAP;
+  const slack=_TRANSPARENT_SETTLED_ROW_CAP_SLACK;
+  return (rows.length>cap+slack)?(rows.length-cap):0;
 }
 // One-shot token: the stream id of the turn that JUST settled at STREAM_DONE.
 // The keep-open exception applies to ONLY this one turn's settled render, then
@@ -11856,6 +13074,19 @@ function _renderSettledAnchorSceneForMessage(message, segment, rawIdx){
   if(streamId&&!_readActivityDisclosureState(activityKey)){
     _copyActivityDisclosureState(`live:${streamId}`, activityKey);
   }
+  // #5941: an errored turn that produced assistant content (tool calls /
+  // reasoning) must not hide that content behind a collapsed header — the user
+  // reads a lone error card as "nothing came back". When the settled scene's
+  // terminal_state is an error/failure (NOT a normal completion) keep the
+  // worklog EXPANDED by default so the produced response stays visible. This
+  // path is only reached for worklog-worthy scenes (the guard at the top
+  // requires >=1 tool/thinking/compression row), so a genuinely-empty errored
+  // turn — a real no_response with zero produced content — never gets here and
+  // still shows only its error card, no phantom empty body. A user who has
+  // explicitly collapsed THIS turn's worklog (saved 'closed' disclosure state)
+  // is still respected, so the default-open never fights an intentional collapse.
+  const erroredWorklogKeepOpen=_anchorSceneHasErroredTerminalState(scene)
+    && _readActivityDisclosureState(activityKey)!=='closed';
   // keepSettledWorklogOpen forces collapsed:false for the ONE height-stable settle
   // render of the just-settled turn (no STREAM_DONE shrink jump) for both pinned
   // followers AND unpinned mid-turn readers. The keep-open is made genuinely
@@ -11867,7 +13098,7 @@ function _renderSettledAnchorSceneForMessage(message, segment, rawIdx){
   // (_isKeepSettledWorklogOpenArmed), so it never persists across restores.
   const group=_anchorSceneWorklogGroup(blocks,{
     live:false,
-    collapsed:!keepSettledWorklogOpen,
+    collapsed:!(keepSettledWorklogOpen||erroredWorklogKeepOpen),
     beforeAnchor:true,
     anchor:segment,
     activityKey,
@@ -11876,6 +13107,24 @@ function _renderSettledAnchorSceneForMessage(message, segment, rawIdx){
   });
   if(!group) return false;
   group.setAttribute('data-anchor-settled-scene-owner','1');
+  // #5839: for a COLLAPSED settled worklog, defer building the row DOM until the
+  // user first expands it. A reasoning-heavy turn can carry 80+ activity rows;
+  // eagerly materializing them for every historical turn balloons the DOM and a
+  // later synchronous layout (e.g. opening a dropdown) tips the tab into a
+  // multi-GB freeze. The summary chip renders from data-turn-duration, not the
+  // rows, so a deferred worklog still shows its "Processed in Xs" label. On
+  // expand, _toggleActivityGroup materializes the stashed rows exactly once.
+  const collapsed=group.classList.contains('tool-call-group-collapsed');
+  if(collapsed){
+    group._deferredWorklogRows=rows;
+    group.setAttribute('data-worklog-rows-deferred','1');
+    const list=_toolWorklogListEl(group);
+    if(list) list.innerHTML='';
+    _syncToolCallGroupSummary(group);
+    return true;
+  }
+  group._deferredWorklogRows=null;
+  group.removeAttribute('data-worklog-rows-deferred');
   return _renderAnchorSceneRowsIntoWorklog(group,rows,{settled:true});
 }
 function _syncLiveWorklogReasonsForAnchor(anchor, displayTextOverride){
@@ -12378,7 +13627,7 @@ function _compressionCardsNode(state){
 function appendLiveCompressionCard(state){
   if(!S.session||!S.activeStreamId||!state) return false;
   if(isLiveAnchorActivitySceneOwner(S.activeStreamId)){
-    return _renderLiveAnchorActivitySceneForStream(S.activeStreamId, S.session.session_id, {mode:'compact_worklog'});
+    return _renderLiveAnchorActivitySceneForStream(S.activeStreamId, S.session.session_id);
   }
   const scrollSnapshot=_captureMessageScrollSnapshot();
   let turn=$('liveAssistantTurn');
@@ -12796,6 +14045,16 @@ function renderCompressionUi(){
 // in-session updates (new messages, edits, stream events).
 const _sessionHtmlCache=new Map();
 let _sessionHtmlCacheSid=null; // session_id currently rendered in the DOM
+// #5966 (Codex F3): persist which capped Transparent-Stream turns the user has
+// revealed, keyed by `${session_id}:${ownerRawIdx}`, so a switch-away/back or a
+// normal rebuild does NOT silently re-cap a turn the user already expanded. The
+// DOM `data-transparent-earlier-revealed` flag alone is lost across the
+// _sessionHtmlCache innerHTML round-trip; this survives it. Reveal also
+// invalidates that session's cached HTML so the stored markup isn't stale-capped.
+const _transparentRevealedTurns=new Set();
+function _transparentRevealKey(sessionId, ownerIdx){
+  return String(sessionId||(S.session&&S.session.session_id)||'')+':'+String(ownerIdx);
+}
 function clearMessageRenderCache(){
   _clearRenderCache();
   _sessionHtmlCache.clear();
@@ -13222,6 +14481,43 @@ window._fixMobileScrollJank=function _fixMobileScrollJank(){
   });
 };
 
+// Desktop stale-snapshot residue (issue #5637 follow-up). Reached only when
+// _restoreMessageViewportAnchor already CONCEDED (anchor row unrecoverable by its
+// per-tier lookup) and the desktop fallback would otherwise write the ABSOLUTE
+// snapshot.top — which is stale once above-viewport content grew since capture,
+// yanking a still reader backward. The correct hold is the app's own realign
+// idiom: shift the CURRENT scrollTop by how far the anchor row moved since capture,
+// `scrollTop += (currentOffset - capturedOffset)` (mirrors _restoreMessageViewportAnchor
+// ui.js and _compensateScrollForMeasurementDelta). NOT `snapshot.top + delta`: a
+// row's offset is scroll-relative (rect.top - containerRect.top = rowContentPos -
+// scrollTop), so only a delta applied to the LIVE scrollTop holds the row put
+// regardless of where scrollTop was carried to. Returns the realign delta (may be
+// 0), or null when the anchor row can't be measured under the SAME per-tier guard
+// _restoreMessageViewportAnchor uses (key -> sessionIdx, never the rawIdx
+// degradation — rawIdx maps to a different message after a virtualization
+// re-window, ui.js per-tier guard) so the caller can fall back to the topPad-delta
+// idiom or keep raw rather than guessing.
+function _desktopAnchorRealignDelta(container, anchor){
+  if(!container||!anchor||typeof container.querySelector!=='function') return null;
+  const capturedOffset=Number(anchor.topOffset);
+  if(!Number.isFinite(capturedOffset)) return null;
+  const anchorKey=String(anchor.key||'');
+  let row=anchorKey
+    ? Array.from(container.querySelectorAll('[data-message-anchor-key]')).find(el=>el&&el.dataset&&el.dataset.messageAnchorKey===anchorKey)
+    : null;
+  if(row&&row.getClientRects&&row.getClientRects().length===0) row=null;
+  const sessionIdx=Number(anchor.sessionIdx);
+  if(!row&&Number.isFinite(sessionIdx)) row=container.querySelector(`[data-session-msg-idx="${sessionIdx}"]`);
+  // Per-tier guard mirror (ui.js _restoreMessageViewportAnchor): a genuinely-gone
+  // anchor misses key AND sessionIdx -> concede (null). Do NOT degrade to rawIdx.
+  if(!row) return null;
+  if(typeof row.getBoundingClientRect!=='function') return null;
+  if(row.getClientRects&&row.getClientRects().length===0) return null;
+  const containerRect=container.getBoundingClientRect();
+  const rect=row.getBoundingClientRect();
+  const currentOffset=rect.top-containerRect.top;
+  return currentOffset-capturedOffset;
+}
 function _restoreMessageScrollSnapshotSameFrame(snapshot){
   const el=$('messages');
   if(!el||!snapshot) return;
@@ -13259,8 +14555,76 @@ function _restoreMessageScrollSnapshotSameFrame(snapshot){
     const target=(snapshot.pinned===true&&Number.isFinite(bottom))
       ? maxTop-Math.max(0,bottom)
       : Number(snapshot.top)||0;
+    // Streaming stale-snapshot guard (issue #5637). The userUnpinned check above is
+    // defeated when a live stream re-pins the state machine (a scrollHeight-collapse
+    // scroll event flips userUnpinned back to false even though the reader is up in
+    // history), so this absolute snapshot.top write still fires and yanks a still
+    // reader — snapshot.top was captured before the streaming chunk grew above-viewport
+    // height, so it is stale. Mirror the realign guard: if content grew since the
+    // snapshot AND there is no recent real input intent AND the write would move
+    // scrollTop non-trivially, refuse it and let the browser overflow-anchor hold.
+    // Pinned tail-followers (target is bottom-relative, not snapshot.top) are
+    // unaffected; an actively scrolling reader has intent and keeps the restore.
+    //
+    // Desktop guard (issue #5637 gate cert): like the realign guard, this refusal
+    // only holds where the browser's native overflow-anchor layer is active (touch
+    // viewports, `.messages` computes to `overflow-anchor:auto`). Desktop `.messages`
+    // is `overflow-anchor:none`, so refusing the absolute fallback write there would
+    // leave the reader unheld AND latch `_messageUserUnpinned=true`. Gate on
+    // `_isTouchLikeMessageViewport` so desktop keeps its absolute snapshot.top restore.
+    const _snapSH=Number(snapshot.scrollHeight);
+    const _grewSinceSnap=Number.isFinite(_snapSH)&&_snapSH>0&&(el.scrollHeight-_snapSH)>4;
+    const _fbActiveIntent=(typeof _recentMessageScrollIntent==='function' && _recentMessageScrollIntent())
+      || (typeof _recentMessageTouchScrollIntent==='function' && _recentMessageTouchScrollIntent());
+    const _fbTouchHold=(typeof _isTouchLikeMessageViewport==='function' && _isTouchLikeMessageViewport(el));
+    if(_fbTouchHold && snapshot.pinned!==true && _grewSinceSnap && !_fbActiveIntent
+       && Math.abs((Math.max(0,Math.min(target,maxTop)))-el.scrollTop)>8){
+      _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
+      _messageUserUnpinned=true;
+      _scrollPinned=false;
+      _nearBottomCount=0;
+      return;
+    }
+    // Desktop stale-snapshot residue fix (issue #5637 follow-up, PR #5742 round-3).
+    // On desktop (overflow-anchor:none) the touch refusal above does NOT apply — the
+    // reader must be actively held, so we write scrollTop. The ABSOLUTE snapshot.top is
+    // stale once above-viewport content grew since capture. Use the app's own realign
+    // idiom instead: shift the CURRENT scrollTop by how far the anchor row moved since
+    // capture. `scrollTop += (currentOffset - capturedOffset)` holds the row put no
+    // matter where scrollTop was carried (a row's offset is scroll-relative), which the
+    // staged `snapshot.top + delta` cannot. No arbiter: the realign is a no-op when
+    // already aligned (delta ~ 0) and heals when not. Only when the anchor row is
+    // genuinely gone (per-tier lookup concedes, no rawIdx degradation) do we fall back
+    // to the topPad-delta idiom, then to raw. Pinned/near-bottom readers took the
+    // bottom-relative target above and never reach here as unpinned.
+    let _fbTarget=Math.max(0,Math.min(target,maxTop));
+    if(!_fbTouchHold && snapshot.pinned!==true){
+      const _realign=_desktopAnchorRealignDelta(el, snapshot.anchor);
+      if(_realign!==null){
+        // Anchor row measurable: realign from the LIVE scrollTop (app idiom).
+        _fbTarget=Math.max(0,Math.min(el.scrollTop+_realign, maxTop));
+      }else{
+        // Anchor row genuinely gone. Mirror the topPad-delta idiom the anchor already
+        // carries (topPadBefore): shift by the growth of the virtual top spacer since
+        // capture so the reader is held by the same amount the content above moved.
+        const _padNow=(function(){
+          const s=el.querySelector('[data-virtual-spacer="before"]');
+          return s?(parseFloat(s.style.height||'0')||0):NaN;
+        })();
+        const _padBeforeRaw=snapshot.anchor&&snapshot.anchor.topPadBefore;
+        const _padBefore=Number(_padBeforeRaw);
+        // Require an ACTUAL captured topPadBefore (not null/undefined): Number(null) is 0,
+        // which would otherwise add the ENTIRE current spacer height to scrollTop and fling
+        // the reader far from their content (greptile P1). Only apply when it was really
+        // captured; else keep the raw fallback target.
+        if(_padBeforeRaw!=null&&Number.isFinite(_padNow)&&Number.isFinite(_padBefore)){
+          _fbTarget=Math.max(0,Math.min(el.scrollTop+(_padNow-_padBefore), maxTop));
+        }
+        // else: no measurable anchor and no topPad geometry -> keep raw target.
+      }
+    }
     _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
-    el.scrollTop=Math.max(0,Math.min(target,maxTop));
+    el.scrollTop=_fbTarget;
   }
   _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
   if(snapshot.pinned===true){
@@ -13288,6 +14652,9 @@ function _transparentStreamOrderedParts(message){
   if(!message||message.role!=='assistant'||message._live||!Array.isArray(message.content)) return null;
   if(message._anchor_activity_scene) return null;
   const ordered=[];
+  const messageTs=typeof _firstValidTimestampSeconds==='function'
+    ? _firstValidTimestampSeconds(message._ts, message.timestamp, message.created_at)
+    : (message._ts||message.timestamp||message.created_at);
   let hasText=false;
   let hasTool=false;
   for(const part of message.content){
@@ -13307,6 +14674,10 @@ function _transparentStreamOrderedParts(message){
         toolUseId,
         name:part.name||'tool',
         input:(part.input&&typeof part.input==='object')?part.input:{},
+        ts:part.ts,
+        timestamp:part.timestamp,
+        created_at:part.created_at,
+        message_ts:messageTs,
       });
       hasTool=true;
     }
@@ -13352,11 +14723,29 @@ function _collectToolResultSnippetsByTid(messages){
   }
   return resultsByTid;
 }
-function _transparentOrderedToolCall(part, rawIdx, toolCallsByTid, resultsByTid, persistedByTid){
+function _transparentOrderedToolCall(part, rawIdx, toolCallsByTid, resultsByTid, persistedByTid, messageTs){
   const tid=String(part&&part.toolUseId||'').trim();
+  const firstValidTimestampSeconds=typeof _firstValidTimestampSeconds==='function'
+    ? _firstValidTimestampSeconds
+    : function(...values){
+        for(const value of values){
+          const stamp=Number(value);
+          if(Number.isFinite(stamp)&&stamp>0) return stamp>1e12?stamp/1000:stamp;
+        }
+        return null;
+      };
+  const messageStamp=firstValidTimestampSeconds(messageTs, part&&part.message_ts);
+  const partStamp=firstValidTimestampSeconds(part&&part.ts, part&&part.timestamp, part&&part.created_at);
   const liveTool=tid&&toolCallsByTid&&toolCallsByTid.get(tid);
   if(liveTool){
     const next={...liveTool};
+    const hasEventStamp=firstValidTimestampSeconds(next.ts, next.timestamp, next.created_at, next.started_at, next.completed_at);
+    const fallbackStamp=partStamp||messageStamp;
+    if(!hasEventStamp&&fallbackStamp){
+      next.ts=fallbackStamp;
+      next.timestamp=fallbackStamp;
+      next.created_at=fallbackStamp;
+    }
     const liveSnip=(resultsByTid&&resultsByTid[tid])||(persistedByTid&&persistedByTid[tid])||'';
     if(liveSnip){
       const patchSnippet=_cliPatchSnippetFromArgs(next.name||part.name||'tool', next.args||part.input||{});
@@ -13370,6 +14759,8 @@ function _transparentOrderedToolCall(part, rawIdx, toolCallsByTid, resultsByTid,
   const args=(part&&part.input&&typeof part.input==='object')?part.input:{};
   const patchSnippet=_cliPatchSnippetFromArgs(name,args);
   const resultSnippet=(resultsByTid&&tid&&resultsByTid[tid])||(persistedByTid&&tid&&persistedByTid[tid])||'';
+  const fallbackStamp=partStamp||messageStamp;
+  const primaryStamp=firstValidTimestampSeconds(part&&part.ts, part&&part.timestamp, part&&part.created_at, fallbackStamp);
   return {
     name,
     tid,
@@ -13379,6 +14770,9 @@ function _transparentOrderedToolCall(part, rawIdx, toolCallsByTid, resultsByTid,
     snippet:_cliToolCardSnippet(resultSnippet,patchSnippet),
     is_diff:_cliToolCardHasDiffSnippet(resultSnippet,patchSnippet),
     done:true,
+    ts:primaryStamp||undefined,
+    timestamp:primaryStamp||undefined,
+    created_at:primaryStamp||undefined,
   };
 }
 function _assistantTurnAnchorSettledFinalAnswer(message, content, context){
@@ -13400,6 +14794,36 @@ function _assistantTurnAnchorSettledFinalAnswer(message, content, context){
       console.warn('assistant turn anchor settled-final projection failed',err);
     }
     return null;
+  }
+}
+// Re-anchor a pinned/tail-following reader to the settled bottom after a full
+// renderMessages() rebuild, eliminating the one-frame mid-stream jitter. MUST be scheduled
+// in a MICROTASK from the end of renderMessages (see the queueMicrotask call site), NOT run
+// synchronously. Why: the mid-stream re-render bug is that renderMessages wipes #msgInner
+// then rebuilds, and the pinned tail-follow path (scrollIfPinned → scrollToBottom) writes
+// scrollTop while still INSIDE the render sync stack, where the browser reports a TRANSIENT
+// scrollHeight a few px short of the settled value (layout is batched — every geometry read
+// inside the sync stack returns the mid-settle height). So scrollToBottom lands scrollTop a
+// little HIGH (short of the true tail); that intermediate is painted this frame and the
+// settle rAF corrects it the next frame → a fast ~1-row back-and-forth bounce (~82px). A
+// microtask runs AFTER the sync stack unwinds (layout has flushed, so scrollHeight/clientHeight
+// are the settled values) but BEFORE the browser paints — so writing the now-correct settled
+// max here lands the tail exactly and the short intermediate never reaches the screen. Only
+// fires for a pre-wipe tail-follower left short of the settled max, so an unpinned reader
+// parked in history is never moved (orthogonal to the unpinned jump-back class). The
+// _programmaticScroll latch (armed at the wipe) keeps the scroll listener from misreading
+// this write as a manual unpin. Idempotent: a no-op once scrollTop already equals the max.
+function _reanchorPinnedTailAfterRender(wasNearTail){
+  if(!wasNearTail) return;
+  const el=$('messages');
+  if(!el) return;
+  const settledMax=Math.max(0, el.scrollHeight-el.clientHeight);
+  if(el.scrollTop < settledMax-1){
+    _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+    el.scrollTop=settledMax;
+    _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
+    _nearBottomCount=2;
+    _scrollPinned=true;
   }
 }
 function _scrollAfterMessageRender(preserveScroll, scrollSnapshot){
@@ -13427,6 +14851,22 @@ function _scrollAfterMessageRender(preserveScroll, scrollSnapshot){
     return;
   }
   if(S.activeStreamId){
+    // Mid-stream re-render (tool completion, activity-scene refresh, clarify echo).
+    // renderMessages() wipes #msgInner (inner.innerHTML='') then rebuilds; that wipe
+    // collapses scrollHeight toward the empty-table height, and the browser is FORCED
+    // to clamp #messages.scrollTop down to the new (near-zero) max. For a reader who
+    // scrolled UP into history (unpinned), scrollIfPinned() is a no-op — so it does NOT
+    // undo that clamp, and the reader is stranded at the top (the scroll jump-back). The
+    // wipe-to-empty clamp is a browser primitive (device-agnostic; JS never writes the
+    // scrollTop), so the passive no-op cannot preserve position here. renderMessages()
+    // captured a pre-wipe snapshot for exactly this case (its scrollSnapshot init fires
+    // when _messageUserUnpinned), so restore the unpinned reader's viewport instead of
+    // the no-op. Pinned/tail-following readers keep scrollIfPinned() (correct live-follow).
+    if(_messageUserUnpinned && scrollSnapshot){
+      _restoreMessageScrollSnapshot(scrollSnapshot);
+      _maybeShowNewMessageScrollCue(scrollSnapshot);
+      return;
+    }
     scrollIfPinned();
     return;
   }
@@ -13515,6 +14955,7 @@ function renderMessages(options){
       _messageVirtualWindowKey=renderWindowKey;
       _sessionHtmlCacheSid=sid;
       _rehydrateTransparentStreamDom(inner);
+      _rehydrateDeferredWorklogsFromCache(inner);
       _wireMessageWindowLoadEarlierButton();
       if(typeof _applySessionNavigationPrefs==='function') _applySessionNavigationPrefs();
       _scrollAfterMessageRender(preserveScroll, scrollSnapshot);
@@ -13595,6 +15036,29 @@ function renderMessages(options){
   // Mobile scroll-jank fix: temporarily disable overflow-anchor so Chromium
   // cannot re-anchor to the topmost row during the DOM wipe-and-rebuild gap.
   if(window._fixMobileScrollJank) window._fixMobileScrollJank();
+  // Capture whether the reader was at/near the tail BEFORE the wipe. A tail-follower
+  // hit by a mid-stream re-render gets a one-frame jitter: the wipe+rebuild lands the
+  // sync scrollTop write against a transient layout whose above-viewport height is a
+  // few px short of the settled value, so the browser clamps scrollTop a little high;
+  // the settle rAF corrects it the next frame, producing a fast ~1-row back-and-forth
+  // bounce. We remember the pre-wipe near-tail state here (geometry, not closure pin
+  // flags — the wipe's clamp scroll event can transiently perturb those) so the tail
+  // of renderMessages can re-anchor to the settled bottom before the intermediate is
+  // painted. See _reanchorPinnedTailAfterRender + its queueMicrotask call site.
+  const _preWipeNearTail=(()=>{
+    const _m=$('messages');
+    if(!_m) return false;
+    return (_m.scrollHeight-_m.scrollTop-_m.clientHeight)<=8;
+  })();
+  // Pre-wipe capture: read the still-laid-out user rows' REAL heights before the wipe below
+  // destroys them, and persist so the rebuild reserves the real off-screen height. This is
+  // the non-virtualized analog of #5638's virtualized measure pass (which never runs when
+  // _virtualizeTranscript===false). Without it, a fresh off-screen tall user row reserves
+  // only the flat contain-intrinsic-size estimate, scrollHeight shrinks, and the browser
+  // clamps scrollTop → the jump-back. Reading pre-wipe (not post-render) is what makes the
+  // measurement reliable — the old elements have painted, so their rect height is real even
+  // off-screen; a post-render read of a fresh off-screen row returns its collapsed reserve.
+  if(typeof _rememberRenderedUserRowIntrinsicHeights==='function') _rememberRenderedUserRowIntrinsicHeights();
   // The DOM wipe can briefly collapse #msgInner to zero height, causing the
   // browser to clamp #messages.scrollTop to 0 and emit a scroll event.  That
   // event is a render artifact, not user intent; if the scroll listener sees it
@@ -13851,11 +15315,13 @@ function renderMessages(options){
         }
       }
     }
+    const isProcessWakeup=m&&m._source==='process_wakeup';
     const isUser=m.role==='user';
     if(!isUser&&_isMarkerOnlyAssistantCompressionMessage(m)){
       content='**Error:** No response received after context compression. Please retry.';
     }
     const displayContent=isUser?_stripAttachedFilesMarkerForDisplay(_stripWorkspaceDisplayPrefix(content)):content;
+    const rowDisplayContent=displayContent;
     if(!isUser&&_isAssistantEmptyPlaceholderContent(m, displayContent)){
       content='';
     }
@@ -13925,6 +15391,42 @@ function renderMessages(options){
       continue;
     }
 
+    if(isProcessWakeup){
+      currentAssistantTurn=null;
+      let row=_msgNodeRecycleEnabled?_recycleStash.get(rawIdx):null;
+      if(row&&(!row.classList.contains('msg-row')||row.classList.contains('assistant-turn'))) row=null;
+      const processText=String(rowDisplayContent||'').trim();
+      const processFootHtml=`<div class="msg-foot">${timeHtml}<span class="msg-actions">${copyBtn}</span></div>`;
+      const processTextHtml=processText?`<pre class="process-wakeup-text">${esc(processText)}</pre>`:'';
+      const nextRowHtml=`<div class="process-wakeup-notice"><div class="process-wakeup-label">${li('terminal',13)}<span>${esc(t('process_wakeup_label'))}</span></div>${filesHtml}<div class="msg-body process-wakeup-body">${processTextHtml}</div>${processFootHtml}</div>`;
+      if(row){
+        row.className='msg-row process-wakeup-row';
+        row.id=_userMessageDomId(rawIdx);
+        row.dataset.msgIdx=rawIdx;
+        row.dataset.sessionMsgIdx=_messageSessionIndexForRawIdx(rawIdx);
+        row.dataset.messageAnchorKey=_messageViewportAnchorKeyForMessage(m);
+        row.dataset.role='process_wakeup';
+        delete row.dataset.editing;
+        if(row.dataset.rawText!==processText||row.innerHTML!==nextRowHtml){
+          row.dataset.rawText=processText;
+          row.innerHTML=nextRowHtml;
+        }
+      }else{
+        row=document.createElement('div');
+        row.className='msg-row process-wakeup-row';
+        row.id=_userMessageDomId(rawIdx);
+        row.dataset.msgIdx=rawIdx;
+        row.dataset.sessionMsgIdx=_messageSessionIndexForRawIdx(rawIdx);
+        row.dataset.messageAnchorKey=_messageViewportAnchorKeyForMessage(m);
+        row.dataset.role='process_wakeup';
+        row.dataset.rawText=processText;
+        row.innerHTML=nextRowHtml;
+      }
+      inner.appendChild(row);
+      userRows.set(rawIdx, row);
+      continue;
+    }
+
     if(isUser){
       currentAssistantTurn=null;
       let row=_msgNodeRecycleEnabled?_recycleStash.get(rawIdx):null;
@@ -13932,6 +15434,7 @@ function renderMessages(options){
       const newRawText=String(displayContent).trim();
       const nextRowHtml=`${filesHtml}<div class="msg-body">${bodyHtml}</div>${footHtml}`;
       if(row){
+        row.className='msg-row';
         row.id=_userMessageDomId(rawIdx);
         row.dataset.msgIdx=rawIdx;
         row.dataset.sessionMsgIdx=_messageSessionIndexForRawIdx(rawIdx);
@@ -13953,6 +15456,14 @@ function renderMessages(options){
         row.dataset.rawText=newRawText;
         row.innerHTML=nextRowHtml;
       }
+      // Reserve this user row's real off-screen height up front so a wipe-and-rebuild
+      // does not collapse scrollHeight to the flat 96px estimate (the collapse that
+      // clamps/re-anchors the viewport on mobile — #5637/#5638, both jump classes). Uses
+      // the remembered measured height when this row has been measured before, else a
+      // content-length estimate; the measure pass refines it exactly next frame. The
+      // typeof guard keeps renderMessages runnable in the node test harnesses that
+      // extract it without this helper (they stub every collaborator by name).
+      if(typeof _applyUserRowIntrinsicHeight==='function') _applyUserRowIntrinsicHeight(row, newRawText);
       inner.appendChild(row);
       userRows.set(rawIdx, row);
       continue;
@@ -13999,7 +15510,7 @@ function renderMessages(options){
       orderedTransparentParts.forEach((part, partIdx)=>{
         if(!part) return;
         if(part.kind==='tool'){
-          const toolCall=_transparentOrderedToolCall(part, rawIdx, transparentOrderedToolCallsByTid, transparentToolResultsByTid, transparentPersistedSnippetByTid);
+        const toolCall=_transparentOrderedToolCall(part, rawIdx, transparentOrderedToolCallsByTid, transparentToolResultsByTid, transparentPersistedSnippetByTid);
           const toolRow=_decorateTransparentEventRow(buildToolCard(toolCall),{
             type:'tool',
             name:toolCall&&toolCall.name,
@@ -14539,11 +16050,13 @@ function renderMessages(options){
       // position). Keyed by the assistant turn element. (Trifecta finding O-Bug1.)
       const transparentSeenThinking=new Map();
       for(const entry of activityOrder){
+        const {aIdx,segmentSeq,burstId,cards,thinkingIdx,includeAnchorReason}=entry;
+        const sourceMsg=aIdx>=0?S.messages[aIdx]:null;
         const event={
           ...entry,
-          thinkingText:entry.thinkingIdx!==null?assistantThinking.get(entry.thinkingIdx):'',
+          ts:sourceMsg&&((sourceMsg._ts!==undefined&&sourceMsg._ts!==null)?sourceMsg._ts:sourceMsg.timestamp),
+          thinkingText:thinkingIdx!==null?assistantThinking.get(thinkingIdx):'',
         };
-        const {aIdx,segmentSeq,burstId,cards}=event;
         if(aIdx<assistantIdxs[0]) continue;
         const anchorRow=_assistantAnchorForActivity(aIdx,segmentSeq,burstId);
         if(!anchorRow) continue;
@@ -14577,6 +16090,7 @@ function renderMessages(options){
               type:'thinking',
               text:event.thinkingText,
               preview:event.thinkingText,
+              ts:event.ts,
               segmentSeq,
               burstId,
             });
@@ -14591,6 +16105,7 @@ function renderMessages(options){
             name:event.toolCall&&event.toolCall.name,
             status:_transparentToolStatus(event.toolCall,true),
             toolCall:event.toolCall,
+            ts:event.ts,
             segmentSeq,
             burstId,
           });
@@ -14607,7 +16122,15 @@ function renderMessages(options){
     }
   }
   _restoreWorklogDetailDisclosureState(inner, worklogDetailDisclosureState);
-  _messageVirtualWindowKey=renderWindowKey;
+  // #5839 fix: deferred settled worklogs have no rows yet at restore time, so
+  // the disclosure restore above can't reach their detail elements. Stash the
+  // captured state on each still-deferred group; _materializeDeferredWorklogRows
+  // re-applies it (key-scoped + idempotent) once the rows exist on expand.
+  if(worklogDetailDisclosureState&&worklogDetailDisclosureState.size){
+    inner.querySelectorAll('[data-worklog-rows-deferred="1"]').forEach(group=>{
+      group._deferredWorklogDisclosure=worklogDetailDisclosureState;
+    });
+  }
   // Render per-turn duration and optional token usage on assistant messages.
   // Duration stays visible even when token usage is disabled, because it answers
   // the basic "how long did that turn take?" UX question. Only walk rendered
@@ -14779,6 +16302,9 @@ function renderMessages(options){
           group.classList.add('open');
           const summary=group.querySelector('.tool-call-group-summary,.activity-summary');
           if(summary) summary.setAttribute('aria-expanded','true');
+          // #5839: this turn is otherwise blank, so materialize any deferred
+          // settled rows now that we're force-expanding the worklog to fill it.
+          if(typeof _materializeDeferredWorklogRows==='function') _materializeDeferredWorklogRows(group);
         }
         // `revealed` means "this turn has a non-empty Worklog group that the user
         // can see" — NOT "we just expanded something". An already-open non-empty
@@ -14929,6 +16455,20 @@ function renderMessages(options){
     }
   }
   _updateMessageVirtualMeasurements(renderVisWithIdx, renderVisibleIdxs, virtualWindow);
+  // Kill the pinned/tail-follower mid-stream jitter. Schedule the re-anchor in a MICROTASK,
+  // not synchronously: inside this render sync stack the browser still reports a transient
+  // scrollHeight (layout is batched), so a synchronous re-anchor would read the SAME short
+  // value scrollToBottom already clamped against and be a no-op. The microtask runs after the
+  // stack unwinds (scrollHeight has flushed to the settled value) but before the browser
+  // paints this frame, so writing the settled max lands the tail exactly and the ~1-row high
+  // intermediate never reaches the screen. Only re-anchors a pre-wipe tail-follower left short
+  // of the settled max — an unpinned reader parked in history is never moved (orthogonal to
+  // the unpinned jump-back class). See _reanchorPinnedTailAfterRender for the full rationale.
+  // (typeof guards mirror the _deferClearProgrammaticScroll call below so standalone
+  // renderMessages() test harnesses that don't define these helpers still run.)
+  if(typeof queueMicrotask==='function' && typeof _reanchorPinnedTailAfterRender==='function'){
+    queueMicrotask(()=>_reanchorPinnedTailAfterRender(_preWipeNearTail));
+  }
   _recycleStash.clear();
   if(typeof _deferClearProgrammaticScroll==='function') _deferClearProgrammaticScroll(160);
 }
@@ -15681,8 +17221,9 @@ function appendLiveToolCard(tc){
   const opts=arguments[1]||{};
   if(opts.sessionId&&S.session.session_id!==opts.sessionId) return;
   if(opts.streamId&&S.activeStreamId!==opts.streamId) return;
+  if(typeof isFinalAnswerOnlyMode==='function'&&isFinalAnswerOnlyMode()) return;
   if(isLiveAnchorActivitySceneOwner(opts.streamId||S.activeStreamId)){
-    _renderLiveAnchorActivitySceneForStream(opts.streamId||S.activeStreamId, opts.sessionId||S.session.session_id, {mode:'compact_worklog'});
+    _renderLiveAnchorActivitySceneForStream(opts.streamId||S.activeStreamId, opts.sessionId||S.session.session_id);
     return;
   }
   let turn=$('liveAssistantTurn');
@@ -15714,11 +17255,14 @@ function appendLiveToolCard(tc){
     if(tid){
       const existing=inner.querySelector(`.transparent-event-row[data-live-tid="${CSS.escape(tid)}"],.tool-card-row[data-live-tid="${CSS.escape(tid)}"]`);
       if(existing){
+        const replacementTs=_transparentEventTimestampSeconds(existing,{toolCall:tc});
         const replacement=_decorateTransparentEventRow(buildToolCard(tc),{
           type:'tool',
           name:tc&&tc.name,
           status:_transparentToolStatus(tc),
           toolCall:tc,
+          ts:replacementTs,
+          live:true,
           segmentSeq:effectiveSegmentSeq,
           burstId,
         });
@@ -15754,6 +17298,7 @@ function appendLiveToolCard(tc){
       name:tc&&tc.name,
       status:_transparentToolStatus(tc),
       toolCall:tc,
+      live:true,
       segmentSeq:effectiveSegmentSeq,
       burstId,
     });
@@ -15852,6 +17397,19 @@ function clearLiveToolCards(){
   const container=$('liveToolCards');
   if(container){container.innerHTML='';container.style.display='none';}
 }
+function _hideLiveActivityForFinalAnswerOnly(){
+  clearLiveToolCards();
+  if(typeof removeThinking==='function') removeThinking();
+  const turn=$('liveAssistantTurn');
+  const inner=_assistantTurnBlocks(turn);
+  if(inner){
+    inner.querySelectorAll('.transparent-event-row,.agent-activity-thinking,.wl-reason,#liveRunStatus,.live-worklog[data-live-worklog-shell],.tool-worklog-group[data-live-tool-call-group],.tool-call-group[data-live-tool-call-group],.tool-card-row[data-live-tid],[data-anchor-scene-owner="1"],[data-anchor-scene-row="1"]').forEach(el=>el.remove());
+  }
+  const legacyThinking=$('thinkingRow');
+  if(legacyThinking) legacyThinking.remove();
+  if(turn&&inner&&!inner.children.length) turn.remove();
+}
+if(typeof window!=='undefined') window._hideLiveActivityForFinalAnswerOnly=_hideLiveActivityForFinalAnswerOnly;
 function _removeEmptyLiveWorklogShells(inner){
   if(!inner) return;
   inner.querySelectorAll('.live-worklog[data-live-worklog-shell="1"],.tool-worklog-group[data-live-worklog-shell="1"],.tool-call-group[data-live-worklog-shell="1"]').forEach(group=>{
@@ -15877,13 +17435,14 @@ function _setLiveWorklogThinkingPlaceholder(group){
 }
 function ensureLiveWorklogShell(){
   if(!S.session) return null;
+  if(typeof isFinalAnswerOnlyMode==='function'&&isFinalAnswerOnlyMode()) return null;
   const activeStreamId=S.activeStreamId||'';
-  if(activeStreamId&&typeof _renderLiveAnchorActivitySceneForStream==='function'&&_renderLiveAnchorActivitySceneForStream(activeStreamId, S.session.session_id, {mode:'compact_worklog'})){
+  if(activeStreamId&&typeof _renderLiveAnchorActivitySceneForStream==='function'&&_renderLiveAnchorActivitySceneForStream(activeStreamId, S.session.session_id)){
     _dedupeLiveProcessedWorklogAnchors($('liveAssistantTurn'));
     return $('liveAssistantTurn');
   }
   if(activeStreamId&&isLiveAnchorActivitySceneOwner(activeStreamId)){
-    _renderLiveAnchorActivitySceneForStream(activeStreamId, S.session.session_id, {mode:'compact_worklog'});
+    _renderLiveAnchorActivitySceneForStream(activeStreamId, S.session.session_id);
     _dedupeLiveProcessedWorklogAnchors($('liveAssistantTurn'));
     return $('liveAssistantTurn');
   }
@@ -15983,6 +17542,11 @@ async function submitEdit(msgIdx, newText) {
   if(!S.session || S.busy) return;
   const initialSid = S.session.session_id;
   const absoluteKeepCount = _oldestIdx + msgIdx;
+  // #5924: capture the deliberate-pick signal up front (pre-network), scoped to
+  // initialSid — a non-default session model (vs profile default), which is
+  // inference-free and survives the failed send's marker consumption. See
+  // _deliberateSessionModelPick. null → no re-arm → server resolution runs.
+  const _recoveryPick=_deliberateSessionModelPick(initialSid);
   if(typeof _ensureAllMessagesLoaded==='function'){
     await _ensureAllMessagesLoaded();
   }
@@ -15992,9 +17556,18 @@ async function submitEdit(msgIdx, newText) {
       session_id: initialSid,
       keep_count: absoluteKeepCount
     })});
+    // #5924 SILENT-race guard: a session switch during the truncate await must not
+    // let this recovery apply session A's intent (truncate/re-arm/send) to the
+    // newly-visible session.
+    if(!S.session || S.session.session_id !== initialSid) return;
     S.messages = S.messages.slice(0, absoluteKeepCount);
     renderMessages();
     $('msg').value = newText;
+    // #5924 (Facet 1 + Facet 4): edit-resubmit is a recovery send. Re-arm the
+    // Re-arm the single-shot explicit-pick marker from the captured non-default
+    // pick — only if still safe at fire time (session unchanged, current model
+    // still matches, no newer onchange marker to clobber). See _reArmRecoveryPick.
+    _reArmRecoveryPick(initialSid, _recoveryPick);
     await send();
   } catch(e) { setStatus(t('edit_failed') + e.message); }
 }
@@ -16322,7 +17895,18 @@ function loadDiffInline(container){
 
 const CSV_MAX_SIZE=256*1024; // 256 KB cap for inline CSV rendering
 
-function buildCsvTablePreview(path, text){
+function _mediaSessionQuery(){
+  const mediaSessionId=(typeof S!=='undefined'&&S&&S.session&&S.session.session_id)?String(S.session.session_id):'';
+  return mediaSessionId?'&session_id='+encodeURIComponent(mediaSessionId):'';
+}
+
+function _csvMediaUrl(path, opts={}){
+  let url='api/media?path='+encodeURIComponent(path)+_mediaSessionQuery();
+  if(opts.download) url+='&download=1';
+  return url;
+}
+
+function buildCsvTablePreview(path, text, downloadUrl=''){
   if(typeof text!=='string') return {errorKey:'csv_error'};
   if(text.length>CSV_MAX_SIZE) return {errorKey:'csv_too_large'};
   const rows=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(r=>r.trim());
@@ -16337,13 +17921,19 @@ function buildCsvTablePreview(path, text){
   const headers=rows[0].split(sep).map(c=>c.trim().replace(/^["']|["']$/g,''));
   const bodyRows=rows.slice(1).map(r=>'<tr>'+r.split(sep).map(c=>`<td>${esc(c.trim().replace(/^["']|["']$/g,''))}</td>`).join('')+'</tr>').join('');
   const headerRow=headers.map(h=>`<th>${esc(h)}</th>`).join('');
+  const fname=path.split('/').pop()||path;
+  const downloadLink=downloadUrl
+    ? `<a class="csv-download-link msg-media-link" href="${esc(downloadUrl)}" download="${esc(fname)}">📎 ${esc(fname)}</a>`
+    : '';
   return {
-    html:`<div class="csv-table-wrap"><div class="pre-header">${esc(path.split('/').pop())} <span style="opacity:.5;font-size:11px">${t('csv_header_note')}</span></div><table class="csv-table"><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table></div>`,
+    html:`<div class="csv-table-wrap"><div class="pre-header csv-preview-header"><span class="csv-preview-title">${esc(fname)} <span style="opacity:.5;font-size:11px">${t('csv_header_note')}</span></span>${downloadLink}</div><table class="csv-table"><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table></div>`,
   };
 }
 
 function _csvPreviewErrorHtml(path, errorKey){
-  return `<div class="diff-inline-error">${esc(path.split('/').pop())}<br><span style="color:var(--muted);font-size:12px">${t(errorKey)}</span></div>`;
+  const fname=path.split('/').pop()||path;
+  const downloadUrl=_csvMediaUrl(path,{download:true});
+  return `<div class="diff-inline-error">${esc(fname)}<br><a class="msg-media-link" href="${esc(downloadUrl)}" download="${esc(fname)}">📎 ${esc(fname)}</a><br><span style="color:var(--muted);font-size:12px">${t(errorKey)}</span></div>`;
 }
 
 function loadCsvInline(container){
@@ -16351,10 +17941,12 @@ function loadCsvInline(container){
   root.querySelectorAll('.csv-inline-load:not([data-loaded])').forEach(el=>{
     el.setAttribute('data-loaded','1');
     const path=el.dataset.path;
-    fetch('api/media?path='+encodeURIComponent(path))
+    const mediaUrl=_csvMediaUrl(path);
+    const downloadUrl=_csvMediaUrl(path,{download:true});
+    fetch(mediaUrl)
       .then(r=>{if(!r.ok) throw new Error(r.status);return r.text();})
       .then(text=>{
-        const preview=buildCsvTablePreview(path, text);
+        const preview=buildCsvTablePreview(path, text, downloadUrl);
         el.outerHTML=preview.html||_csvPreviewErrorHtml(path, preview.errorKey||'csv_error');
       })
       .catch(()=>{
@@ -16805,9 +18397,10 @@ function appendThinking(text='', options){
   // without this check they would pollute the new session's DOM.
   options=options||{};
   const allowPendingPlaceholder=!!(options&&options.pending===true);
+  if(typeof isFinalAnswerOnlyMode==='function'&&isFinalAnswerOnlyMode()) return;
   if(!S.session||(!S.activeStreamId&&!allowPendingPlaceholder)) return;
   if(!allowPendingPlaceholder&&isLiveAnchorActivitySceneOwner(S.activeStreamId)){
-    _renderLiveAnchorActivitySceneForStream(S.activeStreamId, S.session.session_id, {mode:'compact_worklog'});
+    _renderLiveAnchorActivitySceneForStream(S.activeStreamId, S.session.session_id);
     return;
   }
   const empty=$('emptyState');
@@ -16870,10 +18463,19 @@ function appendThinking(text='', options){
       }
       row.id='thinkingRow';
       row.setAttribute('data-thinking-active','1');
+      const existingEventAt=row.getAttribute('data-event-at');
+      const nextTs=_firstValidTimestampSeconds(
+        options.ts,
+        options.timestamp,
+        options.created_at,
+        existingEventAt
+      );
       _decorateTransparentEventRow(row,{
         type:'thinking',
         text:clean,
         preview:clean,
+        ts:nextTs||undefined,
+        live:true,
         segmentSeq,
         burstId,
       });
@@ -17282,7 +18884,18 @@ if(!S._expandedDirs) S._expandedDirs=new Set();
 if(!S._dirCache) S._dirCache={};
 
 function renderFileTree(){
-  const box=$('fileTree');box.innerHTML='';
+  const box=$('fileTree');
+  // #5657: capture the scroll position before wiping the container. box.innerHTML=''
+  // detaches every row, collapsing scrollHeight so the browser clamps scrollTop to 0;
+  // without this, every expand/collapse, breadcrumb nav, refresh, and hidden-files
+  // toggle that re-runs renderFileTree() teleports the reader back to the top of a
+  // long tree. Restored only after the normal render tail below — the two early-return
+  // paths (no-workspace hides the box; empty-dir has nothing to scroll) legitimately
+  // reset. A plain scrollTop restore suffices here: expand/collapse insert/remove rows
+  // BELOW the clicked disclosure, so the clicked row keeps its offset from the top (no
+  // getBoundingClientRect anchor delta needed — that's only for prepend-above cases).
+  const prevScrollTop=box?box.scrollTop:0;
+  box.innerHTML='';
   // Cache current dir entries
   S._dirCache[S.currentDir||'.']=S.entries;
   // Show empty-state when no workspace is set or the directory is empty (#703)
@@ -17301,6 +18914,8 @@ function renderFileTree(){
     return;
   }
   _renderTreeItems(box, visibleEntries, 0);
+  // #5657: restore the pre-wipe scroll position now that the tree is tall again.
+  if(box) box.scrollTop=prevScrollTop;
 }
 
 let _wsActiveDragPath=null;
